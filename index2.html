@@ -1,0 +1,365 @@
+<html>
+<head>
+<title>Rail Baron 2013</title>
+<link rel="stylesheet" href="styles2.css">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+
+<meta name="apple-mobile-web-app-capable" content="yes" />  
+<meta name="apple-mobile-web-app-status-bar-style" content="black" />  
+
+</head>
+
+
+
+<body>
+  <div id="board">
+  <h1 id="title">Rail Baron</h1>
+
+
+
+
+
+<div class="display"><h2>Region</h2>
+<table id="region">
+  <tr>
+    <td class="region-letter"> </td>
+    <td class="region-letter"> </td>
+    <td class="region-letter">R</td>
+    <td class="region-letter">a</td>
+    <td class="region-letter">i</td>
+    <td class="region-letter">l</td>
+    <td class="region-letter"> </td>
+    <td class="region-letter">B</td>
+    <td class="region-letter">a</td>
+    <td class="region-letter">r</td>
+    <td class="region-letter">o</td>
+    <td class="region-letter">n</td>
+    <td class="region-letter"> </td>
+    <td class="region-letter"> </td>
+  </tr>
+</table>
+<form>
+
+      <input type="button" disabled="disabled" class="region-selector" id="region-1" value="Northeast" > 
+  <input type="button" disabled="disabled" class="region-selector" id="region-2" value="Southeast">
+  <input type="button" disabled="disabled" class="region-selector" id="region-3" value="North Central">
+  <input type="button" disabled="disabled" class="region-selector" id="region-4" value="South Central"> 
+  <input type="button" disabled="disabled" class="region-selector" id="region-5" value="Plains">
+  <input type="button" disabled="disabled" class="region-selector" id="region-6" value="Northwest"> 
+  <input type="button" disabled="disabled" class="region-selector" id="region-7" value="Southwest"> 
+</form>
+</div>
+
+<div class="display">
+
+<h2>City</h2>
+
+<table id="city">
+  <tr>
+    <td class="city-letter"> </td>
+    <td class="city-letter"> </td>
+    <td class="city-letter"> </td>
+    <td class="city-letter"> </td>
+    <td class="city-letter"> </td>
+    <td class="city-letter">2</td>
+    <td class="city-letter">0</td>
+    <td class="city-letter">1</td>
+    <td class="city-letter">3</td>
+    <td class="city-letter"> </td>
+    <td class="city-letter"> </td>
+    <td class="city-letter"> </td>
+    <td class="city-letter"> </td>
+    <td class="city-letter"> </td>
+  </tr>
+
+</table>
+</div>    
+
+
+<div class="display"><h2>Payout</h2>
+
+<table id="payout">
+  <tr>
+    <td>$</td>
+    <td class="payout-letter"> </td>
+    <td class="payout-letter"> </td>
+    <td class="payout-letter">0</td>
+    <td class="payout-letter">0</td>
+    <td class="payout-letter">0</td>
+  </tr>
+  
+</table>
+</div>
+
+</div>
+  
+  <div id="buttons">
+  <ul>
+    <li><a href="#" class="destination-button" id="red"><span class="city">tap to join</span><br /> <span class="payout">Red</span> </a>      </li>
+    <li><a href="#" class="destination-button" id="blue" > <span class="city">tap to join</span><br /> <span class="payout">Blue</span></a>   </li>
+    <li><a href="#" class="destination-button" id="green"> <span class="city">tap to join</span><br /> <span class="payout">Green</span></a>  </li>
+    <li><a href="#" class="destination-button" id="yellow"><span class="city">tap to join</span><br /> <span class="payout">Yellow</span></a></li>
+    <li><a href="#" class="destination-button" id="black"> <span class="city">tap to join</span><br /> <span class="payout">Black</span></a>  </li>
+    <li><a href="#" class="destination-button" id="white"> <span class="city">tap to join</span><br /> <span class="payout">White</span></a>  </li>
+  </ul>
+
+</div>
+  
+  <script src="jquery-1.8.3.min.js" type="text/javascript"></script>
+  <script src="modernizr.custom.47689.js" type="text/javascript"></script>
+  <script src="railbaronv2.min.js" type="text/javascript"></script>
+  <script>
+
+console.log(game);
+/* alert(toLowerCase("A")); */
+
+
+var players=[];
+
+var currentPlayer="";
+
+
+
+/*
+function cycleletters(selector,label, done) {
+  done=true;
+    var alpha="abcdefghijklmnopqrstuvwxyz1234567890., ";
+  
+  console.log("each"+selector);
+  $(selector).each(function(index){
+    console.log(index);
+    var a= $(this).text();
+    a.toLowerCase();
+    //if panel needs to be updated for this word
+      
+    var b= label.charAt(index)||" ";
+    b.toLowerCase();
+      
+    console.log(a +", "+b);
+    
+    //increment letters until they match the new name
+    if (a !== b) {
+      $(this).hide(100, function() {
+        
+        
+        var nextindex= (alpha.indexOf(a)+1)%29;
+        $(this).text(alpha.charAt(nextindex));
+        $(this).show();
+        done=false;
+      });
+
+    }
+    
+  });
+  
+  if (done) {
+    console.log("done is true");
+    return;
+  } else {
+    console.log("keep cycling");
+    cycleletters(selector, label, done);
+  }
+  
+}
+*/
+
+
+function updateboard(selector, label, callback) {
+    var alpha="abcdefghijklmnopqrstuvwxyz1234567890., ";
+  
+    $(selector).fadeOut(1000, function() {
+      console.log("label:"+label);
+      label.toLowerCase();
+  
+      $(selector).each(function(index) {
+        var a= $(this).text();
+        a.toLowerCase();
+        //if panel needs to be updated for this word
+          
+        var b= label.charAt(index)||" ";
+        
+        if (a !== b) {
+          console.log("this.text="+$(this).text());
+/*          $(this).hide(100, function() { */
+/*
+          $(this).queue(function(next){
+            
+          })  
+*/
+            
+            
+            $(this).text(b);
+/*            $(this).show(); */
+        }
+        
+      }); 
+
+      $(this).show();
+
+    });
+    
+/*
+  var done=false;
+  
+  while (!done) {
+    $(selector).each(function(index) {
+      var a= $(this).text();
+      a.toLowerCase();
+      //if panel needs to be updated for this word
+        
+      var b= label.charAt(index)||" ";
+      
+      
+      //increment letters until they match the new name
+      if (a !== b) {
+        $(this).hide(100, function() {
+          
+          
+          var nextindex= (alpha.indexOf(a)+1)%29;
+          $(this).text(alpha.charAt(nextindex));
+          $(this).show();
+        });
+      console.log(a +", "+b);
+      done=false;
+        
+  
+      }
+      
+      
+    });
+    console.log(done);
+    
+  }
+*/
+  
+/*  cycleletters(selector, label, false); */
+  
+} 
+
+/*
+ for (var i=0; i<10; i++) {
+ $(".region-panel").each(function(index) {
+  if(Math.floor(Math.random()*10)>5) {
+    $(this).fadeOut(100,function() {
+       $(this).text(alpha.charAt(Math.floor(Math.random()*24)));
+       $(this).show();
+       })
+       }
+   
+   });
+ }
+*/
+
+$(document).ready(function(){
+  $(".region-selector").hide();
+  
+  $(".destination-button").each(function() {
+      
+    //set each button's function
+    $(this).click(function(event){
+      //set each buttons hovers
+      $(this).addClass("add");
+      
+      
+      //set button to create a player, that corresponds to the ID
+      var color= $(this).attr("id");
+      
+      var newPlayer={};
+        newPlayer.color=color;
+        
+        //create the player of that color
+        players[color]= player(newPlayer);
+        
+        //add home town
+        players[color].addDestination();
+        var hometown=players[color].getDestination();
+
+        updateboard(".region-letter",hometown.region.label.toLowerCase()); 
+        updateboard(".city-letter",hometown.city.label.toLowerCase());
+        updateboard(".payout-letter",hometown.payouts.toString());
+/*        $(this).attr("title",$(this).printDestinations()); */
+
+              $("#"+color+" span.city").text(players[color].getCity()); 
+              $("#"+color+" span.payout").text(players[color].getPayout()); 
+
+        
+        //after player is created, switch button's behavior so that it adds destinations
+        $(this).off("click");
+        
+        $(this).click(function(event){
+          currentPlayer=players[color];
+        
+          if ( players[color].addDestination()) {
+            console.log(players[color]);
+            //succesfully added location
+          updateboard(".region-letter",players[color].getRegion());
+            updateboard(".city-letter",players[color].getCity());
+            updateboard(".payout-letter",players[color].getPayout());
+
+              $("#"+color+" span.city").text(players[color].getCity()); 
+              $("#"+color+" span.payout").text("$"+players[color].getPayout()); 
+            
+
+          //updateboard("region",a,b)?
+            
+          } else {
+            //updateboard("region"a,b)?
+          updateboard(".region-letter","choose region");
+            
+          //duplicate region, so ask
+          $("#"+color).attr("disabled","disabled");
+          
+            
+            //activate choose button(s)
+          $(".region-selector").show(1000); 
+          $(".region-selector").removeAttr("disabled"); 
+
+
+          
+          $(".region-selector").each(function(index) {
+          
+            //for each region selector, make it choose a city, which decativateafter one of them was clicked
+            console.log(index+": "+$(this).attr("id"));
+             
+              $(this).click(function(event){
+              currentPlayer.chooseRegion(index+1);
+              updateboard(".region-letter",players[color].getRegion());
+                updateboard(".city-letter",players[color].getCity());
+                updateboard(".payout-letter",players[color].getPayout());
+              
+              
+              $(".region-selector").off("click");
+              $(".region-selector").hide(1000);
+/*          updateboard(players[color].getDestination()); */
+                
+              $("#"+color).removeAttr("disabled"); 
+              
+              $("#"+color+" span.city").text(players[color].getCity()); 
+              $("#"+color+" span.payout").text("$"+players[color].getPayout()); 
+
+                
+            });
+
+             
+          });
+          }
+          
+          console.log(players[color].printDestinations());
+          //$("#board").html(players[color].getDestination().city.label);
+/*          updateboard(players[color].getDestination()); */
+        });
+      
+     });
+   
+     
+     
+     
+     
+  });
+});
+
+</script>
+
+</body>
+
+</html>
