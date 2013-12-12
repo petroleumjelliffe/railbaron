@@ -65,7 +65,16 @@ var player= function(spec) {
         
         
     };
-    
+    that.nextDestination= function(newDest) {
+      
+        if (newDest) {
+          spec.destinations.push(newDest);
+          return true;
+        } else {
+          return false;
+        }
+      
+    }
     that.addDestination= function() {
         var n= spec.destinations.length, 
         newDest= {}, 
@@ -383,13 +392,92 @@ var singleton= function (){
         
             console.log("add "+ color + " player");
             
-            var newPlayer={};
-            newPlayer.color=color;
-            
-            
-            players[color]=player(newPlayer);  //reference player's by their color
+            //check to see if player exists
+            if !(player[color]) {
+              var newPlayer={};
+              newPlayer.color=color;
+              
+              
+              players[color]=player(newPlayer);  //reference player's by their color
+               
+              return true;
+            }
+            return false;
         },
-    
+        newDestination: function(origin, region) {
+          
+          newDest={}, newRegion={};
+          
+          if (region) {
+            newRegion=regions[region];
+            
+            
+            
+          } else {
+            //get new Region
+            var index= codes[roll()][0];
+            var newRegion= regions[index];
+            
+            if (newRegion.label == origin.region.label) {
+              // region matches current, ask for a new one
+              return false;
+            } 
+  
+          }
+          
+          if (newRegion.label !== origin.region.label) {
+            newDest.region= newRegion;
+          } 
+                    
+          index = codes[newRegion.index][roll()];
+          var newCity = cities[newRegion.index-1].cities[index];
+          newDest.city= newCity;
+          
+          if (origin) {
+            var low= Math.min(origin.city.index, newDest.city.index),
+               high= Math.max(origin.city.index, newDest.city.index);
+                      
+            newDest.payouts=payouts[high][low]*1000;
+          } else {
+          //first destination, is hometown
+            newDest.payouts= "Home"
+          }
+          
+          return newDest;
+          
+          
+          
+          
+        },
+        playerAddDestination: function{color,regionIndex){
+          if !(player[color]) {
+          // create a player if one doesn't exist.
+            addPlayer(color);
+            var home= newDestination();
+            player[color].nextDestination(home);
+          } else {
+          
+            var origin= player[color].getCurrentDestination();
+            var newDest= newDestination(origin,regionIndex);
+          
+          if (player[color].addNextDestination(newDest)) {
+            //roll succeeded
+          } else {
+            //same region, let user choose
+            board.askRegion(color);
+            
+            //askRegion will return newDestination with the specified region
+          }
+          
+          return player[color].printDestinations();
+          
+        },
+        playerUndo: function(color) {
+          
+        }
+        listPlayers: function() {
+          return players.join(',');
+        },
         getRandomRegion: function (index) {
             //use a code if one was passed in, otherwise grab a random one.
             index=index||codes[roll()][0];
@@ -433,4 +521,189 @@ var singleton= function (){
 
 };
 
-var game=singleton();
+//GAME SETUP FUNCTIONS
+
+//onClick function for each button
+//takes attribute of button and sets up the appopriate player
+function setupPlayer(color) {
+      
+    //set button's function to add a player and then swith to adding destinations
+    $(this).click(game.addplayer(color)))
+    
+    //update board
+    gameObject.
+    //remove onCLick
+    
+    //replace with adddesitnation
+    }
+
+function addDestination
+    
+    function(event){
+      //set each buttons hovers 
+      /*
+      do i need this?  can i just set the default classes?
+      */
+      $(this).addClass("add");
+      
+      
+      //set button to create a player, that corresponds to the ID
+      var color= $(this).attr("id");
+      
+      //init player object
+      var newPlayer={};
+        newPlayer.color=color;
+        
+        //create the player of that color
+        /* 
+        global var for all players
+        can i return a player object to the main page and add it to the game form there?
+        */
+        players[color]= player(newPlayer);
+        
+        //add home town
+        players[color].addDestination();
+        var hometown=players[color].getDestination();
+
+        updateboard(".region-letter",hometown.region.label.toLowerCase()); 
+        updateboard(".city-letter",hometown.city.label.toLowerCase());
+        updateboard(".payout-letter",hometown.payouts.toString());
+/*        $(this).attr("title",$(this).printDestinations()); */
+
+              $("#"+color+" span.city").text(players[color].getCity()); 
+              $("#"+color+" span.payout").text(players[color].getPayout()); 
+
+        
+        //after player is created, switch button's behavior so that it adds destinations
+        $(this).off("click");
+        
+        $(this).click(function(event){
+          currentPlayer=players[color];
+        
+          if ( players[color].addDestination()) {
+            console.log(players[color]);
+            //succesfully added location
+          updateboard(".region-letter",players[color].getRegion());
+            updateboard(".city-letter",players[color].getCity());
+            updateboard(".payout-letter",players[color].getPayout());
+
+              $("#"+color+" span.city").text(players[color].getCity()); 
+              $("#"+color+" span.payout").text("$"+players[color].getPayout()); 
+            
+
+          //updateboard("region",a,b)?
+            
+          } else {
+            //updateboard("region"a,b)?
+          updateboard(".region-letter","choose region");
+            
+          //duplicate region, so ask
+          $("#"+color).attr("disabled","disabled");
+          
+            
+            //activate choose button(s)
+          $(".region-selector").show(1000); 
+          $(".region-selector").removeAttr("disabled"); 
+
+
+          
+          $(".region-selector").each(function(index) {
+          
+            //for each region selector, make it choose a city, which decativateafter one of them was clicked
+            console.log(index+": "+$(this).attr("id"));
+             
+              $(this).click(function(event){
+              currentPlayer.chooseRegion(index+1);
+              updateboard(".region-letter",players[color].getRegion());
+                updateboard(".city-letter",players[color].getCity());
+                updateboard(".payout-letter",players[color].getPayout());
+              
+              
+              $(".region-selector").off("click");
+              $(".region-selector").hide(1000);
+/*          updateboard(players[color].getDestination()); */
+                
+              $("#"+color).removeAttr("disabled"); 
+              
+              $("#"+color+" span.city").text(players[color].getCity()); 
+              $("#"+color+" span.payout").text("$"+players[color].getPayout()); 
+
+                
+            });
+
+             
+          });
+          }
+          
+          console.log(players[color].printDestinations());
+          //$("#board").html(players[color].getDestination().city.label);
+/*          updateboard(players[color].getDestination()); */
+        });
+      
+     });
+   
+function updateboard(selector, label, callback) {
+    var alpha="abcdefghijklmnopqrstuvwxyz1234567890., ";
+  
+    $(selector).fadeOut(1000, function() {
+      console.log("label:"+label);
+      label.toLowerCase();
+  
+      $(selector).each(function(index) {
+        var a= $(this).text();
+        a.toLowerCase();
+        //if panel needs to be updated for this word
+          
+        var b= label.charAt(index)||" ";
+        
+        if (a !== b) {
+          console.log("this.text="+$(this).text());
+/*          $(this).hide(100, function() { */
+/*
+          $(this).queue(function(next){
+            
+          })  
+*/
+            
+            
+            $(this).text(b);
+/*            $(this).show(); */
+        }
+        
+      }); 
+
+      $(this).show();
+
+    });
+    
+    
+//BOARD OBJECT DEFINITION
+var board= function(spec) {
+    spec.color= spec.color||"none";
+    console.log("create player object");
+    
+    spec.destinations= [];
+    
+    var that={}, currentDestination = function(n) {
+        //pass in a specific number, or just get the last one
+        n = n||spec.destinations.length;
+        
+        //return most recent destination
+        return spec.destinations[n-1];
+
+        
+    };
+    
+    that={};
+    
+    that.askRegion= function(n) {
+      //display the region selector
+      
+      }
+      
+    that.updateBoard= function() {
+      //list of things to update on teh screen
+    }
+      
+      
+
