@@ -469,7 +469,7 @@ var singleton= function (){
               player[color].nextDestination(newDest)
             } else {
               //same region, let user choose
-              board.askRegion(color); //call if function comes back false?
+              //call board.askRegion  outside this function if it comes back false
               return false();
               //askRegion will return newDestination with the specified region
             }
@@ -477,6 +477,22 @@ var singleton= function (){
           return player[color].printDestinations();
           } 
         },
+        playerInfo: function(color) {
+        
+        if (player[color] !== null){
+          //get current destination
+          var obj={};
+          obj.dest= players[color].currentDestination();
+          
+          //get hometown
+          obj.home= players[color].currentDestination(0);
+          
+          return obj;
+          }
+          
+        },
+        
+        
         playerUndo: function(color) {
           
         }
@@ -499,19 +515,6 @@ var singleton= function (){
 
 //GAME SETUP FUNCTIONS
 
-//onClick function for each button
-//takes attribute of button and sets up the appopriate player
-function setupPlayer(color) {
-      
-    //set button's function to add a player and then swith to adding destinations
-    $(this).click(game.addplayer(color)))
-    
-    //update board
-    gameObject.
-    //remove onCLick
-    
-    //replace with adddesitnation
-    }
 
 function addDestination
     
@@ -619,34 +622,30 @@ function addDestination
      });
    
     
-//BOARD OBJECT DEFINITION
-var board= function(spec) {
-    spec.color= spec.color||"none";
-    console.log("create player object");
+//helper functions -- to be made into an object at soem point
     
-    spec.destinations= [];
-    
-    var that={}, currentDestination = function(n) {
-        //pass in a specific number, or just get the last one
-        n = n||spec.destinations.length;
+  var askRegion= function(playerColor) {
+    //display the region selector
+        $(".region-selector").show(1000); 
+        $(".region-selector").removeAttr("disabled"); 
         
-        //return most recent destination
-        return spec.destinations[n-1];
-
         
-    };
-    
-    that={};
-    
-    that.askRegion= function() {
-      //display the region selector
-          $(".region-selector").show(1000); 
-          $(".region-selector").removeAttr("disabled"); 
+        
+        $(".region-selector").forEach(function(index) {
+          //remove old onclick
+          $(this).off("click");
           
-          $(".region-selector").onClick(); 
-      }
-      
-    that.updateBoard= function(selector, label) {
+          //set onclick to the player who clicked 
+          $(this).onClick(function(){
+            game.playerAddDestination(playerColor, index);
+            
+            var dest= game.playerInfo(playerColor);
+            updateBoard(dest.dest);
+        }); 
+    });
+  };
+   
+  var updateBoard= function(selector, label) {
     var alpha="abcdefghijklmnopqrstuvwxyz1234567890., ";
   
     $(selector).fadeOut(1000, function() {
@@ -679,6 +678,32 @@ var board= function(spec) {
       $(this).show();
 
     });
+    
+    
+var selectRegion= function(event, player, index){
+    return game.playerAddDestination(player, index);
+    
+    
+              currentPlayer.chooseRegion(index+1);
+              updateboard(".region-letter",players[color].getRegion());
+                updateboard(".city-letter",players[color].getCity());
+                updateboard(".payout-letter",players[color].getPayout());
+              
+              
+              $(".region-selector").off("click");
+              $(".region-selector").hide(1000);
+/*          updateboard(players[color].getDestination()); */
+                
+              $("#"+color).removeAttr("disabled"); 
+              
+              $("#"+color+" span.city").text(players[color].getCity()); 
+              $("#"+color+" span.payout").text("$"+players[color].getPayout()); 
+
+                
+            }
+
+             
+          }    
 
       
 

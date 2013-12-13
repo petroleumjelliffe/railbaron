@@ -114,54 +114,9 @@ console.log(game);
 /* alert(toLowerCase("A")); */
 
 
-var players=[];
-
-var currentPlayer="";
 
 
 
-/*
-function cycleletters(selector,label, done) {
-  done=true;
-    var alpha="abcdefghijklmnopqrstuvwxyz1234567890., ";
-  
-  console.log("each"+selector);
-  $(selector).each(function(index){
-    console.log(index);
-    var a= $(this).text();
-    a.toLowerCase();
-    //if panel needs to be updated for this word
-      
-    var b= label.charAt(index)||" ";
-    b.toLowerCase();
-      
-    console.log(a +", "+b);
-    
-    //increment letters until they match the new name
-    if (a !== b) {
-      $(this).hide(100, function() {
-        
-        
-        var nextindex= (alpha.indexOf(a)+1)%29;
-        $(this).text(alpha.charAt(nextindex));
-        $(this).show();
-        done=false;
-      });
-
-    }
-    
-  });
-  
-  if (done) {
-    console.log("done is true");
-    return;
-  } else {
-    console.log("keep cycling");
-    cycleletters(selector, label, done);
-  }
-  
-}
-*/
 
 
 function updateboard(selector, label, callback) {
@@ -234,7 +189,7 @@ function updateboard(selector, label, callback) {
   
 /*  cycleletters(selector, label, false); */
   
-} 
+}; 
 
 /*
  for (var i=0; i<10; i++) {
@@ -264,9 +219,12 @@ $(document).ready(function(){
       //set button to create a player, that corresponds to the ID
       var color= $(this).attr("id");
       
+      //create player if first call, add location if not
       var newDest= game.playerAddDestination(color);
       
+      
       if (newDest) {
+        //new dest succeeded, so display desitnation and payout
         board.update(newDest);
         updateboard(".region-letter",newDest.region.label.toLowerCase()); 
         updateboard(".city-letter",newDest.city.label.toLowerCase());
@@ -276,11 +234,21 @@ $(document).ready(function(){
         $("#"+color+" span.payout").text(players[color].getPayout()); 
 
        } else {
-            updateboard(".region-letter","choose region");
+         //ask for desired region
+         updateboard(".region-letter","choose region");
 
-        board.askRegion();
+         board.askRegion();
       }
-      
+    });
+  });
+};
+
+
+</script>
+
+
+<!--
+<script>      
 
 /*        $(this).attr("title",$(this).printDestinations()); */
 
@@ -360,7 +328,31 @@ $(document).ready(function(){
   });
 });
 
+
+var askRegion= function(playerColor) {
+      //display the region selector
+          $(".region-selector").show(1000); 
+          $(".region-selector").removeAttr("disabled"); 
+          
+          
+          
+          $(".region-selector").forEach(function(index) {
+            //remove old onclick
+            $(this).off("click");
+            
+            //set onclick to the player who clicked 
+            $(this).onClick(function(){
+              game.playerAddDestination(playerColor, index);
+              
+              return game.playerInfo(playercolor);
+            });
+             
+          });
+    };
+
+
 </script>
+-->
 
 </body>
 
