@@ -440,7 +440,7 @@ var singleton= function (){
             newDest.payouts=payouts[high][low]*1000;
           } else {
           //first destination, is hometown
-            newDest.payouts= "Home"
+            newDest.payouts= "Home";
           }
           
           return newDest;
@@ -453,59 +453,35 @@ var singleton= function (){
           if !(player[color]) {
           // create a player if one doesn't exist.
             addPlayer(color);
+            
+            //set hometown
             var home= newDestination();
             player[color].nextDestination(home);
+            
           } else {
-          
+            //get next destination
             var origin= player[color].getCurrentDestination();
             var newDest= newDestination(origin,regionIndex);
           
-          if (player[color].addNextDestination(newDest)) {
-            //roll succeeded
-          } else {
-            //same region, let user choose
-            board.askRegion(color);
-            
-            //askRegion will return newDestination with the specified region
-          }
+            //newdest is false if a dest didn't come back
+            if (newDest) {
+              //roll succeeded
+              player[color].nextDestination(newDest)
+            } else {
+              //same region, let user choose
+              board.askRegion(color); //call if function comes back false?
+              return false();
+              //askRegion will return newDestination with the specified region
+            }
           
           return player[color].printDestinations();
-          
+          } 
         },
         playerUndo: function(color) {
           
         }
         listPlayers: function() {
           return players.join(',');
-        },
-        getRandomRegion: function (index) {
-            //use a code if one was passed in, otherwise grab a random one.
-            index=index||codes[roll()][0];
-            
-            return regions[index-1];
-        },
-        
-        getRandomCity: function (region) {
-            var citycode= codes[roll()][region.index],
-            city=cities[region.index-1].cities[citycode];
-            
-            console.log(region);
-            
-            console.log("citycode= "+citycode);
-            
-                            
-            return city;
-            
-        },
-        
-    
-        getPayout: function (originCity, destinationCity) {
-            
-            var low= Math.min(originCity.index, destinationCity.index),
-            high= Math.max(originCity.index, destinationCity.index);
-            
-            return payouts[high][low]*1000;
-            
         }
         
      };
@@ -642,7 +618,35 @@ function addDestination
       
      });
    
-function updateboard(selector, label, callback) {
+    
+//BOARD OBJECT DEFINITION
+var board= function(spec) {
+    spec.color= spec.color||"none";
+    console.log("create player object");
+    
+    spec.destinations= [];
+    
+    var that={}, currentDestination = function(n) {
+        //pass in a specific number, or just get the last one
+        n = n||spec.destinations.length;
+        
+        //return most recent destination
+        return spec.destinations[n-1];
+
+        
+    };
+    
+    that={};
+    
+    that.askRegion= function() {
+      //display the region selector
+          $(".region-selector").show(1000); 
+          $(".region-selector").removeAttr("disabled"); 
+          
+          $(".region-selector").onClick(); 
+      }
+      
+    that.updateBoard= function(selector, label) {
     var alpha="abcdefghijklmnopqrstuvwxyz1234567890., ";
   
     $(selector).fadeOut(1000, function() {
@@ -675,35 +679,6 @@ function updateboard(selector, label, callback) {
       $(this).show();
 
     });
-    
-    
-//BOARD OBJECT DEFINITION
-var board= function(spec) {
-    spec.color= spec.color||"none";
-    console.log("create player object");
-    
-    spec.destinations= [];
-    
-    var that={}, currentDestination = function(n) {
-        //pass in a specific number, or just get the last one
-        n = n||spec.destinations.length;
-        
-        //return most recent destination
-        return spec.destinations[n-1];
 
-        
-    };
-    
-    that={};
-    
-    that.askRegion= function(n) {
-      //display the region selector
-      
-      }
-      
-    that.updateBoard= function() {
-      //list of things to update on teh screen
-    }
-      
       
 
