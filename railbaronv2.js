@@ -625,7 +625,7 @@ function addDestination
 //helper functions -- to be made into an object at soem point
 
 
-var selectregion= function(index) {
+var selectregion= function(index) {  //needs to return a destination
           //remove old onclick
           $(this).off("click");
           
