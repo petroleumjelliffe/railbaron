@@ -208,12 +208,12 @@ function updateboard(selector, label, callback) {
 $(document).ready(function(){
   $(".region-selector").hide();
   
+  
+  //set each palyer button onclick
   $(".destination-button").each(function() {
       
     //set each button's function
     $(this).click(function(event){
-      //set each buttons hovers
-      $(this).addClass("add");
       
       
       //set button to create a player, that corresponds to the ID
@@ -225,19 +225,16 @@ $(document).ready(function(){
       
       if (newDest) {
         //new dest succeeded, so display desitnation and payout
-        board.update(newDest);
-        updateboard(".region-letter",newDest.region.label.toLowerCase()); 
-        updateboard(".city-letter",newDest.city.label.toLowerCase());
-        updateboard(".payout-letter",newDest.payouts.toString());
+        updateBoard("dest", newDest);
+        
+        updateButton(color);
 
-        $("#"+color+" span.city").text(players[color].getCity()); 
-        $("#"+color+" span.payout").text(players[color].getPayout()); 
 
        } else {
          //ask for desired region
-         updateboard(".region-letter","choose region");
+         board.askRegion(color);
+        updateBoard("ask", newDest);
 
-         board.askRegion();
       }
     });
   });
