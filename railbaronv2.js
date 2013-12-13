@@ -623,29 +623,39 @@ function addDestination
    
     
 //helper functions -- to be made into an object at soem point
-    
-  var askRegion= function(playerColor) {
-    //display the region selector
-        $(".region-selector").show(1000); 
-        $(".region-selector").removeAttr("disabled"); 
-        
-        
-        
-        $(".region-selector").forEach(function(index) {
+
+
+var selectregion= function(index) {
           //remove old onclick
           $(this).off("click");
           
           //set onclick to the player who clicked 
-          $(this).onClick(function(){
+          $(this).onClick(function(event){
             game.playerAddDestination(playerColor, index);
             
             var dest= game.playerInfo(playerColor);
             updateBoard(dest.dest);
+            
         }); 
-    });
+    }
+    
+        
+  //VIEW SPECIFIC FUNCTIONS - FLIPPY
+  var askRegion= function(playerColor) {
+    //display the region selector
+        
+        
+        $(".region-selector").forEach(selectRegion);
   };
+  
    
-  var updateBoard= function(selector, label) {
+  var updateButton= function(color, dest) {
+              $("#"+color+" span.city").text(dest.city.label); 
+              $("#"+color+" span.payout").text(dest.payout); 
+  };
+  
+   
+  var updateFlippy= function(selector, label) {
     var alpha="abcdefghijklmnopqrstuvwxyz1234567890., ";
   
     $(selector).fadeOut(1000, function() {
@@ -661,16 +671,9 @@ function addDestination
         
         if (a !== b) {
           console.log("this.text="+$(this).text());
-/*          $(this).hide(100, function() { */
-/*
-          $(this).queue(function(next){
-            
-          })  
-*/
             
             
             $(this).text(b);
-/*            $(this).show(); */
         }
         
       }); 
@@ -679,31 +682,13 @@ function addDestination
 
     });
     
-    
-var selectRegion= function(event, player, index){
-    return game.playerAddDestination(player, index);
-    
-    
-              currentPlayer.chooseRegion(index+1);
-              updateboard(".region-letter",players[color].getRegion());
-                updateboard(".city-letter",players[color].getCity());
-                updateboard(".payout-letter",players[color].getPayout());
-              
-              
-              $(".region-selector").off("click");
-              $(".region-selector").hide(1000);
-/*          updateboard(players[color].getDestination()); */
-                
-              $("#"+color).removeAttr("disabled"); 
-              
-              $("#"+color+" span.city").text(players[color].getCity()); 
-              $("#"+color+" span.payout").text("$"+players[color].getPayout()); 
-
-                
-            }
-
-             
-          }    
-
+    var updateBoard= function(type, dest) {
+      if (type == 'ask') {
+        updateFlippy(".region-letter", "Choose Region");
+      } else {
+        updateFlippy(".region-letter",dest.region);
+        updateFlippy(".city-letter",dest.city);
+        updateFlippy(".payout-letter",dest.payout);
+      }
       
-
+    }
