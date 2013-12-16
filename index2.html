@@ -105,251 +105,58 @@
 
 </div>
   
-  <script src="jquery-1.8.3.min.js" type="text/javascript"></script>
-  <script src="modernizr.custom.47689.js" type="text/javascript"></script>
-  <script src="railbaronv2.js" type="text/javascript"></script>
-  <script>
+<script src="jquery-1.8.3.min.js" type="text/javascript"></script>
+<script src="modernizr.custom.47689.js" type="text/javascript"></script>
+<script src="railbaronv2.js" type="text/javascript"></script>
+<script>
 
-console.log(game);
-/* alert(toLowerCase("A")); */
-
-
-
-
-
-
-
-function updateboard(selector, label, callback) {
-    var alpha="abcdefghijklmnopqrstuvwxyz1234567890., ";
+  console.log(game);
+  /* alert(toLowerCase("A")); */
   
-    $(selector).fadeOut(1000, function() {
-      console.log("label:"+label);
-      label.toLowerCase();
   
-      $(selector).each(function(index) {
-        var a= $(this).text();
-        a.toLowerCase();
-        //if panel needs to be updated for this word
-          
-        var b= label.charAt(index)||" ";
-        
-        if (a !== b) {
-          console.log("this.text="+$(this).text());
-/*          $(this).hide(100, function() { */
-/*
-          $(this).queue(function(next){
-            
-          })  
-*/
-            
-            
-            $(this).text(b);
-/*            $(this).show(); */
-        }
-        
-      }); 
-
-      $(this).show();
-
-    });
+  $(document).ready(function(){
+    $(".region-selector").hide();
     
-/*
-  var done=false;
-  
-  while (!done) {
-    $(selector).each(function(index) {
-      var a= $(this).text();
-      a.toLowerCase();
-      //if panel needs to be updated for this word
-        
-      var b= label.charAt(index)||" ";
-      
-      
-      //increment letters until they match the new name
-      if (a !== b) {
-        $(this).hide(100, function() {
-          
-          
-          var nextindex= (alpha.indexOf(a)+1)%29;
-          $(this).text(alpha.charAt(nextindex));
-          $(this).show();
-        });
-      console.log(a +", "+b);
-      done=false;
-        
-  
-      }
-      
-      
-    });
-    console.log(done);
     
-  }
-*/
-  
-/*  cycleletters(selector, label, false); */
-  
-}; 
-
-/*
- for (var i=0; i<10; i++) {
- $(".region-panel").each(function(index) {
-  if(Math.floor(Math.random()*10)>5) {
-    $(this).fadeOut(100,function() {
-       $(this).text(alpha.charAt(Math.floor(Math.random()*24)));
-       $(this).show();
-       })
-       }
-   
-   });
- }
-*/
-
-$(document).ready(function(){
-  $(".region-selector").hide();
-  
-  
-  //set each palyer button onclick
-  $(".destination-button").each(function() {
-      
-    //set each button's function
-    $(this).click(function(event){
-      
-      
-      //set button to create a player, that corresponds to the ID
+    //set each palyer button onclick
+    $(".destination-button").each(function() {
       var color= $(this).attr("id");
       
-      //create player if first call, add location if not
-      var newDest= game.playerAddDestination(color);
-      
-      
-      if (newDest) {
-        //new dest succeeded, so display desitnation and payout
-        updateBoard("dest", newDest);
+      //set each button's function
+      $(this).click(function(event){
         
-        updateButton(color);
-
-
-       } else {
-         //ask for desired region
-         board.askRegion(color);
-        updateBoard("ask", newDest);
-
-      }
-    });
-  });
-};
-
-
-</script>
-
-
-<!--
-<script>      
-
-/*        $(this).attr("title",$(this).printDestinations()); */
-
-
         
-        //after player is created, switch button's behavior so that it adds destinations
+        //set button to create a player, that corresponds to the ID
+        var color= $(this).attr("id");
         
-        $(this).click(function(event){
-          currentPlayer=players[color];
+        //create player if first call, add location if not
+        var newDest= game.playerAddDestination(color, function (){
+          var player= game.playerInfo(color);
+          
+          updateFlippy(".region", player.getRegion());
+          updateFlippy(".city", player.getCity());
+          updateFlippy(".payout", player.getPayout());
+          
+          updateButton(color, player.getCity(), player.getPayout());        
         
-          if ( players[color].addDestination()) {
-            console.log(players[color]);
-            //succesfully added location
-          updateboard(".region-letter",players[color].getRegion());
-            updateboard(".city-letter",players[color].getCity());
-            updateboard(".payout-letter",players[color].getPayout());
-
-              $("#"+color+" span.city").text(players[color].getCity()); 
-              $("#"+color+" span.payout").text("$"+players[color].getPayout()); 
-            
-
-          //updateboard("region",a,b)?
-            
-          } else {
-            //updateboard("region"a,b)?
-          updateboard(".region-letter","choose region");
-            
-          //duplicate region, so ask
-          $("#"+color).attr("disabled","disabled");
-          
-            
-            //activate choose button(s)
-          $(".region-selector").show(1000); 
-          $(".region-selector").removeAttr("disabled"); 
-
-
-          
-          $(".region-selector").each(function(index) {
-          
-            //for each region selector, make it choose a city, which decativateafter one of them was clicked
-            console.log(index+": "+$(this).attr("id"));
-             
-              $(this).click(function(event){
-              currentPlayer.chooseRegion(index+1);
-              updateboard(".region-letter",players[color].getRegion());
-                updateboard(".city-letter",players[color].getCity());
-                updateboard(".payout-letter",players[color].getPayout());
-              
-              
-              $(".region-selector").off("click");
-              $(".region-selector").hide(1000);
-/*          updateboard(players[color].getDestination()); */
-                
-              $("#"+color).removeAttr("disabled"); 
-              
-              $("#"+color+" span.city").text(players[color].getCity()); 
-              $("#"+color+" span.payout").text("$"+players[color].getPayout()); 
-
-                
-            });
-
-             
-          });
-          }
-          
-          console.log(players[color].printDestinations());
-          //$("#board").html(players[color].getDestination().city.label);
-/*          updateboard(players[color].getDestination()); */
+        
         });
-      
-     });
-   
-     
-     
-     
-     
-  });
-});
-
-
-var askRegion= function(playerColor) {
-      //display the region selector
-          $(".region-selector").show(1000); 
-          $(".region-selector").removeAttr("disabled"); 
+        
+        
+        if (newDest == false) {
+          updateFlippy(".region", "Choose Region");
           
-          
-          
-          $(".region-selector").forEach(function(index) {
-            //remove old onclick
-            $(this).off("click");
-            
-            //set onclick to the player who clicked 
-            $(this).onClick(function(){
-              game.playerAddDestination(playerColor, index);
-              
-              return game.playerInfo(playercolor);
-            });
-             
-          });
-    };
+          board.askRegion(color);
+  
+        }
+      });
+    });
+  };
 
 
 </script>
--->
+
+
 
 </body>
 

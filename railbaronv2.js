@@ -1,13 +1,14 @@
-/*global game: true, players: true*/ 
+/*global game: true, players: true*/
 /*properties
-    addDestination, addPlayer, chooseRegion, cities, city, color, destinations, 
-    floor, getCity, getColor, getDestination, getPayout, getRandomCity, 
-    getRandomRegion, getRegion, index, label, length, log, max, min, payouts, 
+    addDestination, addPlayer, chooseRegion, cities, city, color, destinations,
+    floor, getCity, getColor, getDestination, getPayout, getRandomCity,
+    getRandomRegion, getRegion, index, label, length, log, max, min, payouts,
     pop, printDestinations, push, random, region, toString, undoAddDestination
 */
 /*jslint white: true, devel: true */  
     
-    
+
+
 //PLAYER OBJECT DEFINITION
 var player= function(spec) {
     spec.color= spec.color||"none";
@@ -24,9 +25,7 @@ var player= function(spec) {
 
         
     };
-    
-    that={};
-    
+        
     that.getDestination= function(n) {
         
         return currentDestination(n);
@@ -74,7 +73,7 @@ var player= function(spec) {
           return false;
         }
       
-    }
+    };
     that.addDestination= function() {
         var n= spec.destinations.length, 
         newDest= {}, 
@@ -384,16 +383,13 @@ var singleton= function (){
             
             return row;
         }
-    
-    return {
-    // public interface
-    
-        addPlayer: function(color) {  //create a new player with a specific color
+        
+        function addPlayer(color) {  //create a new player with a specific color
         
             console.log("add "+ color + " player");
             
             //check to see if player exists
-            if !(player[color]) {
+            if (!player[color]) {
               var newPlayer={};
               newPlayer.color=color;
               
@@ -402,11 +398,12 @@ var singleton= function (){
                
               return true;
             }
-            return false;
-        },
-        newDestination: function(origin, region) {
+
+        }
+
+        function newDestination(origin, region) {
           
-          newDest={}, newRegion={};
+          var newDest={}, newRegion={}, index, high, low, newCity;
           
           if (region) {
             newRegion=regions[region];
@@ -415,8 +412,8 @@ var singleton= function (){
             
           } else {
             //get new Region
-            var index= codes[roll()][0];
-            var newRegion= regions[index];
+            index= codes[roll()][0];
+            newRegion= regions[index];
             
             if (newRegion.label == origin.region.label) {
               // region matches current, ask for a new one
@@ -430,12 +427,12 @@ var singleton= function (){
           } 
                     
           index = codes[newRegion.index][roll()];
-          var newCity = cities[newRegion.index-1].cities[index];
+          newCity = cities[newRegion.index-1].cities[index];
           newDest.city= newCity;
           
           if (origin) {
-            var low= Math.min(origin.city.index, newDest.city.index),
-               high= Math.max(origin.city.index, newDest.city.index);
+            low= Math.min(origin.city.index, newDest.city.index);
+            high= Math.max(origin.city.index, newDest.city.index);
                       
             newDest.payouts=payouts[high][low]*1000;
           } else {
@@ -446,11 +443,13 @@ var singleton= function (){
           return newDest;
           
           
-          
-          
-        },
-        playerAddDestination: function{color,regionIndex){
-          if !(player[color]) {
+        }
+           
+    return {
+    // public interface
+    
+        playerAddDestination: function(color, regionIndex, callback) {
+          if (!player[color]) {
           // create a player if one doesn't exist.
             addPlayer(color);
             
@@ -460,8 +459,8 @@ var singleton= function (){
             
           } else {
             //get next destination
-            var origin= player[color].getCurrentDestination();
-            var newDest= newDestination(origin,regionIndex);
+            var origin= player[color].getCurrentDestination(), 
+            newDest= newDestination(origin,regionIndex);
           
             //newdest is false if a dest didn't come back
             if (newDest) {
@@ -469,8 +468,10 @@ var singleton= function (){
               player[color].nextDestination(newDest)
             } else {
               //same region, let user choose
-              //call board.askRegion  outside this function if it comes back false
-              return false();
+              //pass in the function to call if the user needs to choose
+              if (callback && typeof(callback) === "function") {  
+                  callback();  
+              }  
               //askRegion will return newDestination with the specified region
             }
           
@@ -479,15 +480,8 @@ var singleton= function (){
         },
         playerInfo: function(color) {
         
-        if (player[color] !== null){
-          //get current destination
-          var obj={};
-          obj.dest= players[color].currentDestination();
-          
-          //get hometown
-          obj.home= players[color].currentDestination(0);
-          
-          return obj;
+          if (player[color] !== null){
+            return player[color];
           }
           
         },
@@ -495,7 +489,7 @@ var singleton= function (){
         
         playerUndo: function(color) {
           
-        }
+        },
         listPlayers: function() {
           return players.join(',');
         }
@@ -512,126 +506,24 @@ var singleton= function (){
   return singleton();  // call the new function
 
 };
-
+    }
+}
 //GAME SETUP FUNCTIONS
 
 
-function addDestination
     
-    function(event){
-      //set each buttons hovers 
-      /*
-      do i need this?  can i just set the default classes?
-      */
-      $(this).addClass("add");
-      
-      
-      //set button to create a player, that corresponds to the ID
-      var color= $(this).attr("id");
-      
-      //init player object
-      var newPlayer={};
-        newPlayer.color=color;
-        
-        //create the player of that color
-        /* 
-        global var for all players
-        can i return a player object to the main page and add it to the game form there?
-        */
-        players[color]= player(newPlayer);
-        
-        //add home town
-        players[color].addDestination();
-        var hometown=players[color].getDestination();
-
-        updateboard(".region-letter",hometown.region.label.toLowerCase()); 
-        updateboard(".city-letter",hometown.city.label.toLowerCase());
-        updateboard(".payout-letter",hometown.payouts.toString());
-/*        $(this).attr("title",$(this).printDestinations()); */
-
-              $("#"+color+" span.city").text(players[color].getCity()); 
-              $("#"+color+" span.payout").text(players[color].getPayout()); 
-
-        
-        //after player is created, switch button's behavior so that it adds destinations
-        $(this).off("click");
-        
-        $(this).click(function(event){
-          currentPlayer=players[color];
-        
-          if ( players[color].addDestination()) {
-            console.log(players[color]);
-            //succesfully added location
-          updateboard(".region-letter",players[color].getRegion());
-            updateboard(".city-letter",players[color].getCity());
-            updateboard(".payout-letter",players[color].getPayout());
-
-              $("#"+color+" span.city").text(players[color].getCity()); 
-              $("#"+color+" span.payout").text("$"+players[color].getPayout()); 
-            
-
-          //updateboard("region",a,b)?
-            
-          } else {
-            //updateboard("region"a,b)?
-          updateboard(".region-letter","choose region");
-            
-          //duplicate region, so ask
-          $("#"+color).attr("disabled","disabled");
-          
-            
-            //activate choose button(s)
-          $(".region-selector").show(1000); 
-          $(".region-selector").removeAttr("disabled"); 
-
-
-          
-          $(".region-selector").each(function(index) {
-          
-            //for each region selector, make it choose a city, which decativateafter one of them was clicked
-            console.log(index+": "+$(this).attr("id"));
-             
-              $(this).click(function(event){
-              currentPlayer.chooseRegion(index+1);
-              updateboard(".region-letter",players[color].getRegion());
-                updateboard(".city-letter",players[color].getCity());
-                updateboard(".payout-letter",players[color].getPayout());
-              
-              
-              $(".region-selector").off("click");
-              $(".region-selector").hide(1000);
-/*          updateboard(players[color].getDestination()); */
-                
-              $("#"+color).removeAttr("disabled"); 
-              
-              $("#"+color+" span.city").text(players[color].getCity()); 
-              $("#"+color+" span.payout").text("$"+players[color].getPayout()); 
-
-                
-            });
-
-             
-          });
-          }
-          
-          console.log(players[color].printDestinations());
-          //$("#board").html(players[color].getDestination().city.label);
-/*          updateboard(players[color].getDestination()); */
-        });
-      
-     });
    
     
 //helper functions -- to be made into an object at soem point
 
 
-var selectregion= function(index) {  //needs to return a destination
-          //remove old onclick
-          $(this).off("click");
-          
-          //set onclick to the player who clicked 
-          $(this).onClick(function(event){
-            game.playerAddDestination(playerColor, index);
+var selectregion= function(event){
+            game.playerAddDestination(playerColor, index, function(){
+              
+              
+              
+              
+            });
             
             var dest= game.playerInfo(playerColor);
             updateBoard(dest.dest);
@@ -645,13 +537,18 @@ var selectregion= function(index) {  //needs to return a destination
     //display the region selector
         
         
-        $(".region-selector").forEach(selectRegion);
+        $(".region-selector").forEach(function(index) {  
+          //remove old onclick
+          $(this).off("click");
+          
+          //set onclick to the player who clicked 
+          $(this).onClick(selectRegion(playerColor));
   };
   
    
-  var updateButton= function(color, dest) {
-              $("#"+color+" span.city").text(dest.city.label); 
-              $("#"+color+" span.payout").text(dest.payout); 
+  var updateButton= function(color, city, payout) {
+    $("#"+color+" span.city").text(city); 
+    $("#"+color+" span.payout").text(payout); 
   };
   
    
@@ -681,7 +578,7 @@ var selectregion= function(index) {  //needs to return a destination
       $(this).show();
 
     });
-    
+   } 
     var updateBoard= function(type, dest) {
       if (type == 'ask') {
         updateFlippy(".region-letter", "Choose Region");
@@ -692,3 +589,42 @@ var selectregion= function(index) {  //needs to return a destination
       }
       
     }
+    
+    
+    
+
+function updateboard(selector, label, callback) {
+    var alpha="abcdefghijklmnopqrstuvwxyz1234567890., ";
+  
+    $(selector).fadeOut(1000, function() {
+      console.log("label:"+label);
+      label.toLowerCase();
+  
+      $(selector).each(function(index) {
+        var a= $(this).text();
+        a.toLowerCase();
+        //if panel needs to be updated for this word
+          
+        var b= label.charAt(index)||" ";
+        
+        if (a !== b) {
+          console.log("this.text="+$(this).text());
+/*          $(this).hide(100, function() { */
+/*
+          $(this).queue(function(next){
+            
+          })  
+*/
+            
+            
+            $(this).text(b);
+/*            $(this).show(); */
+        }
+        
+      }); 
+
+      $(this).show();
+
+    });
+    
+
