@@ -115,20 +115,17 @@
   
   
   $(document).ready(function(){
-    $(".region-selector").hide();
     
     
     //set each palyer button onclick
     $(".destination-button").each(function() {
+        //set button to create a player, that corresponds to the ID
       var color= $(this).attr("id");
       
       //set each button's function
       $(this).click(function(event){
         
-        
-        //set button to create a player, that corresponds to the ID
-        var color= $(this).attr("id");
-        
+                
         //create player if first call, add location if not
         var newDest= game.playerAddDestination(color, function (){
           var player= game.playerInfo(color);
@@ -144,10 +141,29 @@
         
         
         if (newDest == false) {
-          updateFlippy(".region", "Choose Region");
           
-          board.askRegion(color);
-  
+          game.askRegion(color,function() {
+            updateFlippy(".region", "Choose Region");
+            
+            $(".region-selector").show();
+            
+            $(".region-selector").each(function(index, color) {
+                //set button to create a player, that corresponds to the ID
+              
+              //set each button's function
+              $(this).click(function(event){
+                game.addPlayerDestination(color,index, function (){
+                  $(".region-selector").hide();
+                  
+                });
+                
+                    
+              });
+            
+            
+            });
+          
+          });
         }
       });
     });

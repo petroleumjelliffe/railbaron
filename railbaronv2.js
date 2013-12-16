@@ -69,10 +69,8 @@ var player= function(spec) {
         if (newDest) {
           spec.destinations.push(newDest);
           return true;
-        } else {
-          return false;
-        }
-      
+        } 
+              
     };
     that.addDestination= function() {
         var n= spec.destinations.length, 
@@ -415,7 +413,7 @@ var singleton= function (){
             index= codes[roll()][0];
             newRegion= regions[index];
             
-            if (newRegion.label == origin.region.label) {
+            if (newRegion.label === origin.region.label) {
               // region matches current, ask for a new one
               return false;
             } 
@@ -448,46 +446,73 @@ var singleton= function (){
     return {
     // public interface
     
-        playerAddDestination: function(color, regionIndex, callback) {
+        playerAddDestination: function(color, callback, regionIndex) {
+        // return the added destination, and trigger the callback, 
+        // or return false if no destination was added (dupe region)
+        
+          var home, origin, newDest;
+          
           if (!player[color]) {
           // create a player if one doesn't exist.
             addPlayer(color);
             
             //set hometown
-            var home= newDestination();
+            home= newDestination();
             player[color].nextDestination(home);
+            return home;
             
-          } else {
-            //get next destination
-            var origin= player[color].getCurrentDestination(), 
-            newDest= newDestination(origin,regionIndex);
-          
-            //newdest is false if a dest didn't come back
-            if (newDest) {
-              //roll succeeded
-              player[color].nextDestination(newDest)
-            } else {
-              //same region, let user choose
-              //pass in the function to call if the user needs to choose
-              if (callback && typeof(callback) === "function") {  
-                  callback();  
-              }  
-              //askRegion will return newDestination with the specified region
-            }
-          
-          return player[color].printDestinations();
           } 
+          
+          // existing player, get next destination
+          origin= player[color].getCurrentDestination(); 
+          newDest= newDestination(origin);
+        
+          //newdest is false if a dest didn't come back
+          if (newDest) {
+            //roll succeeded
+            player[color].nextDestination(newDest);
+            
+            if (callback && typeof(callback) === "function") {  
+                callback();  
+            return newDest;
+            }  
+          } else {
+            return false;
+          }
+            
+            
+            //same region, let user choose
+            //pass in the function to call if the user needs to choose
+            //askRegion will return newDestination with the specified region
+          
         },
         playerInfo: function(color) {
+        //return the specified player object
         
           if (player[color] !== null){
             return player[color];
           }
           
         },
+        askRegion(color, callback) {
+        //call the function to display the controls that let a user pick a region
+          
+              if (callback && typeof(callback) === "function") {  
+                  callback(color);  
+              }  
+
+        
+        }
         
         
-        playerUndo: function(color) {
+        playerUndo: function(color, callback) {
+        
+          play[color].undoAddDestination();
+          
+          if (callback && typeof(callback) === "function") {  
+              callback();  
+          }  
+        
           
         },
         listPlayers: function() {
@@ -514,37 +539,11 @@ var singleton= function (){
     
    
     
-//helper functions -- to be made into an object at soem point
 
 
-var selectregion= function(event){
-            game.playerAddDestination(playerColor, index, function(){
-              
-              
-              
-              
-            });
-            
-            var dest= game.playerInfo(playerColor);
-            updateBoard(dest.dest);
-            
-        }); 
-    }
     
         
   //VIEW SPECIFIC FUNCTIONS - FLIPPY
-  var askRegion= function(playerColor) {
-    //display the region selector
-        
-        
-        $(".region-selector").forEach(function(index) {  
-          //remove old onclick
-          $(this).off("click");
-          
-          //set onclick to the player who clicked 
-          $(this).onClick(selectRegion(playerColor));
-  };
-  
    
   var updateButton= function(color, city, payout) {
     $("#"+color+" span.city").text(city); 
@@ -579,52 +578,6 @@ var selectregion= function(event){
 
     });
    } 
-    var updateBoard= function(type, dest) {
-      if (type == 'ask') {
-        updateFlippy(".region-letter", "Choose Region");
-      } else {
-        updateFlippy(".region-letter",dest.region);
-        updateFlippy(".city-letter",dest.city);
-        updateFlippy(".payout-letter",dest.payout);
-      }
-      
-    }
     
-    
-    
-
-function updateboard(selector, label, callback) {
-    var alpha="abcdefghijklmnopqrstuvwxyz1234567890., ";
-  
-    $(selector).fadeOut(1000, function() {
-      console.log("label:"+label);
-      label.toLowerCase();
-  
-      $(selector).each(function(index) {
-        var a= $(this).text();
-        a.toLowerCase();
-        //if panel needs to be updated for this word
-          
-        var b= label.charAt(index)||" ";
-        
-        if (a !== b) {
-          console.log("this.text="+$(this).text());
-/*          $(this).hide(100, function() { */
-/*
-          $(this).queue(function(next){
-            
-          })  
-*/
-            
-            
-            $(this).text(b);
-/*            $(this).show(); */
-        }
-        
-      }); 
-
-      $(this).show();
-
-    });
     
 
