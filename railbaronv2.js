@@ -1,12 +1,12 @@
-/*global game: true, players: true*/
+/*global RailBaronController: true, players: true*/
 /*properties
     addDestination, addPlayer, chooseRegion, cities, city, color, destinations,
     floor, getCity, getColor, getDestination, getPayout, getRandomCity,
-    getRandomRegion, getRegion, index, label, length, log, max, min, payouts,
-    pop, printDestinations, push, random, region, toString, undoAddDestination
+    getRandomRegion, getRegion, index, label, length, listPLayers, log, max, min, payouts,
+    pop, playerUndo, printDestinations, push, random, region, toString, undoAddDestination
 */
-/*jslint white: true, devel: true */  
-    
+/*jslint browser: true, plusplus: true, vars: true */
+
 
 
 //PLAYER OBJECT DEFINITION
@@ -152,7 +152,7 @@ var player= function(spec) {
 //needs to be a singleton so it can be called without instantiating
 
 
-var singleton= function (){
+var RailBaronController= function (){
     var instance = (function() {
         var codes= [ 
             //region and city code lookup table
@@ -462,8 +462,11 @@ var singleton= function (){
             //set hometown
             home= newDestination();
             player[color].nextDestination(home);
-            callback.apply(player[color],["new",player[color].currentDestination()]);
-            return false;
+            if (callback && typeof callback === "function") {  
+              callback.apply(player[color],["new"]);
+            
+            }
+            return home;
             
           } 
           
@@ -476,12 +479,12 @@ var singleton= function (){
             //roll succeeded
             player[color].nextDestination(newDest);
             
-            if (callback && typeof callbackSuccess === "function") {  
-                callback.apply(player[color],["added",player[color].currentDestination()]);  
+            if (callback && typeof callback === "function") {  
+                callback.apply(player[color],["added"]);  
             return newDest;
             }  
           } else {
-            callback.apply(player[color],["ask"])
+            callback.apply(player[color],["ask"]);
             return false;
           }
             
@@ -489,9 +492,6 @@ var singleton= function (){
             //same region, let user choose
             //pass in the function to call if the user needs to choose
             //askRegion will return newDestination with the specified region
-          
-        },
-        playerSetDestination: function(color, region, callback) {
           
         },
         playerInfo: function(color) {
@@ -502,22 +502,13 @@ var singleton= function (){
           }
           
         },
-        askRegion(color, callback) {
-        //call the function to display the controls that let a user pick a region
-          
-              if (callback && typeof callback === "function") {  
-                  callback(color);  
-              }  
-
-        
-        }
         
         
         playerUndo: function(color, callback) {
         
-          play[color].undoAddDestination();
+          player[color].undoAddDestination();
           
-          if (callback && typeof(callback) === "function") {  
+          if (callback && typeof callback === "function") {  
               callback();  
           }  
         
@@ -530,18 +521,15 @@ var singleton= function (){
      };
   }());
 
-  singleton =function(){
+  RailBaronController= function(){
   
   // re-define the function for subsequent calls
     return instance;
   };
   
-  return singleton();  // call the new function
+  return RailBaronController();  // call the new function
 
 };
-    }
-}
-//GAME SETUP FUNCTIONS
 
 
     
@@ -551,45 +539,57 @@ var singleton= function (){
 
     
         
-  //VIEW SPECIFIC FUNCTIONS - FLIPPY
-   
-  var updateButton= function(color, city, payout) {
-    $("#"+color+" span.city").text(city); 
-    $("#"+color+" span.payout").text(payout); 
-  };
-  
-   
-  var updateFlippy= function(selector, label) {
-    var alpha="abcdefghijklmnopqrstuvwxyz1234567890., ";
-  
-    $(selector).fadeOut(1000, function() {
-      console.log("label:"+label);
-      label.toLowerCase();
-  
-      $(selector).each(function(index) {
-        var a= $(this).text();
-        a.toLowerCase();
-        //if panel needs to be updated for this word
+//VIEW SPECIFIC FUNCTIONS - FLIPPY
+
+var game= new RailBaronController();
+ 
+var updateButton= function(color, city, payout) {
+  $("#"+color+" span.city").text(city); 
+  $("#"+color+" span.payout").text(payout); 
+};
+
+ 
+var updateFlippy= function(selector, label) {
+  var alpha="abcdefghijklmnopqrstuvwxyz1234567890., ";
+
+  $(selector).fadeOut(1000, function() {
+    console.log("label:"+label);
+    label.toLowerCase();
+
+    $(selector).each(function(index) {
+      var a= $(this).text();
+      a.toLowerCase();
+      //if panel needs to be updated for this word
+        
+      var b= label.charAt(index)||" ";
+      
+      if (a !== b) {
+        console.log("this.text="+$(this).text());
           
-        var b= label.charAt(index)||" ";
-        
-        if (a !== b) {
-          console.log("this.text="+$(this).text());
-            
-            
-            $(this).text(b);
-        }
-        
-      }); 
+          
+          $(this).text(b);
+      }
+      
+    }); 
 
-      $(this).show();
+    $(this).show();
 
-    });
-   } 
-    
-  //callback function for add destination 
-  var updateBoard= function (result, destination) {
-    switch (result) {
+  });
+}; 
+
+var selectRegion= function(that) {
+//use that.data to access passed object
+  game.playerAddDestination(that.data.player.getColor(), updateBoard, that.data.region);
+  
+  
+};
+
+  
+//callback function for add destination (rewrite as if/then)
+var updateBoard= function (result) {
+
+//'this' refers to the player who triggered the function 
+  switch (result) {
       case "new": //player added
       
           //update flippys with destination
@@ -604,6 +604,11 @@ var singleton= function (){
 
         break;
       case "added":
+      
+          //disable region selector if it's visble
+          
+          $("region-selector").disable();
+          
           //update flippys with destination
           updateFlippy(".region", this.getRegion());
           updateFlippy(".city", this.getCity());
@@ -615,30 +620,25 @@ var singleton= function (){
         break;
       case "ask":
         //display the region selector
+        updateFlippy(".region", "Choose region");
         $(".region-selector").show();
         
         var that={};
-        that.player= this; //store ref
+        that.player= this; //store ref to player
         
         //when a region selector button is clicked, call get destination on the player in this callback
         $(".region-selector").each(function (index){
-          that.region=index
-          $(this).click(that, selectRegion) {
-             
-          }
-          
+          that.region=index;
+          $(this).click(that, selectRegion);
+                    
         });
         break;
         
     
     }
-  }
-  
-  
-  var selectRegion= function(that) {
-  //use that.data to access passed object
-    game.playerAddDestination(color, updateBoard, index)
-  }
+};
+
+
   
     
 
