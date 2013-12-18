@@ -617,16 +617,17 @@ var singleton= function (){
         //display the region selector
         $(".region-selector").show();
         
-        var that=this; //store ref
+        var that={};
+        that.player= this; //store ref
         
         //when a region selector button is clicked, call get destination on the player in this callback
         $(".region-selector").each(function (index){
+          that.region=index
+          $(this).click(that, selectRegion) {
+             
+          }
           
-          $(this).click(that, selectRegion(index) () {
-            
-          })
-          
-        })
+        });
         break;
         
     
@@ -634,7 +635,10 @@ var singleton= function (){
   }
   
   
-  var selectRegion= function(index, Element)
+  var selectRegion= function(that) {
+  //use that.data to access passed object
+    game.playerAddDestination(color, updateBoard, index)
+  }
   
     
 
