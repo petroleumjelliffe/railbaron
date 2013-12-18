@@ -403,16 +403,19 @@ var singleton= function (){
           
           var newDest={}, newRegion={}, index, high, low, newCity;
           
+          
+          // if passed, set region
           if (region) {
             newRegion=regions[region];
             
             
-            
+          //otherwise roll for it
           } else {
             //get new Region
             index= codes[roll()][0];
             newRegion= regions[index];
             
+            //if it matches, exit
             if (newRegion.label === origin.region.label) {
               // region matches current, ask for a new one
               return false;
@@ -420,9 +423,8 @@ var singleton= function (){
   
           }
           
-          if (newRegion.label !== origin.region.label) {
-            newDest.region= newRegion;
-          } 
+          //set the region, even if it matches the old one if it was passed directly
+          newDest.region= newRegion;
                     
           index = codes[newRegion.index][roll()];
           newCity = cities[newRegion.index-1].cities[index];
@@ -446,9 +448,10 @@ var singleton= function (){
     return {
     // public interface
     
-        playerAddDestination: function(color, callback, regionIndex) {
+        playerAddDestination: function(color, callback, region) {
         // return the added destination, and trigger the callback, 
         // or return false if no destination was added (dupe region)
+        // if region provided, skip ahead
         
           var home, origin, newDest;
           
@@ -459,24 +462,26 @@ var singleton= function (){
             //set hometown
             home= newDestination();
             player[color].nextDestination(home);
-            return home;
+            callback.apply(player[color],["new",player[color].currentDestination()]);
+            return false;
             
           } 
           
           // existing player, get next destination
           origin= player[color].getCurrentDestination(); 
-          newDest= newDestination(origin);
+          newDest= newDestination(origin, region);
         
           //newdest is false if a dest didn't come back
           if (newDest) {
             //roll succeeded
             player[color].nextDestination(newDest);
             
-            if (callback && typeof(callback) === "function") {  
-                callback();  
+            if (callback && typeof callbackSuccess === "function") {  
+                callback.apply(player[color],["added",player[color].currentDestination()]);  
             return newDest;
             }  
           } else {
+            callback.apply(player[color],["ask"])
             return false;
           }
             
@@ -484,6 +489,9 @@ var singleton= function (){
             //same region, let user choose
             //pass in the function to call if the user needs to choose
             //askRegion will return newDestination with the specified region
+          
+        },
+        playerSetDestination: function(color, region, callback) {
           
         },
         playerInfo: function(color) {
@@ -497,7 +505,7 @@ var singleton= function (){
         askRegion(color, callback) {
         //call the function to display the controls that let a user pick a region
           
-              if (callback && typeof(callback) === "function") {  
+              if (callback && typeof callback === "function") {  
                   callback(color);  
               }  
 
@@ -579,5 +587,54 @@ var singleton= function (){
     });
    } 
     
+  //callback function for add destination 
+  var updateBoard= function (result, destination) {
+    switch (result) {
+      case "new": //player added
+      
+          //update flippys with destination
+          updateFlippy(".region", this.getRegion());
+          updateFlippy(".city", this.getCity());
+          updateFlippy(".payout", this.getPayout());
+          
+          //activate button
+          
+          //update button
+          updateButton(this.getColor(), this.getCity(), this.getPayout());        
+
+        break;
+      case "added":
+          //update flippys with destination
+          updateFlippy(".region", this.getRegion());
+          updateFlippy(".city", this.getCity());
+          updateFlippy(".payout", this.getPayout());
+
+          //update button
+          updateButton(this.getColor(), this.getCity(), this.getPayout());        
+
+        break;
+      case "ask":
+        //display the region selector
+        $(".region-selector").show();
+        
+        var that=this; //store ref
+        
+        //when a region selector button is clicked, call get destination on the player in this callback
+        $(".region-selector").each(function (index){
+          
+          $(this).click(that, selectRegion(index) () {
+            
+          })
+          
+        })
+        break;
+        
+    
+    }
+  }
+  
+  
+  var selectRegion= function(index, Element)
+  
     
 

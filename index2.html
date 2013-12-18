@@ -128,6 +128,7 @@
                 
         //create player if first call, add location if not
         var newDest= game.playerAddDestination(color, function (){
+        //success callback function
           var player= game.playerInfo(color);
           
           updateFlippy(".region", player.getRegion());
@@ -147,7 +148,16 @@
             
             $(".region-selector").show();
             
-            $(".region-selector").each(function(index, color) {
+            $(".region-selector").each();
+          
+          });
+        }
+      });
+    });
+  };
+
+
+function(index, color) {
                 //set button to create a player, that corresponds to the ID
               
               //set each button's function
@@ -161,14 +171,7 @@
               });
             
             
-            });
-          
-          });
-        }
-      });
-    });
-  };
-
+            }
 
 </script>
 
