@@ -154,6 +154,8 @@ var player= function(spec) {
 
 var RailBaronController= function (){
     var instance = (function() {
+        var players=[];
+        
         var codes= [ 
             //region and city code lookup table
             // Reg, NE, SE, NC, SC, P,  NW, SW
@@ -413,8 +415,12 @@ var RailBaronController= function (){
           } else {
             //get new Region
             index= codes[roll()][0];
-            newRegion= regions[index];
             
+            newRegion= regions[index];
+            console.log(roll());
+            console.log(index);
+             console.log(origin);
+           
             //if it matches, exit
             if (newRegion.label === origin.region.label) {
               // region matches current, ask for a new one
@@ -539,105 +545,6 @@ var RailBaronController= function (){
 
     
         
-//VIEW SPECIFIC FUNCTIONS - FLIPPY
-
-var game= new RailBaronController();
- 
-var updateButton= function(color, city, payout) {
-  $("#"+color+" span.city").text(city); 
-  $("#"+color+" span.payout").text(payout); 
-};
-
- 
-var updateFlippy= function(selector, label) {
-  var alpha="abcdefghijklmnopqrstuvwxyz1234567890., ";
-
-  $(selector).fadeOut(1000, function() {
-    console.log("label:"+label);
-    label.toLowerCase();
-
-    $(selector).each(function(index) {
-      var a= $(this).text();
-      a.toLowerCase();
-      //if panel needs to be updated for this word
-        
-      var b= label.charAt(index)||" ";
-      
-      if (a !== b) {
-        console.log("this.text="+$(this).text());
-          
-          
-          $(this).text(b);
-      }
-      
-    }); 
-
-    $(this).show();
-
-  });
-}; 
-
-var selectRegion= function(that) {
-//use that.data to access passed object
-  game.playerAddDestination(that.data.player.getColor(), updateBoard, that.data.region);
-  
-  
-};
-
-  
-//callback function for add destination (rewrite as if/then)
-var updateBoard= function (result) {
-
-//'this' refers to the player who triggered the function 
-  switch (result) {
-      case "new": //player added
-      
-          //update flippys with destination
-          updateFlippy(".region", this.getRegion());
-          updateFlippy(".city", this.getCity());
-          updateFlippy(".payout", this.getPayout());
-          
-          //activate button
-          
-          //update button
-          updateButton(this.getColor(), this.getCity(), this.getPayout());        
-
-        break;
-      case "added":
-      
-          //disable region selector if it's visble
-          
-          $("region-selector").disable();
-          
-          //update flippys with destination
-          updateFlippy(".region", this.getRegion());
-          updateFlippy(".city", this.getCity());
-          updateFlippy(".payout", this.getPayout());
-
-          //update button
-          updateButton(this.getColor(), this.getCity(), this.getPayout());        
-
-        break;
-      case "ask":
-        //display the region selector
-        updateFlippy(".region", "Choose region");
-        $(".region-selector").show();
-        
-        var that={};
-        that.player= this; //store ref to player
-        
-        //when a region selector button is clicked, call get destination on the player in this callback
-        $(".region-selector").each(function (index){
-          that.region=index;
-          $(this).click(that, selectRegion);
-                    
-        });
-        break;
-        
-    
-    }
-};
-
 
   
     
