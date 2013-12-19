@@ -224,7 +224,7 @@ var updateBoard= function (result) {
       var color= $(this).attr("id");
       
       //set each button's function
-      $(this).click(game.playerAddDestination(color, updateBoard));
+      $(this).click({"color":color,"callback":updateBoard}, game.playerAddDestination);
       
       
       });

@@ -394,7 +394,7 @@ var RailBaronController= function (){
               newPlayer.color=color;
               
               
-              players[color]=player(newPlayer);  //reference player's by their color
+              player[color]=player(newPlayer);  //reference player's by their color
                
               return true;
             }
@@ -406,33 +406,40 @@ var RailBaronController= function (){
           var newDest={}, newRegion={}, index, high, low, newCity;
           
           
-          // if passed, set region
           if (region) {
-            newRegion=regions[region];
-            
-            
-          //otherwise roll for it
+          //region was passed
+            newRegion= regions[region];
+                      console.log(region);
+
           } else {
-            //get new Region
+            //no region, roll for home or next dest
             index= codes[roll()][0];
-            
             newRegion= regions[index];
-            console.log(roll());
-            console.log(index);
-             console.log(origin);
-           
+            
+
             //if it matches, exit
-            if (newRegion.label === origin.region.label) {
+            if (origin && newRegion.label === origin.region.label) {
               // region matches current, ask for a new one
               return false;
             } 
-  
           }
+          
+          //no match 
+          
+          
+          console.log("newRegion: ");
+          console.log(newRegion.index);
           
           //set the region, even if it matches the old one if it was passed directly
           newDest.region= newRegion;
                     
           index = codes[newRegion.index][roll()];
+          console.log(codes[newRegion.index][roll()]); //undefined???
+          
+          
+          console.log(cities[newRegion.index-1]);
+          console.log(cities[newRegion.index-1].cities[index]);
+          
           newCity = cities[newRegion.index-1].cities[index];
           newDest.city= newCity;
           
@@ -454,12 +461,18 @@ var RailBaronController= function (){
     return {
     // public interface
     
-        playerAddDestination: function(color, callback, region) {
+        playerAddDestination: function(event) { //event contains color, callback and optionally region
+        
         // return the added destination, and trigger the callback, 
         // or return false if no destination was added (dupe region)
         // if region provided, skip ahead
+        console.log("player add "+event.data.color);
         
-          var home, origin, newDest;
+          var home, origin, newDest, color, callback, region;
+          
+          color=event.data.color;
+          callback=event.data.callback ;
+          region=event.data.region;
           
           if (!player[color]) {
           // create a player if one doesn't exist.
@@ -467,6 +480,7 @@ var RailBaronController= function (){
             
             //set hometown
             home= newDestination();
+            console.log(home);
             player[color].nextDestination(home);
             if (callback && typeof callback === "function") {  
               callback.apply(player[color],["new"]);
