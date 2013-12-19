@@ -116,6 +116,7 @@
 var game= new RailBaronController();
  
 var updateButton= function(color, city, payout) {
+  console.log(color, city, payout);
   $("#"+color+" span.city").text(city); 
   $("#"+color+" span.payout").text(payout); 
 };
@@ -160,14 +161,18 @@ var selectRegion= function(that) {
 //callback function for add destination (rewrite as if/then)
 var updateBoard= function (result) {
 
+console.log(this);
+
+
 //'this' refers to the player who triggered the function 
   switch (result) {
       case "new": //player added
-      
+          $("#"+this.getColor()).toggleClass("add");
+          
           //update flippys with destination
-          updateFlippy(".region", this.getRegion());
-          updateFlippy(".city", this.getCity());
-          updateFlippy(".payout", this.getPayout());
+          updateFlippy(".region-letter", this.getRegion());
+          updateFlippy(".city-letter", this.getCity());
+          updateFlippy(".payout-letter", this.getPayout());
           
           //activate button
           

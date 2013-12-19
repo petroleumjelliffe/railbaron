@@ -159,7 +159,7 @@ var RailBaronController= function (){
         var codes= [ 
             //region and city code lookup table
             // Reg, NE, SE, NC, SC, P,  NW, SW
-                [  7,   4,  8 , 1,  10, 5,  8,  2],
+                [  7,   4,  8 , 1,  10, 5,  8,  2],//odd
                 [  4,   8,  8 , 0,  10, 8,  6,  3],
                 [  4,   6,  8 , 1,  1,  4,  6,  3],
                 [  4,   6,  1 , 1,  8,  8,  6,  3],
@@ -170,7 +170,7 @@ var RailBaronController= function (){
                 [  6,   1,  10, 7,  2,  6,  1,  8],
                 [  5,   1,  7 , 7,  2,  2,  1,  8],
                 [  6,   4,  8 , 0,  2,  2,  4,  8],
-                [  5,   4,  2 , 2,  6,  3,  8,  7],
+                [  5,   4,  2 , 2,  6,  3,  8,  7],//even
                 [  2,   4,  2 , 2,  6,  3,  8,  7],
                 [  2,   4,  3 , 2,  6,  0,  7,  5],
                 [  2,   0,  0 , 2,  4,  0,  7,  7],
@@ -427,18 +427,12 @@ var RailBaronController= function (){
           //no match 
           
           
-          console.log("newRegion: ");
-          console.log(newRegion.index);
           
           //set the region, even if it matches the old one if it was passed directly
           newDest.region= newRegion;
                     
-          index = codes[newRegion.index][roll()];
-          console.log(codes[newRegion.index][roll()]); //undefined???
+          index = codes[roll()][newRegion.index];
           
-          
-          console.log(cities[newRegion.index-1]);
-          console.log(cities[newRegion.index-1].cities[index]);
           
           newCity = cities[newRegion.index-1].cities[index];
           newDest.city= newCity;
@@ -462,6 +456,8 @@ var RailBaronController= function (){
     // public interface
     
         playerAddDestination: function(event) { //event contains color, callback and optionally region
+        
+        console.log(event);
         
         // return the added destination, and trigger the callback, 
         // or return false if no destination was added (dupe region)
@@ -491,7 +487,7 @@ var RailBaronController= function (){
           } 
           
           // existing player, get next destination
-          origin= player[color].getCurrentDestination(); 
+          origin= player[color].currentDestination(); 
           newDest= newDestination(origin, region);
         
           //newdest is false if a dest didn't come back
