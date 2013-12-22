@@ -114,10 +114,16 @@
 //VIEW SPECIFIC FUNCTIONS - FLIPPY
 
 var game= new RailBaronController();
+
+
  
 var updateButton= function(color, city, payout) {
   console.log(color, city, payout);
   $("#"+color+" span.city").text(city); 
+  
+  if (payout !== "Home") {
+    payout= "$"+ payout; 
+  }
   $("#"+color+" span.payout").text(payout); 
 };
 
@@ -152,10 +158,13 @@ var updateFlippy= function(selector, label) {
 
 var selectRegion= function(that) {
 //use that.data to access passed object
+          console.log("hide ");
   
   //event.color, callback, region
   game.playerAddDestination(that.data.player.getColor(), updateBoard, that.data.region);
-  
+          $(".region-selector").hide();
+          $(".region-selector").prop("disabled",true);
+
   
 };
 
@@ -185,8 +194,9 @@ console.log(this);
       case "added":
       
           //disable region selector if it's visble
-          
-          $("region-selector").prop("disabled",true);
+           $(".region-selector").hide();
+          $(".region-selector").prop("disabled",true);
+         
           
           //update flippys with destination
           updateFlippy(".region-letter", this.getRegion());
@@ -194,12 +204,14 @@ console.log(this);
           updateFlippy(".payout-letter", this.getPayout());
 
           //update button
+          
           updateButton(this.getColor(), this.getCity(), this.getPayout());        
 
         break;
       case "ask":
         //display the region selector
         updateFlippy(".region-letter", "Choose region");
+        updateFlippy(".city-letter", " ");
         
         $(".region-selector").show();
         $(".region-selector").prop("disabled",false);
@@ -209,6 +221,8 @@ console.log(this);
         that.color= this.getColor();
         that.callback= updateBoard;
          //store ref to player
+         
+         
         
         //when a region selector button is clicked, call get destination on the player in this callback
         $(".region-selector").each(function (index){
@@ -220,7 +234,6 @@ console.log(this);
     
     }
 };
-
 
   console.log(game);
   /* alert(toLowerCase("A")); */
