@@ -405,6 +405,7 @@ var RailBaronController= function (){
           
           var newDest={}, newRegion={}, index, high, low, newCity;
           
+          console.log("region: "+region);
           
           if (region) {
           //region was passed
@@ -413,11 +414,18 @@ var RailBaronController= function (){
 
           } else {
             //no region, roll for home or next dest
-            index= codes[roll()][0];
+            
+            var regionRoll=roll()-1;
+            console.log(regionRoll);
+            console.log(codes[regionRoll][0]);
+            
+            index= codes[regionRoll][0];
             newRegion= regions[index];
             
 
             //if it matches, exit
+            console.log(origin);
+            console.log(newRegion);
             if (origin && newRegion.label === origin.region.label) {
               // region matches current, ask for a new one
               return false;
@@ -431,7 +439,7 @@ var RailBaronController= function (){
           //set the region, even if it matches the old one if it was passed directly
           newDest.region= newRegion;
                     
-          index = codes[roll()][newRegion.index];
+          index = codes[roll()-1][newRegion.index];
           
           
           newCity = cities[newRegion.index-1].cities[index];
@@ -487,7 +495,9 @@ var RailBaronController= function (){
           } 
           
           // existing player, get next destination
-          origin= player[color].currentDestination(); 
+          
+          console.log(player[color]);
+          origin= player[color].getDestination(); 
           newDest= newDestination(origin, region);
         
           //newdest is false if a dest didn't come back

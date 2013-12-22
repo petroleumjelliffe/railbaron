@@ -184,7 +184,7 @@ console.log(this);
       
           //disable region selector if it's visble
           
-          $("region-selector").disable();
+          $("region-selector").prop("disabled", true);
           
           //update flippys with destination
           updateFlippy(".region", this.getRegion());
