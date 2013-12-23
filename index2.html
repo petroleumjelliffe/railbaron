@@ -123,6 +123,8 @@
 <script src="modernizr.custom.47689.js" type="text/javascript"></script>
 <script src="js/railbaronv2.js" type="text/javascript"></script>
 <script src="js/jquery.flapper.js" type="text/javascript"></script>
+<script src="js/jshashtable-3.0.js" type="text/javascript"></script>
+<script src="js/jquery.numberformatter-1.2.4.js" type="text/javascript"></script>
 <script>
 
 
@@ -228,7 +230,12 @@ console.log(this);
 */
     $("#region-display").val(this.getRegion().toUpperCase()).change();
     $("#city-display").val(this.getCity().toUpperCase()).change();
-    $("#payout-display").val(this.getPayout()).change();
+    var payout= $("#payout-display");
+    payout.val(this.getPayout());
+    payout.parseNumber({format:"#,###", locale:"us"});
+    payout.formatNumber({format:"$#,###", locale:"us"});
+    payout.change();
+
 
           //update button
           
@@ -305,9 +312,9 @@ var destinationOptions = {
                         // transform to off
 }
 var payoutOptions = {
-  width: 6,             // number of digits
+  width: 7,             // number of digits
   format: null,         // options for jquery.numberformatter, if loaded
-  align: 'left',       // aligns values to the left or right of display
+  align: 'right',       // aligns values to the left or right of display
   padding: '&nbsp;',    // value to use for padding
   chars: null,          // array of characters that Flapper can display
   chars_preset: 'alphanum',  // 'num', 'hexnum', 'alpha' or 'alphanum'
