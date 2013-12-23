@@ -1,12 +1,19 @@
 <html>
 <head>
 <title>Rail Baron 2013</title>
-<link rel="stylesheet" href="styles2.css">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<link rel="stylesheet" href="css/styles2.css">
+<link rel="stylesheet" href="css/flapper.css">
 
+
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <meta name="apple-mobile-web-app-capable" content="yes" />  
 <meta name="apple-mobile-web-app-status-bar-style" content="black" />  
+<style>
 
+.region-letter, .city-letter, #payout {
+  display: none;
+}
+</style>
 </head>
 
 
@@ -20,6 +27,8 @@
 
 
 <div class="display"><h2>Region</h2>
+<input id="region-display" />
+
 <table id="region">
   <tr>
     <td class="region-letter"> </td>
@@ -40,6 +49,7 @@
 </table>
 <form>
 
+
       <input type="button" disabled="disabled" class="region-selector" id="region-1" value="Northeast" > 
   <input type="button" disabled="disabled" class="region-selector" id="region-2" value="Southeast">
   <input type="button" disabled="disabled" class="region-selector" id="region-3" value="North Central">
@@ -53,6 +63,7 @@
 <div class="display">
 
 <h2>City</h2>
+<input id="city-display" />
 
 <table id="city">
   <tr>
@@ -77,6 +88,7 @@
 
 
 <div class="display"><h2>Payout</h2>
+<input id="payout-display" />
 
 <table id="payout">
   <tr>
@@ -104,10 +116,13 @@
   </ul>
 
 </div>
+<input id="display" />
+
   
 <script src="jquery-1.8.3.min.js" type="text/javascript"></script>
 <script src="modernizr.custom.47689.js" type="text/javascript"></script>
-<script src="railbaronv2.js" type="text/javascript"></script>
+<script src="js/railbaronv2.js" type="text/javascript"></script>
+<script src="js/jquery.flapper.js" type="text/javascript"></script>
 <script>
 
 
@@ -178,15 +193,22 @@ console.log(this);
 //'this' refers to the player who triggered the function 
   switch (result) {
       case "new": //player added
+          
+          //activate button
           $("#"+this.getColor()).toggleClass("add");
           
           //update flippys with destination
+/*
           updateFlippy(".region-letter", this.getRegion());
           updateFlippy(".city-letter", this.getCity());
           updateFlippy(".payout-letter", this.getPayout());
+*/
           
-          //activate button
-          
+    $("#region-display").val(this.getRegion().toUpperCase()).change();
+    $("#city-display").val(this.getCity().toUpperCase()).change();
+    $("#payout-display").val(this.getPayout().toUpperCase()).change();
+    
+    console.log(this.getRegion().toUpperCase());
           //update button
           updateButton(this.getColor(), this.getCity(), this.getPayout());        
 
@@ -199,9 +221,14 @@ console.log(this);
          
           
           //update flippys with destination
+/*
           updateFlippy(".region-letter", this.getRegion());
           updateFlippy(".city-letter", this.getCity());
           updateFlippy(".payout-letter", this.getPayout());
+*/
+    $("#region-display").val(this.getRegion().toUpperCase()).change();
+    $("#city-display").val(this.getCity().toUpperCase()).change();
+    $("#payout-display").val(this.getPayout()).change();
 
           //update button
           
@@ -210,8 +237,11 @@ console.log(this);
         break;
       case "ask":
         //display the region selector
+/*
         updateFlippy(".region-letter", "Choose region");
         updateFlippy(".city-letter", " ");
+*/
+    $("#region-display").val("CHOOSE REGION").change();
         
         $(".region-selector").show();
         $(".region-selector").prop("disabled",false);
@@ -258,13 +288,47 @@ console.log(this);
       
       
       });
+
+var destinationOptions = {
+  width: 14,             // number of digits
+  format: null,         // options for jquery.numberformatter, if loaded
+  align: 'left',       // aligns values to the left or right of display
+  padding: '&nbsp;',    // value to use for padding
+  chars: null,          // array of characters that Flapper can display
+  chars_preset: 'alphanum',  // 'num', 'hexnum', 'alpha' or 'alphanum'
+  timing: 250,          // the maximum timing for digit animation
+  min_timing: 10,       // the minimum timing for digit animation
+  threshhold: 100,      // the point at which Flapper will switch from
+                        // simple to detailed animations
+  transform: true       // Flapper automatically detects the jquery.transform
+                        // plugin. Set this to false if you want to force
+                        // transform to off
+}
+var payoutOptions = {
+  width: 6,             // number of digits
+  format: null,         // options for jquery.numberformatter, if loaded
+  align: 'left',       // aligns values to the left or right of display
+  padding: '&nbsp;',    // value to use for padding
+  chars: null,          // array of characters that Flapper can display
+  chars_preset: 'alphanum',  // 'num', 'hexnum', 'alpha' or 'alphanum'
+  timing: 250,          // the maximum timing for digit animation
+  min_timing: 10,       // the minimum timing for digit animation
+  threshhold: 100,      // the point at which Flapper will switch from
+                        // simple to detailed animations
+  transform: true       // Flapper automatically detects the jquery.transform
+                        // plugin. Set this to false if you want to force
+                        // transform to off
+}
         
+    //region
+    $("#region-display").flapper(destinationOptions).val("RAIL BARON").change();
+    $("#city-display").flapper(destinationOptions).val("2014").change();
+    $("#payout-display").flapper(payoutOptions).val("PXJ").change();
         
 
       
     });
   
-
 
 </script>
 

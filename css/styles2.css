@@ -49,15 +49,15 @@ table {
 #board {
   display: block;
   float: left;
-  width: 75%;
+  width: 80%;
   background: #333; 
-  text-align: center;
+  text-align: left;
   height: 100%;
 }
 #buttons {
   display: block;
   float:left;
-  width: 25%;
+  width: 20%;
   height: 100%;
   background: #333;
 }
@@ -309,7 +309,7 @@ table {
 }
 div.display {
   margin: 0 auto;
-  width: 550px;
+  width: 768px;
 }
 
 
