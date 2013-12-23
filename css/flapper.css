@@ -227,6 +227,37 @@
 .flapper.XS .digit .bottom {
     clip: rect(15px, 24px, 30px, 0px); 
 }
+/* XXS 12x15 */
+
+.flapper.XXS {
+    font-size: 14px;
+    line-height: 15px;
+    height: 17px;
+}
+
+.flapper.XXS .digit {
+    border-radius: 3px;
+}
+
+.flapper.XXS .digit div {
+    border-radius: 1px;
+}
+
+.flapper.XXS .digit,
+.flapper.XXS .digit div {
+    height: 15px;
+    width: 12px;
+    font-size: inherit;
+    line-height: inherit;
+}
+
+.flapper.XXS .digit .top {
+    clip: rect(0px, 12px, 7px, 0px);
+}
+
+.flapper.XXS .digit .bottom {
+    clip: rect(8px, 12px, 15px, 0px); 
+}
 
 /* THEME STYLES */
 

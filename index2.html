@@ -20,94 +20,55 @@
 
 <body>
   <div id="board">
-  <h1 id="title">Rail Baron</h1>
-
-
-
-
-
-<div class="display"><h2>Region</h2>
-<input id="region-display" />
-
-<table id="region">
-  <tr>
-    <td class="region-letter"> </td>
-    <td class="region-letter"> </td>
-    <td class="region-letter">R</td>
-    <td class="region-letter">a</td>
-    <td class="region-letter">i</td>
-    <td class="region-letter">l</td>
-    <td class="region-letter"> </td>
-    <td class="region-letter">B</td>
-    <td class="region-letter">a</td>
-    <td class="region-letter">r</td>
-    <td class="region-letter">o</td>
-    <td class="region-letter">n</td>
-    <td class="region-letter"> </td>
-    <td class="region-letter"> </td>
-  </tr>
-</table>
-<form>
-
-
-      <input type="button" disabled="disabled" class="region-selector" id="region-1" value="Northeast" > 
-  <input type="button" disabled="disabled" class="region-selector" id="region-2" value="Southeast">
-  <input type="button" disabled="disabled" class="region-selector" id="region-3" value="North Central">
-  <input type="button" disabled="disabled" class="region-selector" id="region-4" value="South Central"> 
-  <input type="button" disabled="disabled" class="region-selector" id="region-5" value="Plains">
-  <input type="button" disabled="disabled" class="region-selector" id="region-6" value="Northwest"> 
-  <input type="button" disabled="disabled" class="region-selector" id="region-7" value="Southwest"> 
-</form>
-</div>
-
-<div class="display">
-
-<h2>City</h2>
-<input id="city-display" />
-
-<table id="city">
-  <tr>
-    <td class="city-letter"> </td>
-    <td class="city-letter"> </td>
-    <td class="city-letter"> </td>
-    <td class="city-letter"> </td>
-    <td class="city-letter"> </td>
-    <td class="city-letter">2</td>
-    <td class="city-letter">0</td>
-    <td class="city-letter">1</td>
-    <td class="city-letter">3</td>
-    <td class="city-letter"> </td>
-    <td class="city-letter"> </td>
-    <td class="city-letter"> </td>
-    <td class="city-letter"> </td>
-    <td class="city-letter"> </td>
-  </tr>
-
-</table>
-</div>    
-
-
-<div class="display"><h2>Payout</h2>
-<input id="payout-display" />
-
-<table id="payout">
-  <tr>
-    <td>$</td>
-    <td class="payout-letter"> </td>
-    <td class="payout-letter"> </td>
-    <td class="payout-letter">0</td>
-    <td class="payout-letter">0</td>
-    <td class="payout-letter">0</td>
-  </tr>
+    <h1 id="title">Rail Baron</h1>
   
-</table>
-</div>
-
-</div>
+  
+  
+  
+  
+    <div class="display">
+      
+      <h2>Region</h2>
+      <input id="region-display" class="s dark" />
+      
+      <form>
+      
+      
+        <input type="button" disabled="disabled" class="region-selector" id="region-1" value="Northeast" > 
+        <input type="button" disabled="disabled" class="region-selector" id="region-2" value="Southeast">
+        <input type="button" disabled="disabled" class="region-selector" id="region-3" value="North Central">
+        <input type="button" disabled="disabled" class="region-selector" id="region-4" value="South Central"> 
+        <input type="button" disabled="disabled" class="region-selector" id="region-5" value="Plains">
+        <input type="button" disabled="disabled" class="region-selector" id="region-6" value="Northwest"> 
+        <input type="button" disabled="disabled" class="region-selector" id="region-7" value="Southwest"> 
+      </form>
+    </div>
+    
+    <div class="display">
+    
+      <h2>City</h2>
+      <input id="city-display" />
+    
+    </div>    
+    
+    
+    <div class="display">
+      <h2>Payout</h2>
+      
+      <input id="payout-display" />
+    
+    </div>
+  
+  </div>
   
   <div id="buttons">
   <ul>
-    <li><a href="#" class="destination-button" id="red"><span class="city">tap to join</span><br /> <span class="payout">Red</span> </a>      </li>
+    <li>
+      <a href="#" class="destination-button" id="red">
+        <input class="xxs light" id="red-city" value=""/>
+        <input class="xxs light" id="red-payout" value=""/>
+      </a>      
+    </li>
     <li><a href="#" class="destination-button" id="blue" > <span class="city">tap to join</span><br /> <span class="payout">Blue</span></a>   </li>
     <li><a href="#" class="destination-button" id="green"> <span class="city">tap to join</span><br /> <span class="payout">Green</span></a>  </li>
     <li><a href="#" class="destination-button" id="yellow"><span class="city">tap to join</span><br /> <span class="payout">Yellow</span></a></li>
@@ -115,8 +76,7 @@
     <li><a href="#" class="destination-button" id="white"> <span class="city">tap to join</span><br /> <span class="payout">White</span></a>  </li>
   </ul>
 
-</div>
-<input id="display" />
+  </div>
 
   
 <script src="jquery-1.8.3.min.js" type="text/javascript"></script>
@@ -209,6 +169,8 @@ console.log(this);
     $("#region-display").val(this.getRegion().toUpperCase()).change();
     $("#city-display").val(this.getCity().toUpperCase()).change();
     $("#payout-display").val(this.getPayout().toUpperCase()).change();
+    $("#"+this.getColor()+"-city").val(this.getCity().toUpperCase()).change();
+    $("#"+this.getColor()+"-payout").val(this.getPayout().toUpperCase()).change();
     
     console.log(this.getRegion().toUpperCase());
           //update button
@@ -230,11 +192,30 @@ console.log(this);
 */
     $("#region-display").val(this.getRegion().toUpperCase()).change();
     $("#city-display").val(this.getCity().toUpperCase()).change();
-    var payout= $("#payout-display");
-    payout.val(this.getPayout());
-    payout.parseNumber({format:"#,###", locale:"us"});
-    payout.formatNumber({format:"$#,###", locale:"us"});
-    payout.change();
+    var city=[];
+    city[0]=$("#city-display");
+    city[1]=$("#"+this.getColor()+"-city");
+    var dest= this.getCity();
+    
+    
+    var payout=[];
+    payout[0]=$("#payout-display");
+    payout[1]=$("#"+this.getColor()+"-payout");
+    var amount=this.getPayout();
+    $(city).each(function(){
+    console.log(this);
+      this.val(dest.toUpperCase());
+      this.change();
+      
+    });
+    $(payout).each(function(){
+    console.log(this);
+      this.val(amount);
+      this.parseNumber({format:"#,###", locale:"us"});
+      this.formatNumber({format:"$#,###", locale:"us"});
+      this.change();
+      
+    });
 
 
           //update button
@@ -331,6 +312,9 @@ var payoutOptions = {
     $("#region-display").flapper(destinationOptions).val("RAIL BARON").change();
     $("#city-display").flapper(destinationOptions).val("2014").change();
     $("#payout-display").flapper(payoutOptions).val("PXJ").change();
+
+    $("#red-city").flapper(destinationOptions).val("TAP TO").change();
+    $("#red-payout").flapper(payoutOptions).val("JOIN").change();
         
 
       
