@@ -29,7 +29,7 @@
     <div class="display">
       
       <h2>Region</h2>
-      <input id="region-display" class="s dark" />
+      <input id="region-display" class="m dark" />
       
       <form>
       
@@ -69,11 +69,36 @@
         <input class="xxs light" id="red-payout" value=""/>
       </a>      
     </li>
-    <li><a href="#" class="destination-button" id="blue" > <span class="city">tap to join</span><br /> <span class="payout">Blue</span></a>   </li>
-    <li><a href="#" class="destination-button" id="green"> <span class="city">tap to join</span><br /> <span class="payout">Green</span></a>  </li>
-    <li><a href="#" class="destination-button" id="yellow"><span class="city">tap to join</span><br /> <span class="payout">Yellow</span></a></li>
-    <li><a href="#" class="destination-button" id="black"> <span class="city">tap to join</span><br /> <span class="payout">Black</span></a>  </li>
-    <li><a href="#" class="destination-button" id="white"> <span class="city">tap to join</span><br /> <span class="payout">White</span></a>  </li>
+    <li>
+      <a href="#" class="destination-button" id="green">
+        <input class="xxs light" id="green-city" value=""/>
+        <input class="xxs light" id="green-payout" value=""/>
+      </a>      
+    </li>
+    <li>
+      <a href="#" class="destination-button" id="blue">
+        <input class="xxs light" id="blue-city" value=""/>
+        <input class="xxs light" id="blue-payout" value=""/>
+      </a>      
+    </li>
+    <li>
+      <a href="#" class="destination-button" id="yellow">
+        <input class="xxs light" id="yellow-city" value=""/>
+        <input class="xxs light" id="yellow-payout" value=""/>
+      </a>      
+    </li>
+    <li>
+      <a href="#" class="destination-button" id="black">
+        <input class="xxs light" id="black-city" value=""/>
+        <input class="xxs light" id="black-payout" value=""/>
+      </a>      
+    </li>
+    <li>
+      <a href="#" class="destination-button" id="white">
+        <input class="xxs light" id="white-city" value=""/>
+        <input class="xxs light" id="white-payout" value=""/>
+      </a>      
+    </li>
   </ul>
 
   </div>
@@ -316,8 +341,21 @@ var payoutOptions = {
     $("#red-city").flapper(destinationOptions).val("TAP TO").change();
     $("#red-payout").flapper(payoutOptions).val("JOIN").change();
         
+    $("#green-city").flapper(destinationOptions).val("TAP TO").change();
+    $("#green-payout").flapper(payoutOptions).val("JOIN").change();
 
+    $("#blue-city").flapper(destinationOptions).val("TAP TO").change();
+    $("#blue-payout").flapper(payoutOptions).val("JOIN").change();
+
+    $("#yellow-city").flapper(destinationOptions).val("TAP TO").change();
+    $("#yellow-payout").flapper(payoutOptions).val("JOIN").change();
       
+    $("#white-city").flapper(destinationOptions).val("TAP TO").change();
+    $("#white-payout").flapper(payoutOptions).val("JOIN").change();
+
+    $("#black-city").flapper(destinationOptions).val("TAP TO").change();
+    $("#black-payout").flapper(payoutOptions).val("JOIN").change();
+
     });
   
 
