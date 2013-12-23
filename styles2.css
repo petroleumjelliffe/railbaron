@@ -299,6 +299,7 @@ input {
 }
 input.region-selector {
 	font-size: .5em;
+	display:none;
 	
 	
 }

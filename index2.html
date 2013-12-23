@@ -114,10 +114,16 @@
 //VIEW SPECIFIC FUNCTIONS - FLIPPY
 
 var game= new RailBaronController();
+
+
  
 var updateButton= function(color, city, payout) {
   console.log(color, city, payout);
   $("#"+color+" span.city").text(city); 
+  
+  if (payout !== "Home") {
+    payout= "$"+ payout; 
+  }
   $("#"+color+" span.payout").text(payout); 
 };
 
@@ -126,7 +132,7 @@ var updateFlippy= function(selector, label) {
   var alpha="abcdefghijklmnopqrstuvwxyz1234567890., ";
 
   $(selector).fadeOut(1000, function() {
-    console.log("label:"+label);
+//    console.log("label:"+label);
     label.toLowerCase();
 
     $(selector).each(function(index) {
@@ -137,7 +143,7 @@ var updateFlippy= function(selector, label) {
       var b= label.charAt(index)||" ";
       
       if (a !== b) {
-        console.log("this.text="+$(this).text());
+//        console.log("this.text="+$(this).text());
           
           
           $(this).text(b);
@@ -152,8 +158,13 @@ var updateFlippy= function(selector, label) {
 
 var selectRegion= function(that) {
 //use that.data to access passed object
-  game.playerAddDestination(that.data.player.getColor(), updateBoard, that.data.region);
+          console.log("hide ");
   
+  //event.color, callback, region
+  game.playerAddDestination(that.data.player.getColor(), updateBoard, that.data.region);
+          $(".region-selector").hide();
+          $(".region-selector").prop("disabled",true);
+
   
 };
 
@@ -183,38 +194,52 @@ console.log(this);
       case "added":
       
           //disable region selector if it's visble
-          
-          $("region-selector").prop("disabled", true);
+           $(".region-selector").hide();
+          $(".region-selector").prop("disabled",true);
+         
           
           //update flippys with destination
-          updateFlippy(".region", this.getRegion());
-          updateFlippy(".city", this.getCity());
-          updateFlippy(".payout", this.getPayout());
+          updateFlippy(".region-letter", this.getRegion());
+          updateFlippy(".city-letter", this.getCity());
+          updateFlippy(".payout-letter", this.getPayout());
 
           //update button
+          
           updateButton(this.getColor(), this.getCity(), this.getPayout());        
 
         break;
       case "ask":
         //display the region selector
-        updateFlippy(".region", "Choose region");
+        updateFlippy(".region-letter", "Choose region");
+        updateFlippy(".city-letter", " ");
+        
         $(".region-selector").show();
+        $(".region-selector").prop("disabled",false);
+
         
         var that={};
-        that.player= this; //store ref to player
+        that.color= this.getColor();
+        that.callback= updateBoard;
+         //store ref to player
+         console.log(that.color);
+         
         
         //when a region selector button is clicked, call get destination on the player in this callback
         $(".region-selector").each(function (index){
           that.region=index;
-          $(this).click(that, selectRegion);
-                    
+          var obj={};
+          obj["color"]= that.color;
+          obj["callback"]=updateBoard;
+          obj["region"]=index;
+          
+          $(this).off( "click");
+          $(this).click(obj, game.playerAddDestination);
         });
         break;
         
     
     }
 };
-
 
   console.log(game);
   /* alert(toLowerCase("A")); */

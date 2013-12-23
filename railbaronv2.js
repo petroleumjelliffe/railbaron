@@ -1,4 +1,4 @@
-/*global RailBaronController: true, players: true*/
+/*global RailBaronController: true, player: true*/
 /*properties
     addDestination, addPlayer, chooseRegion, cities, city, color, destinations,
     floor, getCity, getColor, getDestination, getPayout, getRandomCity,
@@ -68,6 +68,7 @@ var player= function(spec) {
       
         if (newDest) {
           spec.destinations.push(newDest);
+          console.log(newDest);
           return true;
         } 
               
@@ -159,28 +160,28 @@ var RailBaronController= function (){
         var codes= [ 
             //region and city code lookup table
             // Reg, NE, SE, NC, SC, P,  NW, SW
-                [  7,   4,  8 , 1,  10, 5,  8,  2],//odd
-                [  4,   8,  8 , 0,  10, 8,  6,  3],
-                [  4,   6,  8 , 1,  1,  4,  6,  3],
-                [  4,   6,  1 , 1,  8,  8,  6,  3],
-                [  7,   5,  6 , 3,  1,  4,  4,  2],
-                [  7,   8,  4 , 0,  9,  5,  4,  2],
-                [  5,   5,  6 , 0,  3,  1,  4,  2],
-                [  6,   1,  10, 7,  3,  6,  3,  8],
-                [  6,   1,  10, 7,  2,  6,  1,  8],
-                [  5,   1,  7 , 7,  2,  2,  1,  8],
-                [  6,   4,  8 , 0,  2,  2,  4,  8],
-                [  5,   4,  2 , 2,  6,  3,  8,  7],//even
-                [  2,   4,  2 , 2,  6,  3,  8,  7],
-                [  2,   4,  3 , 2,  6,  0,  7,  5],
-                [  2,   0,  0 , 2,  4,  0,  7,  7],
-                [  3,   2,  0 , 4,  8,  0,  7,  6],
-                [  3,   3,  0 , 4,  0,  3,  7,  1],
-                [  1,   2,  9 , 5,  5,  3,  5,  4],
-                [  1,   7,  5 , 6,  7,  3,  2,  0],
-                [  1,   4,  7 , 6,  7,  7,  0,  9],
-                [  1,   4,  5 , 0,  5,  7,  0,  4],
-                [  1,   4,  7 , 6,  6,  5,  8,  4]
+                [  6,   4,  8 , 1,  10, 5,  8,  2],//odd - 0
+                [  3,   8,  8 , 0,  10, 8,  6,  3],
+                [  3,   6,  8 , 1,  1,  4,  6,  3],
+                [  3,   6,  1 , 1,  8,  8,  6,  3],
+                [  6,   5,  6 , 3,  1,  4,  4,  2],
+                [  6,   8,  4 , 0,  9,  5,  4,  2],
+                [  4,   5,  6 , 0,  3,  1,  4,  2],
+                [  5,   1,  10, 7,  3,  6,  3,  8],
+                [  5,   1,  10, 7,  2,  6,  1,  8],
+                [  4,   1,  7 , 7,  2,  2,  1,  8],
+                [  5,   4,  8 , 0,  2,  2,  4,  8],
+                [  4,   4,  2 , 2,  6,  3,  8,  7],//even 11
+                [  1,   4,  2 , 2,  6,  3,  8,  7],
+                [  1,   4,  3 , 2,  6,  0,  7,  5],
+                [  1,   0,  0 , 2,  4,  0,  7,  7],
+                [  2,   2,  0 , 4,  8,  0,  7,  6],
+                [  2,   3,  0 , 4,  0,  3,  7,  1],
+                [  0,   2,  9 , 5,  5,  3,  5,  4],
+                [  0,   7,  5 , 6,  7,  3,  2,  0],
+                [  0,   4,  7 , 6,  7,  7,  0,  9],
+                [  0,   4,  5 , 0,  5,  7,  0,  4],
+                [  0,   4,  7 , 6,  6,  5,  8,  4]
         ],
         
         regions= [
@@ -389,14 +390,14 @@ var RailBaronController= function (){
             console.log("add "+ color + " player");
             
             //check to see if player exists
-            if (!player[color]) {
+            if (!players[color]) {
               var newPlayer={};
               newPlayer.color=color;
               
               
-              player[color]=player(newPlayer);  //reference player's by their color
+              players[color]=player(newPlayer);  //reference player's by their color
                
-              return true;
+              return players[color];
             }
 
         }
@@ -405,30 +406,35 @@ var RailBaronController= function (){
           
           var newDest={}, newRegion={}, index, high, low, newCity;
           
-          console.log("region: "+region);
+          console.log("region type= "+typeof region);
           
-          if (region) {
+          if (typeof region !== "undefined") {
+          console.log("region= "+region);
+          
           //region was passed
             newRegion= regions[region];
                       console.log(region);
+                      console.log(newRegion);
 
           } else {
-            //no region, roll for home or next dest
             
-            var regionRoll=roll()-1;
-            console.log(regionRoll);
-            console.log(codes[regionRoll][0]);
+            //no region, roll for home or next dest
+            var regionRoll= roll();
+            console.log("roll is "+regionRoll);
+            console.log("index= "+codes[regionRoll][0]);
             
             index= codes[regionRoll][0];
             newRegion= regions[index];
-            
+            console.log(newRegion);
 
             //if it matches, exit
+            if (origin)  {
             console.log(origin);
             console.log(newRegion);
-            if (origin && newRegion.label === origin.region.label) {
+              if (newRegion.label === origin.region.label) {
               // region matches current, ask for a new one
               return false;
+              }
             } 
           }
           
@@ -439,7 +445,7 @@ var RailBaronController= function (){
           //set the region, even if it matches the old one if it was passed directly
           newDest.region= newRegion;
                     
-          index = codes[roll()-1][newRegion.index];
+          index = codes[roll()][newRegion.index];
           
           
           newCity = cities[newRegion.index-1].cities[index];
@@ -463,9 +469,10 @@ var RailBaronController= function (){
     return {
     // public interface
     
-        playerAddDestination: function(event) { //event contains color, callback and optionally region
+        playerAddDestination: function(event) { 
+        //event contains color, callback and optionally region
         
-        console.log(event);
+        console.log(event.data);
         
         // return the added destination, and trigger the callback, 
         // or return false if no destination was added (dupe region)
@@ -478,16 +485,19 @@ var RailBaronController= function (){
           callback=event.data.callback ;
           region=event.data.region;
           
-          if (!player[color]) {
+          console.log(color, callback, region);
+          console.log(players[color]);
+          
+          if (!players[color]) {
           // create a player if one doesn't exist.
             addPlayer(color);
             
             //set hometown
             home= newDestination();
             console.log(home);
-            player[color].nextDestination(home);
+            players[color].nextDestination(home);
             if (callback && typeof callback === "function") {  
-              callback.apply(player[color],["new"]);
+              callback.apply(players[color],["new"]);
             
             }
             return home;
@@ -495,22 +505,24 @@ var RailBaronController= function (){
           } 
           
           // existing player, get next destination
-          
-          console.log(player[color]);
-          origin= player[color].getDestination(); 
+          console.log(players[color]);
+          origin= players[color].getDestination(); 
           newDest= newDestination(origin, region);
         
           //newdest is false if a dest didn't come back
           if (newDest) {
             //roll succeeded
-            player[color].nextDestination(newDest);
+            players[color].nextDestination(newDest);
+            console.log("specify region");
+            console.log(newDest);
+            
             
             if (callback && typeof callback === "function") {  
-                callback.apply(player[color],["added"]);  
+                callback.apply(players[color],["added"]);  
             return newDest;
             }  
           } else {
-            callback.apply(player[color],["ask"]);
+            callback.apply(players[color],["ask"]);
             return false;
           }
             
@@ -523,8 +535,8 @@ var RailBaronController= function (){
         playerInfo: function(color) {
         //return the specified player object
         
-          if (player[color] !== null){
-            return player[color];
+          if (players[color] !== null){
+            return players[color];
           }
           
         },
@@ -532,7 +544,7 @@ var RailBaronController= function (){
         
         playerUndo: function(color, callback) {
         
-          player[color].undoAddDestination();
+          players[color].undoAddDestination();
           
           if (callback && typeof callback === "function") {  
               callback();  
