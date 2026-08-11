@@ -118,9 +118,10 @@ singleton, no modules:
 
 Carry these across as fixes, not as faithful reproductions:
 
-1. **`cities[4]`, `cities[5]`, `cities[6]` are all labelled `"South Central"`** and should
-   be Plains, Northwest, Southwest. The current app survives it because region names are
-   read from `regions`, never from the city groups.
+1. **`cities[4]` and `cities[5]` are labelled `"South Central"`** and should be Plains and
+   Northwest. Three groups carry that label but only two wrongly — `cities[3]` really is
+   South Central, and `cities[6]` is already correctly `"Southwest"`. The current app
+   survives it because region names are read from `regions`, never from the city groups.
 2. **`player.chooseRegion` is dead code** duplicating the live path, and would throw if
    called — it uses `game.getRandomRegion`, which is not on the controller's interface.
    Drop it rather than porting it.

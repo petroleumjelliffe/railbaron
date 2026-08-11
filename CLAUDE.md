@@ -34,8 +34,10 @@ file, no modules, IIFE singleton:
 
 Three defects to carry across rather than reproduce:
 
-- **`cities[4]`, `cities[5]`, `cities[6]` are all labelled `"South Central"`** and should
-  be Plains, Northwest, Southwest ([js/railbaronv2.js:260-286](js/railbaronv2.js#L260-L286)).
+- **`cities[4]` and `cities[5]` are labelled `"South Central"`** and should be Plains and
+  Northwest ([js/railbaronv2.js:260](js/railbaronv2.js#L260) and
+  [:274](js/railbaronv2.js#L274)). `cities[3]` is genuinely South Central and `cities[6]`
+  is already correctly `"Southwest"` — three groups carry the label, only two wrongly.
   The current app gets away with it because region names are read from `regions`, not from
   the city groups — anything reading the city list directly is wrong.
 - **The payout matrix has never been checked against the board.** A single transposed

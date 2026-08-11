@@ -29,7 +29,7 @@ Replace the 2013 jQuery app. Same game, redesigned board, plus the map.
 - Map as a second view: real US geometry, one bulb per real dot, region and city blink
   choreography on a roll
 - Game logic ported from `js/railbaronv2.js` — roll tables, 67 cities, payout matrix —
-  with the three mislabelled regions fixed
+  with the two mislabelled regions fixed
 
 Scope is the roller only. No movement, no railroad ownership, no cash. The graph carries
 dot counts and railroad attribution anyway, so those can be layered on without redoing
