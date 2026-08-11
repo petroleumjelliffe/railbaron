@@ -898,8 +898,33 @@ describe('the board', () => {
     expect(screen.getByText('CHOOSE A MODE')).toBeInTheDocument();
     expect(screen.getByText('Select')).toBeInTheDocument();
   });
+
+  it('reads out the destination throughout a flap, not the spinning tiles', () => {
+    // A screen reader must not narrate two seconds of noise.
+    vi.useFakeTimers();
+    try {
+      const { container, rerender } = render(
+        <Board screen={screenDef([choice('PASS AND PLAY')])} onRowAct={() => {}} onBack={() => {}} />
+      );
+      rerender(
+        <Board screen={screenDef([choice('PLAY ONLINE')])} onRowAct={() => {}} onBack={() => {}} />
+      );
+      act(() => { vi.advanceTimersByTime(52); });
+
+      // Mid-flap: the tiles are somewhere in the alphabet…
+      const tiles = [...container.querySelectorAll('[data-flap]')]
+        .map(el => el.getAttribute('data-flap')).join('').trimEnd();
+      expect(tiles).not.toBe('PLAY ONLINE');
+      // …but the accessible text is already the destination.
+      expect(screen.getByText('PLAY ONLINE')).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 ```
+
+Add `act` to the `@testing-library/react` import and `vi` to the `vitest` import at the top of the file.
 
 - [ ] **Step 2: Run test to verify it fails**
 
@@ -1010,7 +1035,7 @@ export function Board({ screen, onRowAct, onBack }: BoardProps) {
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `npm test -- src/board/Board.test.tsx`
-Expected: PASS, 5 tests.
+Expected: PASS, 6 tests.
 
 - [ ] **Step 5: Prove the seven-row test can fail**
 
@@ -1706,7 +1731,53 @@ function PassAndPlayPage() {
 }
 ```
 
-`Board` gains three optional props — `editing: { seat: SeatId; placeholder: string } | null`, `onCommit`, `onCancel` — and renders `<RowInput>` in place of the destination plate for the row whose `action.field` matches `seat:${editing.seat}`. The cast on `row.action.field` is safe without `as any` because `FieldId` is the template literal type `seat:${SeatId}`.
+`Board` gains three optional props. Add to `BoardProps` in `src/board/Board.tsx`:
+
+```tsx
+export interface BoardProps {
+  screen: ScreenDef;
+  onRowAct: (row: Row, index: number) => void;
+  onBack: () => void;
+  editing?: { seat: SeatId; placeholder: string } | null;
+  onCommit?: (value: string) => void;
+  onCancel?: () => void;
+}
+```
+
+…and inside the row loop, render the input in place of the row when it is the one being edited:
+
+```tsx
+{rows.map((row, index) => {
+  const isEditing =
+    editing != null &&
+    row.action?.kind === 'edit' &&
+    row.action.field === `seat:${editing.seat}`;
+
+  return (
+    <div key={index} data-board-row="" style={{ display: 'flex', flex: 1 }}>
+      {isEditing ? (
+        <RowInput
+          initial={row.text === 'TAP TO JOIN' ? '' : row.text}
+          placeholder={editing!.placeholder}
+          onCommit={value => onCommit?.(value)}
+          onCancel={() => onCancel?.()}
+        />
+      ) : (
+        <BoardRow
+          row={{ ...row, status: settledOnly(row.status), right: settledOnly(row.right) }}
+          faces={faces[index]}
+          onAct={() => {
+            if (flapping) snap();
+            onRowAct(row, index);
+          }}
+        />
+      )}
+    </div>
+  );
+})}
+```
+
+Import `RowInput` and `type SeatId` at the top of `Board.tsx`. The cast on `row.action.field` in `App.tsx` needs no `as any` because `FieldId` is the template literal type `` `seat:${SeatId}` ``, so slicing the prefix yields a `SeatId` by construction.
 
 - [ ] **Step 8: Full suite, typecheck, browser**
 
@@ -1900,7 +1971,7 @@ describe('the saved-game screen', () => {
   it('summarises the roster in one row, so six barons still fit seven rows', () => {
     const rows = screen().rows;
     expect(rows).toHaveLength(7);
-    expect(rows[2].right).toBe('2 barons · Turn 2');
+    expect(rows[2].right).toBe('2 barons · Turn 1');
   });
 
   it('names the leader and what they have earned', () => {
@@ -2050,7 +2121,57 @@ Expected: PASS.
 
 - [ ] **Step 5: Route them**
 
-Modify `src/App.tsx` so `/pass-and-play` renders `saved(...)` when `loadLog().events` is non-empty and the state's phase is `playing`, and `passAndPlay(state)` otherwise. `confirm` is local component state within that page, not a route — a discard confirmation must not be bookmarkable, and the back button out of one must be harmless. Choosing `YES, DISCARD` calls `reset()` and falls through to the setup board.
+Replace `PassAndPlayPage` in `src/App.tsx`. `confirm` is **local state, not a route** — a discard confirmation must not be bookmarkable, and the back button out of one must be harmless:
+
+```tsx
+function PassAndPlayPage() {
+  const navigate = useNavigate();
+  const { state, savedAt, rename, start, reset } = useGame();
+  const [editing, setEditing] = useState<{ seat: SeatId; placeholder: string } | null>(null);
+  const [confirming, setConfirming] = useState(false);
+
+  const resuming = state.phase === 'playing';
+  const screen = confirming ? confirm() : resuming ? saved(state, savedAt) : passAndPlay(state);
+
+  return (
+    <Board
+      screen={screen}
+      editing={editing}
+      onCommit={value => { if (editing) rename(editing.seat, value || null); setEditing(null); }}
+      onCancel={() => setEditing(null)}
+      onBack={() => (confirming ? setConfirming(false) : navigate('/'))}
+      onRowAct={row => {
+        if (row.action === null) return;
+        if (row.action.kind === 'edit') {
+          setEditing({
+            seat: row.action.field.slice('seat:'.length) as SeatId,
+            placeholder: row.action.placeholder
+          });
+          return;
+        }
+        if (row.action.kind !== 'navigate') return;
+        switch (row.action.to) {
+          case 'confirm':
+            setConfirming(true);
+            break;
+          case 'saved':
+            setConfirming(false);
+            break;
+          case 'passAndPlay':
+            // Only reachable from the confirm screen's YES, DISCARD row.
+            reset();
+            setConfirming(false);
+            break;
+          case 'play':
+            if (!resuming) start();
+            navigate('/pass-and-play/game');
+            break;
+        }
+      }}
+    />
+  );
+}
+```
 
 - [ ] **Step 6: Full suite, typecheck, browser, commit**
 
@@ -2260,7 +2381,35 @@ Expected: PASS.
 
 - [ ] **Step 5: Route them and delete the old components**
 
-Modify `src/App.tsx`: `/pass-and-play/game` renders `regionBallot(seat)` when any seat is `awaiting`, and `play(state)` otherwise — the same precedence [DeparturesBoard.tsx:18](../../../src/game/DeparturesBoard.tsx#L18) already used. Wire `act` rows to `activate(seat)` on the play screen and to `chooseRegion(seat, REGIONS[index].id)` on the ballot.
+Add `GamePage` to `src/App.tsx` and route `/pass-and-play/game` at it. The ballot takes precedence over the play board — the same precedence [DeparturesBoard.tsx:18](../../../src/game/DeparturesBoard.tsx#L18) already used:
+
+```tsx
+function GamePage() {
+  const navigate = useNavigate();
+  const { state, activate, chooseRegion } = useGame();
+
+  // Only one seat can be owed a region at a time; it takes over the board.
+  const awaiting = SEATS.map(id => state.seats[id]).find(seat => seat.awaiting !== null);
+  const screen = awaiting ? regionBallot(awaiting) : play(state);
+
+  return (
+    <Board
+      screen={screen}
+      onBack={() => navigate('/')}
+      onRowAct={(row, index) => {
+        if (row.action?.kind !== 'act') return;
+        // The ballot's choice is its row position: RowAction carries no
+        // region, and widening it for one screen would cost every other
+        // screen a field it never sets.
+        if (awaiting) chooseRegion(row.action.seat, REGIONS[index].id);
+        else activate(row.action.seat);
+      }}
+    />
+  );
+}
+```
+
+Import `SEATS` from `./state/events` and `REGIONS` from `../engine` (as `./engine` relative to `src/App.tsx`: `import { REGIONS } from '../engine';`). Then delete the old components:
 
 ```bash
 git rm src/game/DeparturesBoard.tsx src/game/DeparturesBoard.test.tsx \
@@ -2332,7 +2481,31 @@ Each finding either gets fixed with a test that fails first, or is written down 
 git add docs/superpowers/specs/2026-08-11-board-as-lobby-by-hand-notes.md
 git commit -m "docs: by-hand pass notes for the board-as-lobby branch"
 git push -u origin feat/board-as-lobby
-gh pr create --title "The board as the lobby" --body "..."
+gh pr create --title "The board as the lobby" --body "$(cat <<'BODY'
+Every screen is now the same seven-row departures board. Choices live in the
+destination column, and navigating is that column flapping over to the next
+screen's choices — generalizing the pattern `RegionBallot` had already arrived
+at on its own.
+
+- Screens are data (`(state) => ScreenDef`), so the flap is a function of
+  `(fromTexts, toTexts)` and each screen unit-tests without a DOM.
+- The in-play board and the region ballot are unified onto the same row model;
+  `DeparturesBoard`, `DeparturesRow` and `RegionBallot` are retired, with their
+  column-budget test ported.
+- An explicit begin gate lands as a `started` event, so phase is derived and the
+  generic lobby's `lifecycle()` has something to map onto at the lift.
+- `window.prompt` is gone, and with it the StrictMode double-fire hazard.
+- Save records carry `savedAt`, with a v1 migration rather than a version bounce
+  that would discard the very game the saved screen exists to offer back.
+
+Online boards (`1d`/`1e`/`1f`) are designed but deliberately not built — they
+wait for the lift. By-hand pass notes are in `docs/superpowers/specs/`.
+
+Spec: `docs/superpowers/specs/2026-08-11-board-as-lobby-design.md`
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+BODY
+)"
 ```
 
 - [ ] **Step 6: Review the whole branch, not only each task**
