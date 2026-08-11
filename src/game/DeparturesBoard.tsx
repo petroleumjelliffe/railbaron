@@ -10,12 +10,22 @@ export interface DeparturesBoardProps {
   state: GameState;
   onActivate: (seat: SeatId) => void;
   onChooseRegion: (seat: SeatId, region: RegionId) => void;
+  onReset: () => void;
 }
 
-export function DeparturesBoard({ state, onActivate, onChooseRegion }: DeparturesBoardProps) {
+export function DeparturesBoard({ state, onActivate, onChooseRegion, onReset }: DeparturesBoardProps) {
   // Only one seat can be owed a region at a time — it is the app's one modal
   // state, and it takes over the board rather than opening a dialog.
   const awaiting = SEATS.map(id => state.seats[id]).find(seat => seat.awaiting !== null);
+  const hasBarons = SEATS.some(id => state.seats[id].name !== null);
+
+  const handleReset = () => {
+    // The header is reachable by accident on a tablet; confirm before a tap
+    // destroys a game in progress.
+    if (window.confirm('Start a new game? This clears every baron on the board.')) {
+      onReset();
+    }
+  };
 
   return (
     <div
@@ -50,17 +60,38 @@ export function DeparturesBoard({ state, onActivate, onChooseRegion }: Departure
         >
           Rail Baron
         </span>
-        <span
-          style={{
-            fontFamily: "'DM Mono', ui-monospace, monospace",
-            fontSize: 13,
-            letterSpacing: '0.22em',
-            color: TOKENS.dim,
-            textTransform: 'uppercase'
-          }}
-        >
-          {awaiting ? `${awaiting.name ?? awaiting.id} rolled its own region` : 'Departures'}
-        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+          <span
+            style={{
+              fontFamily: "'DM Mono', ui-monospace, monospace",
+              fontSize: 13,
+              letterSpacing: '0.22em',
+              color: TOKENS.dim,
+              textTransform: 'uppercase'
+            }}
+          >
+            {awaiting ? `${awaiting.name ?? awaiting.id} rolled its own region` : 'Departures'}
+          </span>
+          {hasBarons && !awaiting && (
+            <button
+              type="button"
+              onClick={handleReset}
+              style={{
+                fontFamily: "'DM Mono', ui-monospace, monospace",
+                fontSize: 13,
+                letterSpacing: '0.22em',
+                color: TOKENS.dim,
+                textTransform: 'uppercase',
+                background: 'none',
+                border: 'none',
+                padding: 0,
+                cursor: 'pointer'
+              }}
+            >
+              New Game
+            </button>
+          )}
+        </div>
       </header>
 
       {awaiting ? (

@@ -6,15 +6,21 @@ import { replay } from '../state/game';
 import type { GameEvent } from '../state/events';
 import { REGIONS } from '../../engine';
 
-const board = (events: GameEvent[], onActivate = vi.fn(), onChooseRegion = vi.fn()) => {
+const board = (
+  events: GameEvent[],
+  onActivate = vi.fn(),
+  onChooseRegion = vi.fn(),
+  onReset = vi.fn()
+) => {
   render(
     <DeparturesBoard
       state={replay(events)}
       onActivate={onActivate}
       onChooseRegion={onChooseRegion}
+      onReset={onReset}
     />
   );
-  return { onActivate, onChooseRegion };
+  return { onActivate, onChooseRegion, onReset };
 };
 
 describe('the departures board', () => {
@@ -79,5 +85,14 @@ describe('the departures board', () => {
     ]);
     await userEvent.click(screen.getByRole('button', { name: /southwest/i }));
     expect(onChooseRegion).toHaveBeenCalledWith('red', 'SW');
+  });
+
+  it('hides the New Game control while a region ballot is up, even with a baron seated', () => {
+    board([
+      { type: 'joined', seat: 'red', name: 'Pete' },
+      { type: 'arrived', seat: 'red', city: 20, region: 'NC', payout: null },
+      { type: 'regionRequested', seat: 'red', rolled: 'NC' }
+    ]);
+    expect(screen.queryByRole('button', { name: /new game/i })).not.toBeInTheDocument();
   });
 });

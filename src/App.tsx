@@ -8,10 +8,15 @@ export interface AppProps {
 }
 
 export default function App({ rng }: AppProps = {}) {
-  const { state, activate, chooseRegion } = useGame(rng);
+  const { state, activate, chooseRegion, reset } = useGame(rng);
   return (
     <main style={{ height: '100%' }}>
-      <DeparturesBoard state={state} onActivate={activate} onChooseRegion={chooseRegion} />
+      <DeparturesBoard
+        state={state}
+        onActivate={activate}
+        onChooseRegion={chooseRegion}
+        onReset={reset}
+      />
     </main>
   );
 }

@@ -138,4 +138,51 @@ describe('the app', () => {
     expect(screen.getByText('NEW YORK')).toBeInTheDocument();
     expect(screen.getByText('$31,000')).toBeInTheDocument();
   });
+
+  it('has no New Game button on a fresh board — nothing to reset yet', () => {
+    render(<App />);
+    expect(screen.queryByRole('button', { name: /new game/i })).not.toBeInTheDocument();
+  });
+
+  it('confirms before a New Game tap wipes the board, and honors a decline', async () => {
+    vi.spyOn(window, 'prompt').mockReturnValue('Pete');
+    vi.spyOn(window, 'confirm').mockReturnValue(false);
+    render(<App />);
+
+    await userEvent.click(screen.getAllByRole('button', { name: /tap to join/i })[0]!);
+    expect(screen.getByText('PETE')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /new game/i }));
+
+    // Declined: the baron already on the board is untouched, in the DOM and
+    // in the persisted log alike.
+    expect(screen.getByText('PETE')).toBeInTheDocument();
+    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY)!) as { events: unknown[] };
+    expect(stored.events).toHaveLength(1);
+  });
+
+  it('empties the board and clears storage once New Game is confirmed', async () => {
+    vi.spyOn(window, 'prompt').mockReturnValue('Pete');
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    render(<App />);
+
+    await userEvent.click(screen.getAllByRole('button', { name: /tap to join/i })[0]!);
+    expect(screen.getByText('PETE')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /new game/i }));
+
+    // Rendered state, not internals: the board is back to six open seats
+    // and the button that started it is gone along with the baron it named.
+    expect(screen.queryByText('PETE')).not.toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: /tap to join/i })).toHaveLength(6);
+    expect(screen.queryByRole('button', { name: /new game/i })).not.toBeInTheDocument();
+
+    // useGame's save effect fires again on the post-reset render (it saves
+    // on every `events` change, reset included), so the key itself is still
+    // present — reset leaves behind a valid, empty log rather than deleting
+    // the key outright. What actually matters, and what's asserted here, is
+    // that no baron survives in it.
+    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY)!) as { events: unknown[] };
+    expect(stored.events).toEqual([]);
+  });
 });

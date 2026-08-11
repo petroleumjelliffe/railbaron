@@ -1,4 +1,4 @@
-import type { GameEvent } from './events';
+import { isGameEvent, type GameEvent } from './events';
 
 /** Prefixed: this game shares the GitHub Pages origin with Acquire. */
 export const STORAGE_KEY = 'railbaron:log:v1';
@@ -21,7 +21,11 @@ export function loadLog(): GameEvent[] {
     if (typeof parsed !== 'object' || parsed === null) return [];
     const { version, events } = parsed as { version?: number; events?: unknown };
     if (version !== VERSION || !Array.isArray(events)) return [];
-    return events as GameEvent[];
+    // All-or-nothing: a log with one bad event and the rest filtered out
+    // would replay into a state that never existed (a seat arriving
+    // somewhere it never departed from). An empty board is an honest
+    // failure; a silently-repaired one isn't.
+    return events.every(isGameEvent) ? events : [];
   } catch {
     return [];
   }

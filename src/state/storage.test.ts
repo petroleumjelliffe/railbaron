@@ -51,4 +51,43 @@ describe('persistence', () => {
     expect([localStorage.key(0), localStorage.key(1)]).toContain('key1');
     expect([localStorage.key(0), localStorage.key(1)]).toContain('key2');
   });
+
+  it('discards a log where an arrived event names a city id that was never real', () => {
+    const bad: GameEvent[] = [
+      { type: 'joined', seat: 'red', name: 'Pete' },
+      { type: 'arrived', seat: 'red', city: 999, region: 'PL', payout: 0 }
+    ];
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: 1, events: bad }));
+    expect(loadLog()).toEqual([]);
+  });
+
+  it('discards a log containing an event with an unknown type', () => {
+    const bad = [
+      { type: 'joined', seat: 'red', name: 'Pete' },
+      { type: 'departed', seat: 'red' }
+    ];
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: 1, events: bad }));
+    expect(loadLog()).toEqual([]);
+  });
+
+  it('discards the whole log when only one of several events is bad, not just the bad one', () => {
+    const mostlyGood: unknown[] = [
+      { type: 'joined', seat: 'red', name: 'Pete' },
+      { type: 'arrived', seat: 'red', city: 999, region: 'PL', payout: 0 },
+      { type: 'joined', seat: 'blue', name: 'Alex' }
+    ];
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: 1, events: mostlyGood }));
+    expect(loadLog()).toHaveLength(0);
+  });
+
+  it('round-trips a well-formed log of all three event variants unchanged', () => {
+    const full: GameEvent[] = [
+      { type: 'joined', seat: 'red', name: 'Pete' },
+      { type: 'arrived', seat: 'red', city: 43, region: 'PL', payout: null },
+      { type: 'regionRequested', seat: 'red', rolled: 'NE' },
+      { type: 'arrived', seat: 'red', city: 4, region: 'NE', payout: 31000 }
+    ];
+    saveLog(full);
+    expect(loadLog()).toEqual(full);
+  });
 });
