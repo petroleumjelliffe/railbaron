@@ -1238,12 +1238,21 @@ export default function App() {
 }
 ```
 
-`/pass-and-play` points at `HomePage` only until Task 7 gives it its own screen. The existing `src/App.test.tsx` drives the old prompt-based flow and will fail here; delete it — Task 7 replaces its coverage with tests against the setup screen.
+`/pass-and-play` points at `HomePage` only until Task 7 gives it its own screen.
+
+**`src/App.test.tsx` must not be deleted.** It drives the old prompt-based flow so it cannot pass here, but it holds three things nothing else covers: a StrictMode guard that one roll appends exactly one event (the *roll* side effect, which does **not** go away with `window.prompt`), an integration test scripting the dice through the whole roll→ballot→payout path with a hand-verified RNG queue, and the reset confirm/decline behaviour.
+
+Park it, don't drop it:
+
+```bash
+git mv src/App.test.tsx src/App.legacy.test.tsx
+```
+
+…and change its top-level `describe('the app', ...)` to `describe.skip('the app — superseded, migrated in Task 10', ...)`. Task 10 rewrites each test against the new board and deletes this file; its Step 6 verifies no `.skip` and no `App.legacy.test.tsx` survive, so this cannot be forgotten.
 
 - [ ] **Step 8: Verify the whole suite and typecheck**
 
 ```bash
-rm src/App.test.tsx
 npm test
 npm run typecheck
 ```
@@ -1262,8 +1271,7 @@ Open the dev server URL (note it now serves under `/railbaron/`). Confirm: the h
 
 ```bash
 git add basePath.ts vite.config.ts src/main.tsx src/App.tsx package.json package-lock.json \
-        src/board/screens/home.ts src/board/screens/home.test.ts
-git rm --cached src/App.test.tsx 2>/dev/null || true
+        src/board/screens/home.ts src/board/screens/home.test.ts src/App.legacy.test.tsx
 git commit -m "feat(board): home screen, router and base path"
 ```
 
@@ -1366,6 +1374,28 @@ describe('undo', () => {
 
 Add `import type { GameEvent } from './events';` to the test file's imports if it is not already there, and ensure `undo` is imported alongside `replay`.
 
+**Also add this to `src/state/storage.test.ts`.** It is the most important test in this task:
+
+```ts
+describe('the new events survive being saved and loaded', () => {
+  it('keeps a log containing started and renamed, rather than discarding it', () => {
+    // isGameEvent is applied all-or-nothing by loadLog: one unrecognised
+    // event and the WHOLE log becomes []. A new event type that the
+    // validator does not know about therefore does not degrade the save —
+    // it silently destroys it, and only on the next reload.
+    const log: GameEvent[] = [
+      { type: 'joined', seat: 'red', name: 'ADA' },
+      { type: 'renamed', seat: 'red', name: 'MARGO' },
+      { type: 'started' }
+    ];
+    saveLog(log);
+    expect(loadLog().events).toHaveLength(3);
+  });
+});
+```
+
+Note this test needs `loadLog().events`, which is Task 8's return shape. Until Task 8 lands, write it as `loadLog()` and change it there — Task 8's step 4 already updates every caller.
+
 - [ ] **Step 2: Run tests to verify they fail**
 
 Run: `npm test -- src/state/game.test.ts`
@@ -1385,6 +1415,22 @@ export type GameEvent =
 ```
 
 Note `started` carries no `seat`, so any code narrowing on `event.seat` must handle it — `replay` does below.
+
+**Then extend `isGameEvent` in the same file.** Its `default: return false`, combined with `loadLog`'s all-or-nothing `events.every(isGameEvent)`, means an event type the validator does not recognise does not degrade a save — it destroys it, silently, on the next load:
+
+```ts
+    case 'started':
+      // No payload to check: its presence is the whole fact.
+      return true;
+    case 'renamed':
+      // null is a real value here — it vacates the seat.
+      return (
+        VALID_SEATS.has(event.seat as string) &&
+        (event.name === null || typeof event.name === 'string')
+      );
+```
+
+Add both cases above the existing `default:`.
 
 - [ ] **Step 4: Update `game.ts`**
 
@@ -1887,19 +1933,26 @@ export function loadLog(): SavedGame {
     const { version, events, savedAt } =
       parsed as { version?: number; events?: unknown; savedAt?: unknown };
     if (!Array.isArray(events)) return EMPTY;
-    if (version === 1) return { events: events as GameEvent[], savedAt: null };
-    if (version === SAVE_VERSION) {
-      return {
-        events: events as GameEvent[],
-        savedAt: typeof savedAt === 'number' ? savedAt : null
-      };
-    }
-    return EMPTY;
+    if (version !== 1 && version !== SAVE_VERSION) return EMPTY;
+
+    // All-or-nothing, unchanged from before: a log with one bad event and
+    // the rest filtered out would replay into a state that never existed
+    // (a seat arriving somewhere it never departed from). An empty board is
+    // an honest failure; a silently-repaired one isn't.
+    if (!events.every(isGameEvent)) return EMPTY;
+
+    return {
+      events,
+      // Version 1 records never carried a time.
+      savedAt: version === 1 || typeof savedAt !== 'number' ? null : savedAt
+    };
   } catch {
     return EMPTY;
   }
 }
 ```
+
+**Keep the `isGameEvent` import** at the top of the file — `import { isGameEvent, type GameEvent } from './events';`. Dropping it would revert `8e282f6`, which exists because a structurally-valid-but-wrong log throws deep inside `cityById` on every replay and bricks the app with no recovery short of clearing site data by hand.
 
 - [ ] **Step 4: Update the caller**
 
@@ -2419,13 +2472,60 @@ git rm src/game/DeparturesBoard.tsx src/game/DeparturesBoard.test.tsx \
 
 `src/game/SplitFlap.tsx` and `src/game/tokens.ts` **stay** — `tokens.ts` is imported throughout `src/board/`, and `SplitFlap`'s `formatMoney` is still tested and used.
 
+- [ ] **Step 5b: Migrate the parked legacy tests**
+
+Create `src/App.test.tsx` fresh, carrying forward the three things `App.legacy.test.tsx` covered and nothing else. **Copy the scripted RNG queue and its entire explanatory comment verbatim from the legacy file** — those twelve values were confirmed by direct execution against `engine/roll.ts`, and re-deriving them by hand is how they get silently wrong.
+
+```tsx
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router-dom';
+import { StrictMode } from 'react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import App from './App';
+import { STORAGE_KEY } from './state/storage';
+
+const at = (path: string, rng?: () => number) =>
+  render(<MemoryRouter initialEntries={[path]}><App rng={rng} /></MemoryRouter>);
+
+beforeEach(() => { localStorage.clear(); vi.restoreAllMocks(); });
+
+describe('the app end to end', () => {
+  it('appends exactly one event per roll under StrictMode', async () => {
+    // The roll's side effect still lives in the handler, and StrictMode
+    // still double-invokes updaters. Losing window.prompt did not retire
+    // this hazard — it only retired the other half of it.
+    render(
+      <StrictMode>
+        <MemoryRouter initialEntries={['/pass-and-play']}><App /></MemoryRouter>
+      </StrictMode>
+    );
+
+    await userEvent.click(screen.getAllByRole('button', { name: /tap to join/i })[0]!);
+    await userEvent.keyboard('PETE{Enter}');
+    await userEvent.click(screen.getByRole('button', { name: /start game/i }));
+
+    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY)!) as { events: unknown[] };
+    expect(stored.events).toHaveLength(2);   // joined + started, never doubled
+  });
+});
+```
+
+Then port the scripted-dice ballot test and the two reset tests the same way — driving the board's rows rather than `window.prompt`/`window.confirm`, and reaching the discard path through the `confirm` screen rather than a `window.confirm` spy.
+
+```bash
+git rm src/App.legacy.test.tsx
+```
+
 - [ ] **Step 6: Full suite, typecheck, commit**
 
 ```bash
 npm test && npm run typecheck
+! git ls-files | grep -q 'App.legacy.test.tsx'   # the parked file is gone
+! grep -rn 'describe.skip' src/                  # nothing is still skipped
 ```
 
-Expected: PASS with no references to the deleted components.
+Expected: PASS with no references to the deleted components, and both guards silent. Those two lines are how the Task 5 parking cannot be quietly forgotten.
 
 ```bash
 git add src/board/screens/play.ts src/board/screens/play.test.ts \
