@@ -1,4 +1,4 @@
-import { CITIES, REGIONS, type CityId, type RegionId } from '../../engine';
+import { CITIES, REGIONS, cityById, type CityId, type RegionId } from '../../engine';
 
 export type SeatId = 'red' | 'green' | 'blue' | 'yellow' | 'black' | 'white';
 
@@ -42,10 +42,16 @@ export function isGameEvent(value: unknown): value is GameEvent {
       // payout: 0 is a real, legal journey (Minneapolis<->St. Paul,
       // San Francisco<->Oakland) — `typeof === 'number'` here, never a
       // truthiness check, or every $0 save silently loses that stop.
+      //
+      // VALID_CITIES.has(...) must short-circuit before cityById(...) runs:
+      // cityById throws on an id it doesn't recognise, and && evaluates
+      // left to right, so a bad id is rejected here rather than reaching
+      // the call that would throw on it.
       return (
         VALID_SEATS.has(event.seat as string) &&
         VALID_CITIES.has(event.city as CityId) &&
         VALID_REGIONS.has(event.region as RegionId) &&
+        cityById(event.city as CityId).region === event.region &&
         (event.payout === null ||
           (typeof event.payout === 'number' && Number.isFinite(event.payout)))
       );

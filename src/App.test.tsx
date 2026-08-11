@@ -177,12 +177,10 @@ describe('the app', () => {
     expect(screen.getAllByRole('button', { name: /tap to join/i })).toHaveLength(6);
     expect(screen.queryByRole('button', { name: /new game/i })).not.toBeInTheDocument();
 
-    // useGame's save effect fires again on the post-reset render (it saves
-    // on every `events` change, reset included), so the key itself is still
-    // present — reset leaves behind a valid, empty log rather than deleting
-    // the key outright. What actually matters, and what's asserted here, is
-    // that no baron survives in it.
-    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY)!) as { events: unknown[] };
-    expect(stored.events).toEqual([]);
+    // The key is genuinely gone, not left behind holding an empty log:
+    // useGame's save effect skips persisting when the log is empty, so
+    // reset()'s clearLog() call isn't immediately undone by the render it
+    // triggers.
+    expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
   });
 });

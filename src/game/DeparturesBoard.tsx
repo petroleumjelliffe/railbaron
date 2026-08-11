@@ -27,6 +27,17 @@ export function DeparturesBoard({ state, onActivate, onChooseRegion, onReset }: 
     }
   };
 
+  // Shared by the status span and the New Game button — same type
+  // treatment, so it's one declaration rather than two copies to keep in
+  // sync.
+  const headerType = {
+    fontFamily: "'DM Mono', ui-monospace, monospace",
+    fontSize: 13,
+    letterSpacing: '0.22em',
+    color: TOKENS.dim,
+    textTransform: 'uppercase' as const
+  };
+
   return (
     <div
       style={{
@@ -61,32 +72,14 @@ export function DeparturesBoard({ state, onActivate, onChooseRegion, onReset }: 
           Rail Baron
         </span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
-          <span
-            style={{
-              fontFamily: "'DM Mono', ui-monospace, monospace",
-              fontSize: 13,
-              letterSpacing: '0.22em',
-              color: TOKENS.dim,
-              textTransform: 'uppercase'
-            }}
-          >
+          <span style={headerType}>
             {awaiting ? `${awaiting.name ?? awaiting.id} rolled its own region` : 'Departures'}
           </span>
           {hasBarons && !awaiting && (
             <button
               type="button"
               onClick={handleReset}
-              style={{
-                fontFamily: "'DM Mono', ui-monospace, monospace",
-                fontSize: 13,
-                letterSpacing: '0.22em',
-                color: TOKENS.dim,
-                textTransform: 'uppercase',
-                background: 'none',
-                border: 'none',
-                padding: 0,
-                cursor: 'pointer'
-              }}
+              style={{ ...headerType, background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
             >
               New Game
             </button>

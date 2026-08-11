@@ -61,6 +61,17 @@ describe('persistence', () => {
     expect(loadLog()).toEqual([]);
   });
 
+  it('discards a log where a real city id is filed under the wrong region', () => {
+    // City 4 is New York, which is in NE, not SW — structurally valid, but
+    // the two fields disagree about where the baron actually is.
+    const bad: GameEvent[] = [
+      { type: 'joined', seat: 'red', name: 'Pete' },
+      { type: 'arrived', seat: 'red', city: 4, region: 'SW', payout: 0 }
+    ];
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: 1, events: bad }));
+    expect(loadLog()).toEqual([]);
+  });
+
   it('discards a log containing an event with an unknown type', () => {
     const bad = [
       { type: 'joined', seat: 'red', name: 'Pete' },

@@ -7,7 +7,14 @@ import { clearLog, loadLog, saveLog } from './storage';
 export function useGame(rng: Rng = Math.random) {
   const [events, setEvents] = useState<GameEvent[]>(() => loadLog());
 
-  useEffect(() => saveLog(events), [events]);
+  // loadLog() already defaults to [] when nothing is stored, so an empty log
+  // needs no entry of its own — persisting `{version,events:[]}` here would
+  // just resurrect the key on the very next render after reset()'s
+  // clearLog() call removed it, making that call a no-op in practice.
+  useEffect(() => {
+    if (events.length === 0) return;
+    saveLog(events);
+  }, [events]);
 
   const state = replay(events);
 
