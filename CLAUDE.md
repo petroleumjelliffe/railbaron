@@ -9,41 +9,75 @@ it. Players use the physical board; the app rolls each baron's next destination 
 then city — and looks up the payout for the journey. Nothing else about the game is
 modelled: no movement, no railroad ownership, no cash.
 
-The repo currently holds the 2013 jQuery version. It is being replaced by a React port;
-[ROADMAP.md](ROADMAP.md) has the four phases and the reasoning.
+The repo holds the React port. The original 2013 jQuery app was deleted once the port
+was complete and tested — it remains in git history, but there is only one Rail Baron in
+this repo now. [ROADMAP.md](ROADMAP.md) has the phases and the reasoning; Phase 1 (the
+roller) is done, Phases 2 and 3 (pass-and-play menu, online multiplayer) are ahead.
 
 ## Commands
 
-**There is no build system yet.** No `package.json`, no tests, no lint. The old app is
-static files — open `index2.html` directly, or serve the directory.
+```bash
+npm install
+npm run dev        # Vite dev server, http://localhost:5173
+npm test            # vitest run — engine/ and src/, once
+npm run test:watch  # vitest, watch mode
+npm run typecheck   # tsc --noEmit
+npm run build        # vite build, production bundle to dist/
+npm run preview      # serve the production build locally
+```
 
-Phase 1 introduces Vite + React + TypeScript. Until it lands, don't invent commands or
-assume a toolchain exists.
+`engine/` and `src/` run as two separate Vitest projects (`vite.config.ts`): `engine`
+under a plain `node` environment, `app` under `jsdom` with `src/test/setup.ts` loaded.
+`engine/smoke.test.ts` asserts `window` and `localStorage` are both `undefined` in the
+engine project, so a React or DOM dependency creeping into `engine/` fails a test rather
+than surviving unnoticed.
 
 ## The game data, and its known bugs
 
-Everything the roller needs is in [js/railbaronv2.js](js/railbaronv2.js) — one 583-line
-file, no modules, IIFE singleton:
+Everything the roller needs is under [`engine/`](engine/) — no React, no DOM. The 2013
+source it was transcribed from, `js/railbaronv2.js`, no longer exists in the working tree
+but is still in git history (`git log --all --full-history -- js/railbaronv2.js`).
 
-- **`codes`** — a 22-row lookup indexed by `roll()`, which is one d6 + one d6 + a d2×11.
-  Column 0 gives the region; columns 1–7 give the city within each region.
-- **`regions`** — 7 entries, `index` is 1-based and is what indexes into `cities`.
-- **`cities`** — 7 region groups, 67 cities, each with a globally unique `index` 0–66.
-- **`payouts`** — a triangular matrix indexed `payouts[high][low]` by those global city
-  indices, in thousands.
+- **[`engine/rollTable.ts`](engine/rollTable.ts)'s `CODES`** — a 22-row lookup indexed by
+  `rollRow()`, which is one d6 + one d6 + a d2×11. Column 0 gives the region; columns 1–7
+  give the city within each region.
+- **[`engine/regions.ts`](engine/regions.ts)'s `REGIONS`** — 7 entries.
+- **[`engine/cities.ts`](engine/cities.ts)'s `CITIES`** — 7 region groups, 67 cities, each
+  with a globally unique `id` 0–66.
+- **[`engine/payouts.ts`](engine/payouts.ts)'s `PAYOUT_TABLE`** — a triangular matrix
+  indexed `[high][low]` by those global city ids, in thousands.
 
-Three defects to carry across rather than reproduce:
+Each table carries a digest test pinning the transcription — `PAYOUT_TABLE_DIGEST` in
+[`engine/payouts.test.ts`](engine/payouts.test.ts), `CODES_DIGEST` in
+[`engine/rollTable.test.ts`](engine/rollTable.test.ts) — an FNV-1a hash over every cell.
+Range and coverage checks can pass on a transposed or mis-copied value; the digest can't.
+If you deliberately change a cell (a real correction, not a transcription fix), recompute
+and update the digest constant in the same commit, and say why in the commit message.
 
-- **`cities[4]` and `cities[5]` are labelled `"South Central"`** and should be Plains and
-  Northwest ([js/railbaronv2.js:260](js/railbaronv2.js#L260) and
-  [:274](js/railbaronv2.js#L274)). `cities[3]` is genuinely South Central and `cities[6]`
-  is already correctly `"Southwest"` — three groups carry the label, only two wrongly.
-  The current app gets away with it because region names are read from `regions`, not from
-  the city groups — anything reading the city list directly is wrong.
-- **The payout matrix has never been checked against the board.** A single transposed
-  number is invisible until it pays someone the wrong amount. Verify before trusting.
-- `player.chooseRegion` and `RailBaronController.newDestination` both compute destinations,
-  by different routes. Only the latter is reachable.
+Defects carried across from the source rather than reproduced-and-fixed:
+
+- **The two mislabelled city groups are fixed.** The 2013 source labelled its 4th and 5th
+  city groups `"South Central"` (they should be Plains and Northwest); the port's
+  `engine/cities.ts` uses the correct names directly, so this is not a live bug — noted
+  here only because it explains why the 2013 file and the port disagree.
+- **The payout matrix was checked against the source, not against the physical board.**
+  The digest tests prove the transcription is faithful to `js/railbaronv2.js`; they cannot
+  prove the source itself was ever right. See task-3-report.md for how the comparison was
+  done.
+- `chooseRegion` (the source's second, unreachable destination-computation path) was
+  dropped rather than ported — there is only one path now.
+
+### The `$0` constraint
+
+Minneapolis↔St. Paul and San Francisco↔Oakland are the board's only two zero-paying
+journeys — legal destinations, worth nothing to land on. `payoutBetween` returns `0` for
+them, a real, displayable amount. This is unrelated to `payout: null`, which means "no
+payout applies" (the roll landed on the baron's own home town) and renders as `HOME`
+instead of a dollar figure — see `formatMoney` in
+[`src/game/SplitFlap.tsx`](src/game/SplitFlap.tsx). Anywhere on this path, `if (payout)`
+or `payout || fallback` is a bug: both are falsy-on-zero and would treat a real $0 payout
+as if it were the null case. `engine/payouts.test.ts` and
+`src/game/SplitFlap.test.tsx` guard this distinction.
 
 ## The map graph
 
@@ -103,16 +137,25 @@ hardest: derive every displayed value from replayed state rather than hardcoding
 prove a new test can fail by breaking the code and reading real output — never by reading
 the assertion.
 
+## Testing notes
+
+**`src/test/setup.ts` bridges jsdom's real `localStorage` onto `globalThis` — do not
+delete it, even though it looks like dead weight.** Node 26 ships its own experimental
+`globalThis.localStorage`, which returns `undefined` unless the process is started with
+`--localstorage-file`. Vitest's `populateGlobal` only copies a jsdom `window` property
+onto `global` when that key is *absent* from `global` — and `localStorage` is not absent,
+because Node already defined it (however uselessly). So jsdom's genuine `Storage`
+implementation never gets bridged through, and Node's stub silently wins. jsdom itself is
+fine; this is a Node-version interaction, not a jsdom bug. Every test under `src/` that
+touches storage (`src/state/storage.test.ts`, plus anything rendering through
+`useGame`/`App`) depends on this bridge running before it; without it they fail in a way
+that looks unrelated to storage at all.
+
 ## Working notes
 
 - **The branch is `main`.** Renamed from `master` 2026-08-11; `origin/master` is deleted.
   `bugfixes`, `flippy` and `jsfixes` are 2013–2014 leftovers, deliberately kept.
-- **`Untitled.html`, `testlayout.html`, `savegame.js` and `railbaronv2.min.js` are dead.**
-  Layout experiments and a stale build; nothing references them. `index2.html` is the live
-  app, and root-level `styles.css` is not the stylesheet it loads (that's `css/styles2.css`).
-- **Don't treat `railbaronv2.min.js` as a reference for the source.** It is an older
-  variant, not a build of the current file: its `codes` table holds 1-based region indices
-  read as `regions[n-1]`, where [js/railbaronv2.js](js/railbaronv2.js) holds 0-based ones
-  read as `regions[index]`. Diffing the two to settle a question gives a wrong answer.
-- The old jQuery files get **deleted** when the port lands rather than left alongside —
-  git history keeps them, and two Rail Barons in one repo is how the wrong one gets edited.
+- **The 2013 jQuery app is gone from the working tree.** `index2.html`, `js/`, `css/`, and
+  the rest were deleted once the React port had a passing test suite covering the same
+  ground; `git log --all --full-history -- <path>` reaches any of it. Two Rail Barons in
+  one repo is how the wrong one gets edited, so there is deliberately only one now.
