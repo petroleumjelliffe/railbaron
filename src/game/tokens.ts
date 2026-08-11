@@ -11,7 +11,8 @@ export const TOKENS = {
   flapTop: '#1e1e1e',
   flapBottom: '#151515',
   tileWidth: 30,
-  tileHeight: 40
+  tileHeight: 40,
+  tileGap: 1
 } as const;
 
 export const SEAT_COLORS: Record<SeatId, string> = {

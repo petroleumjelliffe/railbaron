@@ -1,13 +1,27 @@
 import { cityById, regionById } from '../../engine';
 import type { Seat } from '../state/game';
 import type { SeatId } from '../state/events';
-import { SplitFlap, formatMoney } from './SplitFlap';
+import { FlapPanel, SplitFlap, formatMoney } from './SplitFlap';
 import { SEAT_COLORS, TOKENS } from './tokens';
 
 export interface DeparturesRowProps {
   seat: Seat;
   onActivate: (seat: SeatId) => void;
 }
+
+/**
+ * Column budgets for the three flap fields. Exported so the layout-budget
+ * test derives its expectations from the same numbers the row is built
+ * with, rather than restating them.
+ */
+export const DEPARTURES_COLUMN_WIDTHS = {
+  region: 212,
+  destination: 436,
+  payout: 219
+} as const;
+
+/** The region field is one panel, not a per-character tile grid. */
+export const REGION_PANEL_WIDTH = 210;
 
 export function DeparturesRow({ seat, onActivate }: DeparturesRowProps) {
   const latest = seat.stops[seat.stops.length - 1];
@@ -55,13 +69,16 @@ export function DeparturesRow({ seat, onActivate }: DeparturesRowProps) {
       >
         {label.toUpperCase()}
       </span>
-      <span style={{ width: 212 }}>
-        <SplitFlap value={latest ? regionById(latest.region).name : ''} width={13} />
+      <span data-column="region" style={{ width: DEPARTURES_COLUMN_WIDTHS.region }}>
+        <FlapPanel
+          value={latest ? regionById(latest.region).name : ''}
+          width={REGION_PANEL_WIDTH}
+        />
       </span>
-      <span style={{ width: 436 }}>
+      <span data-column="destination" style={{ width: DEPARTURES_COLUMN_WIDTHS.destination }}>
         <SplitFlap value={latest ? cityById(latest.city).name : ''} width={14} />
       </span>
-      <span style={{ width: 219 }}>
+      <span data-column="payout" style={{ width: DEPARTURES_COLUMN_WIDTHS.payout }}>
         <SplitFlap
           value={latest ? formatMoney(latest.payout) : ''}
           width={7}
