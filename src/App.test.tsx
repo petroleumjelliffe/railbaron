@@ -65,4 +65,77 @@ describe('the app', () => {
     // 'joined' + one roll's worth of 'arrived' (or 'regionRequested') — never two.
     expect(stored.events).toHaveLength(2);
   });
+
+  // useGame's rng has no route through App unless App exposes it, so this is
+  // the only test that drives chooseRegion — the glue that turns a ballot
+  // pick into an 'arrived' event with a real payout. The scripted values
+  // below were confirmed by direct execution against engine/roll.ts before
+  // being wired in here (not derived by hand alone):
+  //
+  //   rollRow(rng) = floor(r1*6) + floor(r2*6) + floor(r3*2)*11, three draws
+  //   per call. Every triple below is chosen so floor(r1*6)=0, floor(r2*6)=0
+  //   and floor(r3*2)=0, i.e. row 0 every time — CODES[0] = [6,4,8,1,10,5,8,2].
+  //
+  //   Triple 1 (0.05, 0.10, 0.20) — rollRegion for the home roll: row 0,
+  //   CODES[0][0]=6, REGIONS[6]='SW'. Home region is Southwest.
+  //
+  //   Triple 2 (0.02, 0.08, 0.40) — rollCityIn('SW', ...) for the home roll:
+  //   row 0, SW's column is 7, CODES[0][7]=2, citiesIn('SW')[2]='Los Angeles'
+  //   (id 59). Home town: Los Angeles.
+  //
+  //   Triple 3 (0.10, 0.15, 0.45) — rollRegion for the second roll: row 0
+  //   again, region 'SW' — the seat's own region (Los Angeles is in SW), so
+  //   rollDestination returns 'chooseRegion' instead of a city, and the
+  //   ballot appears.
+  //
+  //   Triple 4 (0.01, 0.12, 0.49) — after picking Northeast, rollCityIn('NE',
+  //   ...) for destinationInRegion: row 0, NE's column is 1, CODES[0][1]=4,
+  //   citiesIn('NE')[4]='New York' (id 4). payoutBetween(59, 4) = 31000, i.e.
+  //   $31,000 (PAYOUT_TABLE[59][4] = 31, in thousands).
+  //
+  // Verified by running rollDestination(null, rng) then
+  // rollDestination(59, rng) then destinationInRegion(59, 'NE', rng) with
+  // this exact queue and reading the real output: home = Los Angeles/SW,
+  // second = { kind: 'chooseRegion', rolled: 'SW' }, arrival = New York,
+  // payout 31000 — all 12 scripted draws consumed, none left over.
+  it('scripts dice through the full ballot path and shows the payout that lands', async () => {
+    vi.spyOn(window, 'prompt').mockReturnValue('Pete');
+
+    const values = [
+      0.05, 0.10, 0.20,
+      0.02, 0.08, 0.40,
+      0.10, 0.15, 0.45,
+      0.01, 0.12, 0.49
+    ];
+    let i = 0;
+    const rng = () => {
+      const value = values[i++];
+      if (value === undefined) {
+        throw new Error('rng exhausted: scripted for fewer draws than were requested');
+      }
+      return value;
+    };
+
+    render(<App rng={rng} />);
+
+    await userEvent.click(screen.getAllByRole('button', { name: /tap to join/i })[0]!);
+    expect(screen.getByText('PETE')).toBeInTheDocument();
+
+    // Roll #1: the home town.
+    await userEvent.click(screen.getByRole('button', { name: /pete/i }));
+    expect(screen.getByText('LOS ANGELES')).toBeInTheDocument();
+    expect(screen.getByText('HOME')).toBeInTheDocument();
+
+    // Roll #2: names the seat's own region, so the ballot takes over instead
+    // of a destination.
+    await userEvent.click(screen.getByRole('button', { name: /pete/i }));
+    const northeast = screen.getByRole('button', { name: /northeast/i });
+    expect(northeast).toBeInTheDocument();
+
+    // Pick Northeast from the ballot.
+    await userEvent.click(northeast);
+
+    expect(screen.getByText('NEW YORK')).toBeInTheDocument();
+    expect(screen.getByText('$31,000')).toBeInTheDocument();
+  });
 });

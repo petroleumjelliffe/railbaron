@@ -38,4 +38,26 @@ describe('the city table', () => {
   it('has no duplicate names', () => {
     expect(new Set(CITIES.map(c => c.name)).size).toBe(67);
   });
+
+  it('pins every name to its id — a swap of two names is not caught by the ' +
+     'numeric-table digests, since reordering names touches neither CODES nor ' +
+     'PAYOUT_TABLE', () => {
+    expect(CITIES.map(c => c.name)).toEqual([
+      'Albany', 'Baltimore', 'Boston', 'Buffalo', 'New York', 'Philadelphia',
+      'Pittsburgh', 'Portland, ME', 'Washington DC',
+      'Atlanta', 'Charleston', 'Charlotte', 'Chattanooga', 'Jacksonville',
+      'Knoxville', 'Miami', 'Mobile', 'Norfolk', 'Richmond', 'Tampa',
+      'Chicago', 'Cincinnati', 'Cleveland', 'Columbus', 'Detroit',
+      'Indianapolis', 'Milwaukee', 'St. Louis',
+      'Birmingham', 'Dallas', 'Fort Worth', 'Houston', 'Little Rock',
+      'Louisville', 'Memphis', 'Nashville', 'New Orleans', 'San Antonio',
+      'Shreveport',
+      'Denver', 'Des Moines', 'Fargo', 'Kansas City', 'Minneapolis',
+      'Oklahoma City', 'Omaha', 'Pueblo', 'St. Paul',
+      'Billings', 'Butte', 'Casper', 'Pocatello', 'Portland, OR',
+      'Rapid City', 'Salt Lake City', 'Seattle', 'Spokane',
+      'El Paso', 'Las Vegas', 'Los Angeles', 'Oakland', 'Phoenix', 'Reno',
+      'Sacramento', 'San Diego', 'San Francisco', 'Tucumcari'
+    ]);
+  });
 });

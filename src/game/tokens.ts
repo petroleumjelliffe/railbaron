@@ -8,12 +8,10 @@ export const TOKENS = {
   amber: '#f5c451',
   pale: '#cfc9ba',
   dim: '#6f6a5e',
-  label: '#7d7669',
   flapTop: '#1e1e1e',
   flapBottom: '#151515',
   tileWidth: 30,
-  tileHeight: 40,
-  rowHeight: 64
+  tileHeight: 40
 } as const;
 
 export const SEAT_COLORS: Record<SeatId, string> = {

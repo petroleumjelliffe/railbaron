@@ -28,9 +28,14 @@ npm run preview      # serve the production build locally
 
 `engine/` and `src/` run as two separate Vitest projects (`vite.config.ts`): `engine`
 under a plain `node` environment, `app` under `jsdom` with `src/test/setup.ts` loaded.
-`engine/smoke.test.ts` asserts `window` and `localStorage` are both `undefined` in the
-engine project, so a React or DOM dependency creeping into `engine/` fails a test rather
-than surviving unnoticed.
+`engine/smoke.test.ts` asserts `window` is `undefined` in the engine project, so a React
+or DOM dependency creeping into `engine/` fails a test rather than surviving unnoticed.
+(It does not also assert `localStorage` is `undefined`: Node 26 defines
+`globalThis.localStorage` as a getter that returns `undefined` without
+`--localstorage-file`, in both the plain-node project and a bare jsdom project alike —
+jsdom's real `Storage` only reaches `globalThis` via the bridge described below, which
+this project doesn't load — so that half would pass in both environments and guard
+nothing.)
 
 ## The game data, and its known bugs
 
