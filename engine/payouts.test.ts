@@ -2,6 +2,33 @@ import { describe, expect, it } from 'vitest';
 import { PAYOUT_TABLE, payoutBetween } from './payouts';
 import { CITIES } from './cities';
 
+// Locked-in digest of every value in PAYOUT_TABLE, in row-major order. Two
+// independent element-by-element comparisons against js/railbaronv2.js
+// (the 2013 source, which a later task deletes) confirmed this data is
+// correct on 2026-08-11 — see task-3-report.md. This constant freezes that
+// verified state so any future edit to a single cell, anywhere in the
+// table, is caught even though js/railbaronv2.js will no longer exist to
+// re-check against.
+//
+// Plain FNV-1a over the decimal text of each value (comma-terminated, so
+// e.g. "1,2" and "12," hash differently). No Node/DOM APIs — engine/ code
+// and its tests stay platform-free.
+const PAYOUT_TABLE_DIGEST = '11d42253';
+
+const digestOf = (table: readonly (readonly number[])[]): string => {
+  let hash = 0x811c9dc5;
+  for (const row of table) {
+    for (const value of row) {
+      const text = `${value},`;
+      for (let i = 0; i < text.length; i++) {
+        hash ^= text.charCodeAt(i);
+        hash = Math.imul(hash, 0x01000193);
+      }
+    }
+  }
+  return (hash >>> 0).toString(16).padStart(8, '0');
+};
+
 const idOf = (name: string) => {
   const city = CITIES.find(c => c.name === name);
   if (!city) throw new Error(`no city named ${name}`);
@@ -61,5 +88,13 @@ describe('the payout table', () => {
         expect(Number.isInteger(paid)).toBe(true);
       }
     }
+  });
+
+  it('pins every value in the table, so a single corrupted cell fails', () => {
+    // The other tests here sample a handful of cells; symmetry and range
+    // checks can't detect most transposed digits. This test covers all
+    // 2,211 values by digest, so any single-cell change — anywhere in the
+    // table — turns this red.
+    expect(digestOf(PAYOUT_TABLE)).toBe(PAYOUT_TABLE_DIGEST);
   });
 });
