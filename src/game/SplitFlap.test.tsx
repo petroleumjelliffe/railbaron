@@ -33,6 +33,21 @@ describe('a split-flap field', () => {
     const { container } = render(<SplitFlap value="500" width={6} align="right" />);
     expect(tiles(container)).toEqual([' ', ' ', ' ', '5', '0', '0']);
   });
+
+  it('leaves an exact-length value untouched — no padding, no truncation', () => {
+    const { container } = render(<SplitFlap value="DENVER" width={6} />);
+    expect(tiles(container)).toEqual(['D', 'E', 'N', 'V', 'E', 'R']);
+  });
+
+  it('renders an empty value as all-blank tiles, without a negative pad count', () => {
+    const { container } = render(<SplitFlap value="" width={4} />);
+    expect(tiles(container)).toEqual([' ', ' ', ' ', ' ']);
+  });
+
+  it('truncates before aligning, so a right-aligned overflow is not padded', () => {
+    const { container } = render(<SplitFlap value="ABCDEFGH" width={4} align="right" />);
+    expect(tiles(container)).toEqual(['A', 'B', 'C', 'D']);
+  });
 });
 
 describe('formatting money', () => {
