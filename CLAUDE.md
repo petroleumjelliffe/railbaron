@@ -56,10 +56,17 @@ and update the digest constant in the same commit, and say why in the commit mes
 
 Defects carried across from the source rather than reproduced-and-fixed:
 
-- **The two mislabelled city groups are fixed.** The 2013 source labelled its 4th and 5th
-  city groups `"South Central"` (they should be Plains and Northwest); the port's
-  `engine/cities.ts` uses the correct names directly, so this is not a live bug — noted
-  here only because it explains why the 2013 file and the port disagree.
+- **The two mislabelled city groups are fixed.** Counting `engine/cities.ts`'s `GROUPS`
+  array in file order, 1-indexed, the 2013 source labelled the 5th and 6th groups —
+  **the group containing Denver, Kansas City, Minneapolis and St. Paul** (actually Plains)
+  and **the group containing Billings, Seattle and Spokane** (actually Northwest) — both
+  `"South Central"`. The 4th group (Birmingham, Dallas, Houston) genuinely is South
+  Central and was labelled correctly; three groups carry the literal string, only two are
+  wrong. The port's `engine/cities.ts` uses the correct region for each, so this is not a
+  live bug — noted here only because it explains why the 2013 file and the port disagree.
+  This exact off-by-one (miscounting which two groups are the wrong ones) has recurred in
+  project docs before — if you're editing this again, name the groups by contents as
+  above, not only by ordinal.
 - **The payout matrix was checked against the source, not against the physical board.**
   The digest tests prove the transcription is faithful to `js/railbaronv2.js`; they cannot
   prove the source itself was ever right. See task-3-report.md for how the comparison was

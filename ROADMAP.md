@@ -23,17 +23,20 @@ Output is `data/rail-baron-graph.json` (scan pixel space, hand-verified) built i
 
 Replace the 2013 jQuery app. Same game, redesigned board, plus the map.
 
-- Vite + React + TypeScript, tablet landscape
-- Departures-board UI: six player rows of split-flap, region ballot on a same-region roll,
-  tap-to-join-and-name signup
-- Map as a second view: real US geometry, one bulb per real dot, region and city blink
-  choreography on a roll
-- Game logic ported from `js/railbaronv2.js` — roll tables, 67 cities, payout matrix —
-  with the two mislabelled regions fixed
+- [x] Vite + React + TypeScript, tablet landscape
+- [x] Departures-board UI: six player rows of split-flap, region ballot on a same-region
+      roll, tap-to-join-and-name signup
+- [ ] Map as a second view: real US geometry, one bulb per real dot, region and city blink
+      choreography on a roll — still ahead; depends on Phase 0's data pipeline, which has
+      unchecked steps above
+- [x] Game logic ported from [`engine/`](engine/) — roll tables, 67 cities, payout matrix —
+      with the two mislabelled regions fixed. The source it was transcribed from,
+      `js/railbaronv2.js`, lived at the repo root and was deleted once the port had a
+      passing test suite covering the same ground; it's still reachable in git history.
 
-Scope is the roller only. No movement, no railroad ownership, no cash. The graph carries
-dot counts and railroad attribution anyway, so those can be layered on without redoing
-the extraction.
+The roller — departures board plus the ported game logic — is done. Scope for it was the
+roller only: no movement, no railroad ownership, no cash. The graph carries dot counts and
+railroad attribution anyway, so those can be layered on without redoing the extraction.
 
 ## Phase 2 — pass-and-play menu
 
