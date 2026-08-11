@@ -87,21 +87,31 @@ Two scripts already exist and stay:
 Validates clean: **471 dots, 67 cities, 12 junctions, 710 edges** (36 shared by more than
 one railroad), 28 railroads, one connected component.
 
-**One item outstanding.** Five city names need confirming against the board before they are
-baked in — all within twin pairs, where a swap costs no payout because both members share
-a region and pay each other $0:
+**Names are settled.** `data/city-names.json` holds all 67, keyed by node id, each one
+checked to match `engine/cities.ts` exactly — the build joins the two by name string, not
+by id, so a typo drops a bulb off the map rather than failing loudly.
 
-- Bay Area: `c40` = San Francisco, `c41` = Oakland, `c94` = Sacramento
-- Twin Cities: `c13` = Minneapolis, `c95` = St. Paul
+Five sat inside twin pairs where a swap costs no payout — both members share a region and
+pay each other $0 — so nothing in the roller could have caught a mistake. They resolved
+differently:
 
-The registration proposed the Bay Area chain shifted one place; the twin-pair spacing
-(`c40`/`c41` are 5px apart, `c94` is 33px away) and the railroad topology both say
-otherwise. Until confirmed, `data/city-names-proposed.json` holds the unverified proposal
-and is not an input to the build.
+- **Bay Area, from the graph.** `c40`–`c41` is a direct AT&SF/SP edge 5.5px long, so that
+  pair is the bay crossing; `c94` sits 29–33px inland on WP/SP. Within the pair, `c40`'s
+  only edge is to `c41` — a single-edge peninsula terminus is San Francisco, and `c41` is
+  the mainland hub with track running east. This is what the registration's worst residual
+  in all 67 cities was reporting: it had put San Francisco at `c94`, scoring 49.93.
+  `c40` = San Francisco, `c41` = Oakland, `c94` = Sacramento.
+- **Twin Cities, by ruling.** The westward ordering made `c13` Minneapolis; the railroad
+  topology argued the other way, GN and NP having been headquartered in St. Paul. Settled
+  on the drawn network: every route points at the hub, the hub is Minneapolis, and St. Paul
+  is a spur off it. `c13` = Minneapolis, `c95` = St. Paul — `c95` had carried no name at
+  all, Minneapolis being the single unclaimed one.
 
-**This blocks the map view and the build script, not the rest.** The engine, the departures
-board, and the whole roller work from the game data in `js/railbaronv2.js`, which already
-names its 67 cities. Implementation can start on those while the names settle.
+`scripts/propose-city-names.mjs --write` still emits `data/city-names-proposed.json`. That
+is a diagnostic to compare against the verified file, never a substitute for it.
+
+**What remains for the map is the warp**, not the names — `scripts/build-network.mjs` is
+still to write.
 
 ## The game data, and what to fix while porting
 

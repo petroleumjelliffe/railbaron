@@ -223,9 +223,13 @@ for (const group of [['New York', 'Philadelphia', 'Baltimore', 'Washington DC'],
 if (write) {
   const out = [...matched].sort((a, b) =>
     a.id.localeCompare(b.id, undefined, { numeric: true }));
+  // Deliberately not data/city-names.json — that file is hand-verified and is
+  // what the build consumes. This one is a diagnostic re-run: compare it
+  // against the verified names, don't substitute it for them.
   const file = 'data/city-names-proposed.json';
   writeFileSync(file, JSON.stringify(
-    { note: 'Proposed by scripts/propose-city-names.mjs. Verify before use.',
+    { note: 'Proposed by scripts/propose-city-names.mjs. Diagnostic only — '
+          + 'data/city-names.json holds the hand-verified names.',
       unclaimed: [...openS],
       cities: out.map(({ id, name, region, x, y, residual }) =>
         ({ id, name, region, x, y, residual: Number(residual.toFixed(2)) })) },

@@ -9,15 +9,18 @@ Convert the printed map into a graph. Done in a one-off editor that runs against
 the board: cities, movement dots, and junctions as nodes; track between them as edges,
 each attributed to one or more of the 28 railroads.
 
-- [x] Detect and hand-clean the point set — 475 dots, 66 cities, 12 junctions
+- [x] Detect and hand-clean the point set — 471 dots, 67 cities, 12 junctions
 - [x] Trace every railroad's route
-- [ ] Find the missing 67th city
-- [ ] Attach names and regions to city nodes
-- [ ] Validate: no dead-end dots, no orphan edges, one connected component
+- [x] Find the missing 67th city — Minneapolis, by elimination in the registration
+- [x] Attach names and regions to city nodes — `data/city-names.json`, all 67
+      confirmed against `engine/cities.ts`
+- [x] Validate: no dead-end dots, no orphan edges, one connected component
 - [ ] Fit the scan→lat/lon warp so every node has real coordinates
 
-Output is `data/rail-baron-graph.json` (scan pixel space, hand-verified) built into
-`src/data/network.json` (lat/lon, named, validated).
+Output is `data/rail-baron-graph.json` (scan pixel space, hand-verified) plus
+`data/city-names.json` (names and regions, keyed by node id), built into
+`src/data/network.json` (lat/lon, named, validated) by `scripts/build-network.mjs`
+— the one step still to write.
 
 ## Phase 1 — the React port
 
