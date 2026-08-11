@@ -43,4 +43,12 @@ describe('persistence', () => {
     expect(loadLog()).toEqual([]);
     expect(localStorage.getItem('acquire:something')).toBe('keep me');
   });
+
+  it('exposes localStorage.length and localStorage.key() on the real Storage implementation', () => {
+    localStorage.setItem('key1', 'value1');
+    localStorage.setItem('key2', 'value2');
+    expect(localStorage.length).toBe(2);
+    expect([localStorage.key(0), localStorage.key(1)]).toContain('key1');
+    expect([localStorage.key(0), localStorage.key(1)]).toContain('key2');
+  });
 });

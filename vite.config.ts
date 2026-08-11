@@ -15,11 +15,6 @@ export default defineConfig({
         test: {
           name: 'app',
           environment: 'jsdom',
-          environmentOptions: {
-            jsdom: {
-              localStorage: true
-            }
-          },
           include: ['src/**/*.test.{ts,tsx}'],
           setupFiles: ['src/test/setup.ts']
         }
