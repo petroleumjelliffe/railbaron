@@ -4,6 +4,16 @@ import { describe, expect, it, vi } from 'vitest';
 import { REGIONS } from '../../engine';
 import type { Seat } from '../state/game';
 import { RegionBallot } from './RegionBallot';
+import { TOKENS } from './tokens';
+
+// jsdom normalizes inline hex colors to rgb(...) strings; round-tripping
+// TOKENS.amber through a throwaway element gets the same normalization the
+// buttons under test go through, instead of hardcoding jsdom's format.
+const normalizedAmber = (() => {
+  const probe = document.createElement('span');
+  probe.style.color = TOKENS.amber;
+  return probe.style.color;
+})();
 
 const seat = (awaiting: Seat['awaiting']): Seat => ({
   id: 'red',
@@ -43,22 +53,23 @@ describe('the region ballot', () => {
     expect(onChoose).toHaveBeenCalledExactlyOnceWith('PL');
   });
 
-  it('visibly distinguishes the awaited region from the other six', () => {
+  it('assigns a different colour value to the awaited region', () => {
     render(<RegionBallot seat={seat('PL')} onChoose={() => {}} />);
 
     const plainsButton = screen.getByRole('button', { name: /plains/i });
     const otherButton = screen.getByRole('button', { name: /northeast/i });
 
-    // The rolled region is styled differently (dimmed) from the rest —
-    // the two buttons must not share the same text color.
+    // jsdom paints nothing, so this only proves the two buttons receive
+    // different inline `color` values (dim vs amber) — not that a human
+    // would perceive a difference on screen.
     expect(plainsButton.style.color).not.toBe(otherButton.style.color);
   });
 
-  it('does not distinguish any region when the seat is not awaiting one', () => {
+  it('gives every button the same active colour when the seat is not awaiting one', () => {
     render(<RegionBallot seat={seat(null)} onChoose={() => {}} />);
 
-    const colors = new Set(screen.getAllByRole('button').map(button => button.style.color));
-    expect(colors.size).toBe(1);
+    const colors = screen.getAllByRole('button').map(button => button.style.color);
+    expect(colors).toEqual(colors.map(() => normalizedAmber));
   });
 
   it('names whose choice this is in the group\'s accessible name', () => {
