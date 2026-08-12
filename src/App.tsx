@@ -1,13 +1,15 @@
 import { useState } from 'react';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
-import type { Rng } from '../engine';
+import { REGIONS, type Rng } from '../engine';
 import { Board } from './board/Board';
 import { home } from './board/screens/home';
 import { passAndPlay } from './board/screens/passAndPlay';
 import { saved } from './board/screens/saved';
 import { confirm } from './board/screens/confirm';
+import { play } from './board/screens/play';
+import { regionBallot } from './board/screens/regionBallot';
 import type { Row, ScreenDef } from './board/types';
-import type { SeatId } from './state/events';
+import { SEATS, type SeatId } from './state/events';
 import { useGame } from './state/useGame';
 
 export interface AppProps {
@@ -41,7 +43,7 @@ const isKnown = (path: string): path is KnownRoute =>
 export default function App({ rng }: AppProps = {}) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  const { state, savedAt, rename, start, reset } = useGame(rng);
+  const { state, savedAt, activate, chooseRegion, rename, start, reset } = useGame(rng);
   const [editing, setEditing] = useState<{ seat: SeatId; placeholder: string } | null>(null);
   const [confirming, setConfirming] = useState(false);
 
@@ -54,15 +56,28 @@ export default function App({ rng }: AppProps = {}) {
     return resuming ? saved(state, savedAt) : passAndPlay(state);
   };
 
+  // Only one seat can be owed a region at a time. It takes over the whole
+  // board rather than opening a dialog over it — which is the pattern this
+  // entire design generalises.
+  const awaiting = SEATS.map(id => state.seats[id]).find(seat => seat.awaiting !== null);
+
   const screens: Record<KnownRoute, ScreenDef> = {
     '/': home(),
     '/pass-and-play': passAndPlayScreen(),
-    // Task 10 replaces this with the play board and the region ballot.
-    '/pass-and-play/game': passAndPlay(state)
+    '/pass-and-play/game': awaiting ? regionBallot(awaiting) : play(state)
   };
 
-  const onRowAct = (row: Row) => {
+  const onRowAct = (row: Row, index: number) => {
     if (row.action === null) return;
+
+    if (row.action.kind === 'act') {
+      // The ballot's choice is its row position: RowAction carries no
+      // region, and widening it for one screen would cost every other
+      // screen a field it never sets.
+      if (awaiting) chooseRegion(row.action.seat, REGIONS[index]!.id);
+      else activate(row.action.seat);
+      return;
+    }
 
     if (row.action.kind === 'edit') {
       // No `as any`: FieldId is the template literal `seat:${SeatId}`, so

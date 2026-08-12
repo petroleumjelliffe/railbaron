@@ -108,11 +108,13 @@ export function BoardRow({ row, faces, onAct, input }: BoardRowProps) {
       >
         {input !== undefined ? input : <>
         {/* The accessible copy carries the destination throughout a flap.
-            Reading the drum instead would narrate two seconds of noise. */}
+            Reading the drum instead would narrate two seconds of noise.
+            Natural case, not the flaps' upper case: some screen readers
+            spell out an all-caps word letter by letter. */}
         <span
           style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clipPath: 'inset(50%)' }}
         >
-          {row.text.toUpperCase()}
+          {row.text}
         </span>
         {faces.map((face, index) => (
           <span
