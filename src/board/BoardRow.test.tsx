@@ -38,10 +38,19 @@ function occupiedWidth(container: Element): number {
   return tiles.length * BOARD_TILE.width + Math.max(0, tiles.length - 1) * BOARD_TILE.gap;
 }
 
+const dollar = (container: HTMLElement) => container.querySelector('[data-dollar]');
+
 describe('a board row', () => {
   it('renders one tile per character position of the destination field', () => {
     const { container } = render1(row);
-    expect(container.querySelectorAll('[data-flap]')).toHaveLength(FLAP_WIDTH);
+    const column = container.querySelector('[data-column="destination"]')!;
+    expect(column.querySelectorAll('[data-flap]')).toHaveLength(FLAP_WIDTH);
+  });
+
+  it('renders the payout as flaps too, one per character it can hold', () => {
+    const { container } = render1(row);
+    const column = container.querySelector('[data-column="amount"]')!;
+    expect(column.querySelectorAll('[data-flap]')).toHaveLength(AMOUNT_WIDTH);
   });
 
   it('fits the destination field inside its declared column', () => {
@@ -80,16 +89,28 @@ describe('a board row', () => {
   });
 
   it('shows the dollar sign only when the row asks for one', () => {
-    const { container } = render1(row);
-    expect(container.querySelector('[data-dollar]')).not.toBeNull();
-    const without = render1({ ...row, showDollar: false });
-    expect(without.container.querySelector('[data-dollar]')).toBeNull();
+    // Present either way, so the tiles beside it do not shift when it
+    // arrives; hidden rather than absent when the row has no payout.
+    const shown = dollar(render1(row).container);
+    expect(shown).not.toBeNull();
+    expect(getComputedStyle(shown!).visibility).toBe('visible');
+
+    const without = dollar(render1({ ...row, showDollar: false }).container);
+    expect(getComputedStyle(without!).visibility).toBe('hidden');
+  });
+
+  it('holds the dollar sign back until the payout has landed', () => {
+    const turning = render(
+      <BoardRow {...settledProps(row)} amountSettled={false} onAct={() => {}} />
+    );
+    expect(getComputedStyle(dollar(turning.container)!).visibility).toBe('hidden');
   });
 
   it('renders a blank row with no action and a full set of blank tiles', () => {
     const { container } = render1(blankRow());
     expect(container.querySelector('button')).toBeNull();
-    expect(container.querySelectorAll('[data-flap]')).toHaveLength(FLAP_WIDTH);
+    const column = container.querySelector('[data-column="destination"]')!;
+    expect(column.querySelectorAll('[data-flap]')).toHaveLength(FLAP_WIDTH);
   });
 
   it('puts an input in the destination column without displacing the rest of the row', () => {

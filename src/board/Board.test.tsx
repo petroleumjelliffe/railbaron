@@ -21,7 +21,8 @@ const board = (def: ScreenDef) => (
 
 /** The tiles of one row's destination field, as the characters on show. */
 const tilesOfRow = (container: HTMLElement, index: number) =>
-  [...container.querySelectorAll('[data-board-row]')[index]!.querySelectorAll('[data-flap]')]
+  [...container.querySelectorAll('[data-board-row]')[index]!
+    .querySelector('[data-column="destination"]')!.querySelectorAll('[data-flap]')]
     .map(tile => tile.getAttribute('data-flap'))
     .join('')
     .trimEnd();
@@ -121,7 +122,8 @@ describe('the order a roll is revealed in', () => {
     tick(52 * 6);
     expect(tilesOfRow(container, 0)).not.toBe('DENVER');
     expect(columnText(container, 'amount')).not.toContain('21,000');
-    expect(container.querySelector('[data-dollar]')).toBeNull();
+    expect(getComputedStyle(container.querySelector('[data-dollar]')!).visibility)
+      .toBe('hidden');
   });
 
   it('lands the region, then the city, then the payout', () => {

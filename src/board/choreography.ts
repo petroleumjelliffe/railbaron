@@ -13,8 +13,12 @@ export interface RowDrums {
   amount: Tile[];
 }
 
-/** Payout figures are short; seven faces cover every one on the board. */
-export const AMOUNT_WIDTH = 7;
+/**
+ * Payout figures are short. The largest on the board is $35,000 — six
+ * characters once the dollar sign is set aside as a label — so six tiles
+ * cover every payout the table can produce.
+ */
+export const AMOUNT_WIDTH = 6;
 
 /**
  * A panel with nothing to change to still turns a full lap, so that a baron

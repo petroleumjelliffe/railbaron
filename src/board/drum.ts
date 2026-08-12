@@ -30,11 +30,13 @@ export interface FlapChar {
 const CHARACTERS = [...ALPHABET];
 
 /**
- * The faces an amount panel carries. Payouts are digits, commas and blanks —
- * nothing else — so a tile that only carries those reaches any figure in at
- * most twelve turns instead of the alphabet's forty-one. The payout lands
- * last in the sequence, and a full alphabet drum there would add two seconds
- * to every roll for characters that can never come up.
+ * The faces a payout tile carries: digits, a comma and a blank. The dollar
+ * sign is not among them — it is a fixed label in front of the tiles, not
+ * something that turns. Nothing else can appear in a payout, so a tile
+ * carrying only these reaches any figure in at most twelve turns instead of
+ * the alphabet's forty-one; the payout lands last in the sequence, and a
+ * full alphabet drum there would add two seconds to every roll for
+ * characters that can never come up.
  */
 const DIGITS = [...' 0123456789,'];
 

@@ -17,6 +17,10 @@ export const BOARD_COLUMN_WIDTHS = {
   chip: 22, label: 168, status: 170, destination: 406, amount: 219, right: 178
 } as const;
 
+/** The dollar label in front of the payout tiles. Holds its width whether or
+ *  not it is showing, so the tiles do not shift when it arrives. */
+export const DOLLAR_WIDTH = 16;
+
 export const BOARD_TILE = {
   width: 27,
   height: 40,
@@ -70,6 +74,37 @@ function Panel({ value, width }: { value: string; width: number }) {
     >
       {value.toUpperCase()}
     </span>
+  );
+}
+
+/**
+ * A strip of flaps, one per character. The destination and the payout are
+ * both these — same tile, same gap, same leading edge — so the payout turns
+ * like part of the board rather than like a number that changed.
+ */
+function Tiles(
+  { faces, colour, fontSize }: { faces: FlapChar[]; colour: string; fontSize: number }
+) {
+  return (
+    <>
+      {faces.map((face, index) => (
+        <span
+          key={index}
+          data-flap={face.top}
+          aria-hidden="true"
+          style={{
+            display: 'inline-block', width: BOARD_TILE.width, height: BOARD_TILE.height,
+            marginLeft: index === 0 ? 0 : BOARD_TILE.gap,
+            lineHeight: `${BOARD_TILE.height}px`, textAlign: 'center', fontSize,
+            borderRadius: 3, color: colour,
+            background: `linear-gradient(180deg, ${TOKENS.flapTop} 0 50%, ${TOKENS.flapBottom} 50% 100%)`,
+            boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.16)'
+          }}
+        >
+          {face.top === ' ' ? '\u00a0' : face.top}
+        </span>
+      ))}
+    </>
   );
 }
 
@@ -134,37 +169,41 @@ export function BoardRow({
         >
           {row.text}
         </span>
-        {faces.map((face, index) => (
-          <span
-            key={index}
-            data-flap={face.top}
-            aria-hidden="true"
-            style={{
-              display: 'inline-block', width: BOARD_TILE.width, height: BOARD_TILE.height,
-              marginLeft: index === 0 ? 0 : BOARD_TILE.gap,
-              lineHeight: `${BOARD_TILE.height}px`, textAlign: 'center', fontSize: 29,
-              borderRadius: 3, color: colour,
-              background: `linear-gradient(180deg, ${TOKENS.flapTop} 0 50%, ${TOKENS.flapBottom} 50% 100%)`,
-              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.16)'
-            }}
-          >
-            {face.top === ' ' ? ' ' : face.top}
-          </span>
-        ))}
+        <Tiles faces={faces} colour={colour} fontSize={29} />
         </>}
       </span>
       <span
         data-column="amount"
         style={{
           width: BOARD_COLUMN_WIDTHS.amount, flex: `0 0 ${BOARD_COLUMN_WIDTHS.amount}px`,
-          fontSize: 27, color: TOKENS.amber, whiteSpace: 'nowrap'
+          whiteSpace: 'nowrap'
         }}
       >
-        {/* The dollar sign waits with the figure. Showing it while the drum
-            is still turning announces that a payout is coming, which is the
-            one thing the HOME case has to be able to not say. */}
-        {row.showDollar && amountSettled && <span data-dollar="">$</span>}
-        {amountFace}
+        {/* Read out as one figure rather than as seven tiles, and silent
+            until it lands: a screen reader should not be told a payout the
+            board is still withholding. */}
+        <span
+          style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clipPath: 'inset(50%)' }}
+        >
+          {amountSettled ? amountFace : ''}
+        </span>
+        {/* A printed label, not a flap: the tiles carry digits and a comma
+            and nothing else. It arrives with the figure rather than ahead of
+            it — a dollar sign over a still-turning drum announces that a
+            payout is coming, which is the one thing the home-town case has to
+            be able to not say. */}
+        <span
+          data-dollar=""
+          aria-hidden="true"
+          style={{
+            display: 'inline-block', width: DOLLAR_WIDTH, fontSize: 25,
+            lineHeight: `${BOARD_TILE.height}px`, verticalAlign: 'top',
+            color: TOKENS.amber, visibility: row.showDollar && amountSettled ? 'visible' : 'hidden'
+          }}
+        >
+          $
+        </span>
+        <Tiles faces={amount} colour={TOKENS.amber} fontSize={25} />
       </span>
       <span
         data-column="right"
