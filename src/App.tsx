@@ -4,6 +4,8 @@ import type { Rng } from '../engine';
 import { Board } from './board/Board';
 import { home } from './board/screens/home';
 import { passAndPlay } from './board/screens/passAndPlay';
+import { saved } from './board/screens/saved';
+import { confirm } from './board/screens/confirm';
 import type { Row, ScreenDef } from './board/types';
 import type { SeatId } from './state/events';
 import { useGame } from './state/useGame';
@@ -39,14 +41,22 @@ const isKnown = (path: string): path is KnownRoute =>
 export default function App({ rng }: AppProps = {}) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  const { state, rename, start } = useGame(rng);
+  const { state, savedAt, rename, start, reset } = useGame(rng);
   const [editing, setEditing] = useState<{ seat: SeatId; placeholder: string } | null>(null);
+  const [confirming, setConfirming] = useState(false);
 
   if (!isKnown(pathname)) return <Navigate to="/" replace />;
 
+  const resuming = state.phase === 'playing';
+
+  const passAndPlayScreen = (): ScreenDef => {
+    if (confirming) return confirm();
+    return resuming ? saved(state, savedAt) : passAndPlay(state);
+  };
+
   const screens: Record<KnownRoute, ScreenDef> = {
     '/': home(),
-    '/pass-and-play': passAndPlay(state),
+    '/pass-and-play': passAndPlayScreen(),
     // Task 10 replaces this with the play board and the region ballot.
     '/pass-and-play/game': passAndPlay(state)
   };
@@ -67,10 +77,19 @@ export default function App({ rng }: AppProps = {}) {
     if (row.action.kind !== 'navigate') return;
     switch (row.action.to) {
       case 'passAndPlay':
+        // Only reachable from the confirmation's YES, DISCARD row.
+        if (confirming) reset();
+        setConfirming(false);
         navigate('/pass-and-play');
         break;
+      case 'confirm':
+        setConfirming(true);
+        break;
+      case 'saved':
+        setConfirming(false);
+        break;
       case 'play':
-        start();
+        if (!resuming) start();
         navigate('/pass-and-play/game');
         break;
     }
@@ -86,7 +105,12 @@ export default function App({ rng }: AppProps = {}) {
           setEditing(null);
         }}
         onCancel={() => setEditing(null)}
-        onBack={() => navigate(pathname === '/' ? '/' : '/')}
+        onBack={() => {
+          // Backing out of the confirmation returns to the saved game
+          // rather than leaving the route, which is why it is not a route.
+          if (confirming) { setConfirming(false); return; }
+          navigate('/');
+        }}
         onRowAct={onRowAct}
       />
     </main>
