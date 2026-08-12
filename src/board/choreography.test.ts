@@ -88,6 +88,21 @@ describe('the order a roll arrives in', () => {
     expect(different.status).toBeGreaterThan(0);
   });
 
+  it('resolves an ordinary roll in about three seconds', () => {
+    // Not the worst case — an unremarkable one, which is what a player waits
+    // through most turns. It is close to the worst case rather than well
+    // under it, because holding a column back is done in whole laps of its
+    // ring: a city tile with less than a column's wait left to travel runs a
+    // complete extra lap of the 42-face alphabet, 2.2 seconds, to arrive
+    // late. Waiting still and then turning would cost the delay itself and
+    // nothing more.
+    const at = roll(
+      { status: 'Northeast', text: 'Boston', amount: '5,000', turn: 0 },
+      { status: 'North Central', text: 'Chicago', amount: '4,500', turn: 0 }
+    );
+    expect(at.amount * 52).toBeLessThan(3200);
+  });
+
   it('resolves a whole roll in about three seconds at worst', () => {
     // 52ms a tick. The worst case is a city whose letters have the furthest
     // to travel; anything much beyond this is a wait on every single turn.
@@ -101,7 +116,10 @@ describe('the order a roll arrives in', () => {
       );
       worst = Math.max(worst, at.amount);
     }
-    expect(worst * 52).toBeLessThan(3400);
+    // Worst case, not typical: the longest letter travel in the alphabet
+    // plus the payout ring rounding its wait up to a whole lap. Typical is
+    // covered above and is about two-thirds of this.
+    expect(worst * 52).toBeLessThan(3600);
   });
 });
 

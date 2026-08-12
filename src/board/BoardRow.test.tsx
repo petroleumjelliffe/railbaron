@@ -88,14 +88,14 @@ describe('a board row', () => {
     expect(onAct).not.toHaveBeenCalled();
   });
 
-  it('prints the dollar sign on every row, lit only where a baron is playing', () => {
-    const playing = dollar(render1(row).container)!;
-    expect(getComputedStyle(playing).visibility).toBe('visible');
-    expect(getComputedStyle(playing).color).toBe('rgb(245, 196, 81)');
+  it('prints the dollar sign where the column is money, and nowhere else', () => {
+    // The menu screens borrow this column for a player count, and a dollar
+    // sign in front of "2-6" is a different claim entirely. The space is
+    // still reserved, so the tiles line up down the whole board.
+    expect(dollar(render1(row).container)).not.toBeNull();
 
-    const empty = dollar(render1({ ...row, showDollar: false }).container)!;
-    expect(getComputedStyle(empty).visibility).toBe('visible');
-    expect(getComputedStyle(empty).color).not.toBe('rgb(245, 196, 81)');
+    const { container } = render1({ ...row, showDollar: false });
+    expect(container.querySelector('[data-dollar]')).toBeNull();
   });
 
   it('leaves the dollar sign alone while the payout is turning', () => {

@@ -30,15 +30,20 @@ export interface FlapChar {
 const CHARACTERS = [...ALPHABET];
 
 /**
- * The faces a payout tile carries: digits, a comma and a blank. The dollar
- * sign is not among them — it is a fixed label in front of the tiles, not
- * something that turns. Nothing else can appear in a payout, so a tile
- * carrying only these reaches any figure in at most twelve turns instead of
- * the alphabet's forty-one; the payout lands last in the sequence, and a
- * full alphabet drum there would add two seconds to every roll for
- * characters that can never come up.
+ * The faces this column's tiles carry: digits, a comma, a hyphen and a
+ * blank. The dollar sign is not among them — it is a fixed label in front of
+ * the tiles, not something that turns.
+ *
+ * A tile carrying only these reaches any figure in at most thirteen turns
+ * instead of the alphabet's forty-one. The payout lands last in the
+ * sequence, and a full alphabet drum there would add two seconds to every
+ * roll for characters that can never come up.
+ *
+ * The hyphen is here because the menu screens reuse this column for a range
+ * — "2-6" players. Without it that row read as "2 6", the hyphen silently
+ * becoming a blank because the ring had no face for it.
  */
-const DIGITS = [...' 0123456789,'];
+const DIGITS = [...' 0123456789,-'];
 
 export interface DrumSpec {
   from: string;

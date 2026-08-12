@@ -238,12 +238,17 @@ export function BoardRow({
             something about the figure beside it before the figure has
             landed. */}
         <span
-          data-dollar=""
+          data-dollar={row.showDollar ? '' : undefined}
           aria-hidden="true"
           style={{
             display: 'inline-block', width: DOLLAR_WIDTH, fontSize: 27,
             lineHeight: `${BOARD_TILE.height}px`, verticalAlign: 'top',
-            color: row.showDollar ? TOKENS.amber : '#3a3730'
+            color: TOKENS.amber,
+            // Reserved on every row so the tiles line up down the board, but
+            // only inked where this column is money. The menu screens borrow
+            // it for a player count, and a dollar sign in front of "2-6" is
+            // a different claim entirely.
+            visibility: row.showDollar ? 'visible' : 'hidden'
           }}
         >
           $
