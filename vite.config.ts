@@ -1,3 +1,6 @@
+import { copyFileSync, existsSync } from 'node:fs';
+import { resolve } from 'node:path';
+import type { Plugin } from 'vite';
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 // Extensionless, matching Acquire. Vite 8's native config loader warns and
@@ -6,9 +9,30 @@ import react from '@vitejs/plugin-react';
 // spend on a deprecation warning that has not landed yet.
 import { BASE_PATH } from './basePath';
 
+/**
+ * GitHub Pages serves static files and knows nothing about client-side
+ * routes, so a direct load or a refresh on /pass-and-play/game returns its
+ * own 404 page rather than the app. Pages falls back to 404.html for any
+ * path it cannot find, so shipping a copy of index.html under that name
+ * hands those URLs back to the router.
+ *
+ * Written at build time rather than kept as a second file in the repo, which
+ * would be an identical copy that silently stops matching.
+ */
+function pagesFallback(): Plugin {
+  return {
+    name: 'railbaron:pages-fallback',
+    apply: 'build',
+    closeBundle() {
+      const built = resolve('dist', 'index.html');
+      if (existsSync(built)) copyFileSync(built, resolve('dist', '404.html'));
+    }
+  };
+}
+
 export default defineConfig({
   base: BASE_PATH,
-  plugins: [react()],
+  plugins: [react(), pagesFallback()],
   test: {
     globals: true,
     projects: [

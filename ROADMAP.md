@@ -1,7 +1,12 @@
 # Rail Baron — roadmap
 
-A destination-roller companion for the Avalon Hill board game *Rail Baron*. You play on
-the physical board; the app rolls destinations, computes payouts, and shows the network.
+A companion for the Avalon Hill board game *Rail Baron*. You play on the physical board;
+the app rolls destinations, computes payouts, and shows the network.
+
+**v1.0.0 is the companion release** — Phases 0 to 2, deployed to GitHub Pages. It is
+complete for what it claims to be: a roller and a map, used beside a board that people
+are playing themselves. Phase 4 is the game itself, and it is a different application
+wearing the same clothes.
 
 ## Phase 0 — map data
 
@@ -104,3 +109,42 @@ refactoring into it later:
 
 The lobby is turn-agnostic by design: it knows seats, tokens, lifecycle and presence,
 never turns or timing. A roller with no turn order at all sits on it unchanged.
+
+## Phase 4 — the game itself
+
+Modelling Rail Baron rather than assisting it: a baron rolls, **moves**, chooses a
+route, and pays for the track they used. Then the parts that make it a game rather
+than a journey — buying railroads, the auction, user fees, cash, and winning.
+
+**Nothing here is designed yet.** That is the honest state: the rules are known,
+the interface is not, and the two questions below are the ones that decide what
+this becomes.
+
+### What the map already gives us
+
+Phase 0 captured more than the roller needed, on purpose, so this phase does not
+mean reading the board again:
+
+- **Path cost is the count of `dot` nodes traversed.** Junctions cost nothing by
+  construction rather than by rule — they are not dots — so route-finding needs no
+  special case for them.
+- **Every edge names the railroads running over it.** Shared trackage is one edge
+  naming several, which is exactly the shape a "whose track did you use, and what
+  do you owe them" calculation wants.
+- **Both spaces are available** — real geography for the map view, scan pixels in
+  `data/design-network.json` for anything that needs the printed board's own layout.
+
+### The two open questions
+
+- **Whose turn is it?** The roller has no turn order at all: any row can be tapped at
+  any time, which is right for a companion and wrong for a referee. Introducing turns
+  touches the event log, the board, and the lobby contract Phase 3 depends on.
+- **How much does the app decide?** There is a wide gap between showing a baron their
+  legal routes and choosing one for them, and a wider one between tracking cash and
+  enforcing it. The further it goes, the less the physical board is being played.
+
+### What it must not break
+
+The `$0` constraint, the event log as the single source of truth, and the rule that
+a roll is not told until the board has finished announcing it. Those are load-bearing
+and documented in [CLAUDE.md](CLAUDE.md).

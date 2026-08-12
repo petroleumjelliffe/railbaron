@@ -7,7 +7,8 @@
  * and the manifest generator — before it was consolidated; this file exists
  * before that can happen here.
  *
- * Rail Baron has no deploy yet, so this value is unverified. The point of
- * the file is to be the only place it will need changing when there is one.
+ * Deployed to GitHub Pages by .github/workflows/deploy.yml, which serves the
+ * repository at this path. Change it here and the Vite config, the router's
+ * basename and the built asset URLs all follow.
  */
 export const BASE_PATH = '/railbaron';
