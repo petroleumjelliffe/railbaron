@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { play } from './play';
 import { replay } from '../../state/game';
-import type { GameEvent } from '../../state/events';
+import { SEATS, type GameEvent } from '../../state/events';
 import { BOARD_ROWS } from '../types';
 
 const log: GameEvent[] = [
@@ -19,6 +19,20 @@ describe('the in-play board', () => {
     expect(rows()[0]!.label).toBe('ADA');
     expect(rows()[1]!.label).toBe('MARGO');
     expect(rows()[2]!.action).toBeNull();
+  });
+
+  it('keeps the map on the last row whoever is playing', () => {
+    const last = BOARD_ROWS - 1;
+    expect(rows()[last]!.action).toEqual({ kind: 'navigate', to: 'map' });
+
+    // Six barons fills every other row; the map must not be pushed off.
+    const full: GameEvent[] = [
+      ...SEATS.map((seat, i) => ({ type: 'joined' as const, seat, name: `B${i}` })),
+      { type: 'started' }
+    ];
+    expect(rows(full)).toHaveLength(BOARD_ROWS);
+    expect(rows(full)[last]!.action).toEqual({ kind: 'navigate', to: 'map' });
+    expect(rows(full)[last - 1]!.label).toBe('B5');
   });
 
   it('makes a baron row roll when tapped', () => {

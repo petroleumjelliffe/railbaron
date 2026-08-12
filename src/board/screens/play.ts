@@ -2,7 +2,7 @@ import { cityById, regionById } from '../../../engine';
 import { SEATS } from '../../state/events';
 import type { GameState } from '../../state/game';
 import { SEAT_COLORS } from '../../game/tokens';
-import { padRows, type Row, type ScreenDef } from '../types';
+import { blankRow, BOARD_ROWS, padRows, type Row, type ScreenDef } from '../types';
 
 export function play(state: GameState): ScreenDef {
   const rows: Row[] = SEATS
@@ -26,11 +26,23 @@ export function play(state: GameState): ScreenDef {
       };
     });
 
+  // Seven rows, six barons: the last is always free, and the map takes it.
+  // Padding to the row above first pins it to the bottom of the board, so it
+  // does not slide up the screen as barons join — a row that moves under the
+  // finger between turns is one that gets tapped by mistake.
+  const withMap = padRows(rows).slice(0, BOARD_ROWS - 1);
+  withMap.push({
+    ...blankRow(),
+    label: 'Map',
+    text: 'View the network',
+    action: { kind: 'navigate', to: 'map' }
+  });
+
   return {
     title: 'Departures',
     sub: 'IN PLAY',
     back: 'home',
     cols: ['Baron', 'Region', 'Destination', 'Payout', ''],
-    rows: padRows(rows)
+    rows: withMap
   };
 }

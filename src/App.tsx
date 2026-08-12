@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { REGIONS, type Rng } from '../engine';
 import { Board } from './board/Board';
@@ -9,6 +9,13 @@ import { confirm } from './board/screens/confirm';
 import { play } from './board/screens/play';
 import { regionBallot } from './board/screens/regionBallot';
 import type { Row, ScreenDef } from './board/types';
+
+/**
+ * The map is loaded only when someone asks for it. It carries the projected
+ * network, the coastline and d3-geo — around 160KB that the roller, which is
+ * the whole app for most of a game, has no use for.
+ */
+const MapView = lazy(() => import('./map/MapView').then(m => ({ default: m.MapView })));
 import { SEATS, type SeatId } from './state/events';
 import { useGame } from './state/useGame';
 
@@ -23,7 +30,7 @@ export interface AppProps {
  * confirmation should not be bookmarkable and the back button out of one
  * must be harmless.
  */
-const ROUTES = ['/', '/pass-and-play', '/pass-and-play/game'] as const;
+const ROUTES = ['/', '/pass-and-play', '/pass-and-play/game', '/pass-and-play/map'] as const;
 type KnownRoute = (typeof ROUTES)[number];
 
 const isKnown = (path: string): path is KnownRoute =>
@@ -54,8 +61,31 @@ export default function App({ rng }: AppProps = {}) {
   // A stale bookmark or a typed URL can ask for the game board when there
   // is no game. Rendering it anyway gives a board of seven blank rows with
   // nothing tappable on it — a dead end whose only affordance is BACK.
-  if (pathname === '/pass-and-play/game' && !resuming) {
+  // The map is reached from the game and shows what each baron is doing, so
+  // it is guarded the same way.
+  if (pathname.startsWith('/pass-and-play/') && !resuming) {
     return <Navigate to="/pass-and-play" replace />;
+  }
+
+  // The map is not a ScreenDef and is not seven rows, so it replaces the
+  // Board rather than being handed to it. Everything below this line is the
+  // board and does not apply.
+  if (pathname === '/pass-and-play/map') {
+    return (
+      <main style={{ height: '100%' }}>
+        <Suspense fallback={
+          <div style={{
+            height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: '#e8e6e1', fontFamily: "'DM Mono', ui-monospace, monospace",
+            fontSize: 12, letterSpacing: '0.18em', textTransform: 'uppercase', color: '#8a8377'
+          }}>
+            Warming the lamps
+          </div>
+        }>
+          <MapView state={state} onBack={() => navigate('/pass-and-play/game')} />
+        </Suspense>
+      </main>
+    );
   }
 
   const passAndPlayScreen = (): ScreenDef => {
@@ -68,7 +98,8 @@ export default function App({ rng }: AppProps = {}) {
   // entire design generalises.
   const awaiting = SEATS.map(id => state.seats[id]).find(seat => seat.awaiting !== null);
 
-  const screens: Record<KnownRoute, ScreenDef> = {
+  // Every route but the map, which returned above — it is not a ScreenDef.
+  const screens: Record<Exclude<KnownRoute, '/pass-and-play/map'>, ScreenDef> = {
     '/': home(),
     '/pass-and-play': passAndPlayScreen(),
     '/pass-and-play/game': awaiting ? regionBallot(awaiting) : play(state)
@@ -113,6 +144,9 @@ export default function App({ rng }: AppProps = {}) {
       case 'play':
         if (!resuming) start();
         navigate('/pass-and-play/game');
+        break;
+      case 'map':
+        navigate('/pass-and-play/map');
         break;
     }
   };

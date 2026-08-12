@@ -1,8 +1,14 @@
 import type { SeatId } from '../state/events';
 
-/** Every screen the board can show. Only some have routes — see App.tsx. */
+/**
+ * Every screen the board can show, plus `map` — which the board cannot show.
+ * The map is a lit cabinet, not seven rows of flaps, so it renders instead of
+ * the Board rather than through it. It is named here anyway because a row has
+ * to be able to navigate to it, and a second navigation vocabulary for one
+ * destination would cost more than this note does.
+ */
 export type ScreenId =
-  | 'home' | 'passAndPlay' | 'saved' | 'confirm' | 'play' | 'regionBallot';
+  | 'home' | 'passAndPlay' | 'saved' | 'confirm' | 'play' | 'regionBallot' | 'map';
 
 /** What an editable row is editing. Seat names today. */
 export type FieldId = `seat:${SeatId}`;

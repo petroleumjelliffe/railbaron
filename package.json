@@ -11,9 +11,11 @@
     "test:watch": "vitest",
     "graph:validate": "node scripts/validate-graph.mjs",
     "graph:names": "node scripts/propose-city-names.mjs",
-    "network:build": "node scripts/build-network.mjs --write"
+    "network:build": "node scripts/build-network.mjs --write",
+    "outline:build": "node scripts/build-outline.mjs --write"
   },
   "dependencies": {
+    "d3-geo": "^3.1.1",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-router-dom": "^7.18.2"
@@ -22,11 +24,15 @@
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.3",
+    "@types/d3-geo": "^3.1.1",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
+    "@types/topojson-client": "^3.1.5",
     "@vitejs/plugin-react": "^6.0.5",
     "jsdom": "^30.0.1",
+    "topojson-client": "^3.1.0",
     "typescript": "^5.9.3",
+    "us-atlas": "^3.0.1",
     "vite": "^8.2.1",
     "vitest": "^4.1.10"
   }

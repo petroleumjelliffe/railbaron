@@ -39,9 +39,11 @@ Replace the 2013 jQuery app. Same game, redesigned board, plus the map.
 - [x] Vite + React + TypeScript, tablet landscape
 - [x] Departures-board UI: split-flap rows, region ballot on a same-region roll, naming.
       Rebuilt in Phase 2 as one board driven by screen definitions — see below
-- [ ] Map as a second view: real US geometry, one bulb per real dot, region and city blink
-      choreography on a roll — still ahead; depends on Phase 0's data pipeline, which has
-      unchecked steps above
+- [x] Map as a second view: real US geometry, one lamp per real dot, cities tinted by
+      region, track drawn in each railroad's own colour. Reached from the last row of the
+      in-play board. Each baron's destination and the city they set out from light in
+      their colour — no path is drawn between them, because which route a baron takes
+      depends on the railroads they can use and this app does not model that
 - [x] Game logic ported from [`engine/`](engine/) — roll tables, 67 cities, payout matrix —
       with the two mislabelled regions fixed. The source it was transcribed from,
       `js/railbaronv2.js`, lived at the repo root and was deleted once the port had a

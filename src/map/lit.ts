@@ -1,0 +1,56 @@
+import type { CityId } from '../../engine';
+import { SEATS, type SeatId } from '../state/events';
+import type { GameState } from '../state/game';
+
+export type Role = 'destination' | 'origin';
+
+export interface Marker {
+  seat: SeatId;
+  name: string;
+  role: Role;
+}
+
+/**
+ * Which cities carry a baron's colour, and why.
+ *
+ * A baron's latest stop is where they are heading — the destination the roll
+ * just produced. The stop before it is where they set out from. Nothing
+ * between the two is lit: the app does not model movement, and the route a
+ * baron actually takes depends on which railroads they can use, which is not
+ * something this app knows. Drawing a line between the two lamps would be
+ * asserting a path the game has not chosen.
+ *
+ * A city can hold several markers — barons share destinations, and a baron's
+ * own origin can be another's destination. Destinations sort first so a
+ * renderer showing one colour shows the more important one.
+ */
+export function markers(state: GameState): Map<CityId, Marker[]> {
+  const out = new Map<CityId, Marker[]>();
+
+  const add = (city: CityId, marker: Marker) => {
+    const list = out.get(city);
+    if (list) list.push(marker);
+    else out.set(city, [marker]);
+  };
+
+  for (const id of SEATS) {
+    const seat = state.seats[id];
+    if (seat.name === null || seat.stops.length === 0) continue;
+
+    const destination = seat.stops[seat.stops.length - 1]!;
+    add(destination.city, { seat: id, name: seat.name, role: 'destination' });
+
+    const origin = seat.stops[seat.stops.length - 2];
+    // A baron's first roll has no origin — they have not been anywhere else.
+    // A roll that lands where they already stand (the home-town case) would
+    // otherwise mark one city as both, so the destination alone stands.
+    if (origin && origin.city !== destination.city) {
+      add(origin.city, { seat: id, name: seat.name, role: 'origin' });
+    }
+  }
+
+  for (const list of out.values()) {
+    list.sort((a, b) => Number(b.role === 'destination') - Number(a.role === 'destination'));
+  }
+  return out;
+}
