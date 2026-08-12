@@ -5,7 +5,10 @@ import { currentCity, replay, undo } from './game';
 import { clearLog, loadLog, saveLog } from './storage';
 
 export function useGame(rng: Rng = Math.random) {
-  const [events, setEvents] = useState<GameEvent[]>(() => loadLog());
+  const [events, setEvents] = useState<GameEvent[]>(() => loadLog().events);
+  // Read once, at mount: this is the age of the record we resumed from, not
+  // of the save this session goes on to write.
+  const [savedAt] = useState<number | null>(() => loadLog().savedAt);
 
   // loadLog() already defaults to [] when nothing is stored, so an empty log
   // needs no entry of its own — persisting `{version,events:[]}` here would
@@ -87,5 +90,5 @@ export function useGame(rng: Rng = Math.random) {
   const undoLast = useCallback(() => setEvents(log => undo(log)), []);
   const reset = useCallback(() => { clearLog(); setEvents([]); }, []);
 
-  return { state, activate, chooseRegion, rename, start, undoLast, reset };
+  return { state, savedAt, activate, chooseRegion, rename, start, undoLast, reset };
 }

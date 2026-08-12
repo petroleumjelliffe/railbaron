@@ -17,30 +17,30 @@ describe('persistence', () => {
 
   it('round-trips a log, zero payouts included', () => {
     saveLog(log);
-    const back = loadLog();
+    const back = loadLog().events;
     expect(back).toEqual(log);
     expect(back[2]!.type === 'arrived' && back[2]!.payout).toBe(0);
   });
 
   it('returns an empty log when nothing has been saved', () => {
-    expect(loadLog()).toEqual([]);
+    expect(loadLog().events).toEqual([]);
   });
 
   it('returns an empty log rather than throwing on damaged data', () => {
     localStorage.setItem(STORAGE_KEY, '{not json');
-    expect(loadLog()).toEqual([]);
+    expect(loadLog().events).toEqual([]);
   });
 
   it('ignores a log written by a future version', () => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: 99, events: log }));
-    expect(loadLog()).toEqual([]);
+    expect(loadLog().events).toEqual([]);
   });
 
   it('leaves other games\' keys alone when clearing', () => {
     localStorage.setItem('acquire:something', 'keep me');
     saveLog(log);
     clearLog();
-    expect(loadLog()).toEqual([]);
+    expect(loadLog().events).toEqual([]);
     expect(localStorage.getItem('acquire:something')).toBe('keep me');
   });
 
@@ -58,7 +58,7 @@ describe('persistence', () => {
       { type: 'arrived', seat: 'red', city: 999, region: 'PL', payout: 0 }
     ];
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: 1, events: bad }));
-    expect(loadLog()).toEqual([]);
+    expect(loadLog().events).toEqual([]);
   });
 
   it('discards a log where a real city id is filed under the wrong region', () => {
@@ -69,7 +69,7 @@ describe('persistence', () => {
       { type: 'arrived', seat: 'red', city: 4, region: 'SW', payout: 0 }
     ];
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: 1, events: bad }));
-    expect(loadLog()).toEqual([]);
+    expect(loadLog().events).toEqual([]);
   });
 
   it('discards a log containing an event with an unknown type', () => {
@@ -78,7 +78,7 @@ describe('persistence', () => {
       { type: 'departed', seat: 'red' }
     ];
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: 1, events: bad }));
-    expect(loadLog()).toEqual([]);
+    expect(loadLog().events).toEqual([]);
   });
 
   it('discards the whole log when only one of several events is bad, not just the bad one', () => {
@@ -88,7 +88,7 @@ describe('persistence', () => {
       { type: 'joined', seat: 'blue', name: 'Alex' }
     ];
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: 1, events: mostlyGood }));
-    expect(loadLog()).toHaveLength(0);
+    expect(loadLog().events).toHaveLength(0);
   });
 
   it('keeps a log containing started and renamed, rather than discarding it', () => {
@@ -103,7 +103,31 @@ describe('persistence', () => {
       { type: 'started' }
     ];
     saveLog(withNewEvents);
-    expect(loadLog()).toHaveLength(4);
+    expect(loadLog().events).toHaveLength(4);
+  });
+
+  it('stamps the time a game was saved', () => {
+    saveLog(log);
+    expect(loadLog().savedAt).toBeTypeOf('number');
+  });
+
+  it('still reads a version 1 record rather than discarding the game', () => {
+    // The screen that shows this record exists to protect the game inside
+    // it. Bouncing the version would throw away exactly what it offers back.
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: 1, events: log }));
+    const loaded = loadLog();
+    expect(loaded.events).toHaveLength(3);
+    expect(loaded.savedAt).toBeNull();
+  });
+
+  it('reports no age when nothing has been saved', () => {
+    expect(loadLog().savedAt).toBeNull();
+  });
+
+  it('still validates a version 1 record rather than trusting it for being old', () => {
+    const bad = [{ type: 'joined', seat: 'nobody', name: 'Pete' }];
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: 1, events: bad }));
+    expect(loadLog().events).toEqual([]);
   });
 
   it('round-trips a well-formed log of all three event variants unchanged', () => {
@@ -114,6 +138,6 @@ describe('persistence', () => {
       { type: 'arrived', seat: 'red', city: 4, region: 'NE', payout: 31000 }
     ];
     saveLog(full);
-    expect(loadLog()).toEqual(full);
+    expect(loadLog().events).toEqual(full);
   });
 });
