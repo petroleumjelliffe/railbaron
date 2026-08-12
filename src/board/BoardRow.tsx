@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import type { FlapChar } from './drum';
 import type { Row } from './types';
 import { TOKENS } from '../game/tokens';
@@ -30,6 +31,12 @@ export interface BoardRowProps {
   row: Row;
   faces: FlapChar[];
   onAct: () => void;
+  /**
+   * Rendered in the destination column in place of the tiles. The rest of
+   * the row — chip, seat label, state and note — stays put, so typing a
+   * name happens *in* the board rather than replacing a row of it.
+   */
+  input?: ReactNode;
 }
 
 /**
@@ -55,8 +62,8 @@ function Panel({ value, width }: { value: string; width: number }) {
   );
 }
 
-export function BoardRow({ row, faces, onAct }: BoardRowProps) {
-  const interactive = row.action !== null && row.tone !== 'disabled';
+export function BoardRow({ row, faces, onAct, input }: BoardRowProps) {
+  const interactive = row.action !== null && row.tone !== 'disabled' && input === undefined;
   const colour =
     row.tone === 'disabled' ? '#4a463e' : row.tone === 'dim' ? TOKENS.dim : TOKENS.pale;
 
@@ -99,6 +106,7 @@ export function BoardRow({ row, faces, onAct }: BoardRowProps) {
           whiteSpace: 'nowrap'
         }}
       >
+        {input !== undefined ? input : <>
         {/* The accessible copy carries the destination throughout a flap.
             Reading the drum instead would narrate two seconds of noise. */}
         <span
@@ -123,6 +131,7 @@ export function BoardRow({ row, faces, onAct }: BoardRowProps) {
             {face.top === ' ' ? ' ' : face.top}
           </span>
         ))}
+        </>}
       </span>
       <span
         data-column="amount"

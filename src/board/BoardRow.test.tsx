@@ -82,6 +82,28 @@ describe('a board row', () => {
     expect(container.querySelectorAll('[data-flap]')).toHaveLength(FLAP_WIDTH);
   });
 
+  it('puts an input in the destination column without displacing the rest of the row', () => {
+    // Typing a name happens *in* the board, not in place of a row of it:
+    // the chip, seat label, state and note all stay put.
+    const { container } = render(
+      <BoardRow row={row} faces={staticFaces(row.text)} onAct={() => {}} input={<input />} />
+    );
+    const destination = container.querySelector('[data-column="destination"]')!;
+    expect(destination.querySelector('input')).not.toBeNull();
+    expect(destination.querySelectorAll('[data-flap]')).toHaveLength(0);
+    expect(screen.getByText('SEAT 1')).toBeInTheDocument();
+    expect(screen.getByText('READY')).toBeInTheDocument();
+  });
+
+  it('does not act on a tap while it is being typed into', () => {
+    const onAct = vi.fn();
+    const { container } = render(
+      <BoardRow row={row} faces={staticFaces(row.text)} onAct={onAct} input={<input />} />
+    );
+    container.querySelector('button')?.click();
+    expect(onAct).not.toHaveBeenCalled();
+  });
+
   it('keeps every column inside the width the board budgets for a row', () => {
     // The five columns, their gaps and the row's own padding have to fit
     // the board's inner width. The design has three pixels of slack, so

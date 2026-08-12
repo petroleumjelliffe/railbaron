@@ -1,16 +1,24 @@
 import { useMemo } from 'react';
 import { BoardRow, BOARD_COLUMN_WIDTHS, BOARD_TILE } from './BoardRow';
+import { RowInput } from './RowInput';
 import { useFlap } from './useFlap';
 import { padRows, type Row, type ScreenDef } from './types';
+import type { SeatId } from '../state/events';
 import { TOKENS } from '../game/tokens';
 
 export interface BoardProps {
   screen: ScreenDef;
   onRowAct: (row: Row, index: number) => void;
   onBack: () => void;
+  /** The seat currently being typed into, if any. */
+  editing?: { seat: SeatId; placeholder: string } | null;
+  onCommit?: (value: string) => void;
+  onCancel?: () => void;
 }
 
-export function Board({ screen, onRowAct, onBack }: BoardProps) {
+export function Board({
+  screen, onRowAct, onBack, editing = null, onCommit, onCancel
+}: BoardProps) {
   const rows = useMemo(() => padRows(screen.rows), [screen.rows]);
   const texts = useMemo(() => rows.map(row => row.text), [rows]);
   const { rows: faces, flapping, snap } = useFlap(texts);
@@ -99,20 +107,36 @@ export function Board({ screen, onRowAct, onBack }: BoardProps) {
       </div>
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '0 34px 20px' }}>
-        {rows.map((row, index) => (
-          <div key={index} data-board-row="" style={{ display: 'flex', flex: 1 }}>
-            <BoardRow
-              row={{ ...row, status: settledOnly(row.status), right: settledOnly(row.right) }}
-              faces={faces[index] ?? []}
-              onAct={() => {
-                // A tap during a flap finishes it rather than being ignored:
-                // an inert menu is a worse trade than a cut-short animation.
-                if (flapping) snap();
-                onRowAct(row, index);
-              }}
-            />
-          </div>
-        ))}
+        {rows.map((row, index) => {
+          const isEditing =
+            editing !== null &&
+            row.action?.kind === 'edit' &&
+            row.action.field === `seat:${editing.seat}`;
+
+          return (
+            <div key={index} data-board-row="" style={{ display: 'flex', flex: 1 }}>
+              <BoardRow
+                row={{ ...row, status: settledOnly(row.status), right: settledOnly(row.right) }}
+                faces={faces[index] ?? []}
+                input={isEditing ? (
+                  <RowInput
+                    initial={row.text === 'TAP TO JOIN' ? '' : row.text}
+                    placeholder={editing.placeholder}
+                    onCommit={value => onCommit?.(value)}
+                    onCancel={() => onCancel?.()}
+                  />
+                ) : undefined}
+                onAct={() => {
+                  // A tap during a flap finishes it rather than being
+                  // ignored: an inert menu is a worse trade than a
+                  // cut-short animation.
+                  if (flapping) snap();
+                  onRowAct(row, index);
+                }}
+              />
+            </div>
+          );
+        })}
       </div>
     </div>
   );
