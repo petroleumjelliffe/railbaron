@@ -5,6 +5,8 @@ export interface RowText {
   status: string;
   text: string;
   amount: string;
+  /** See `Row.turn`: a roll being announced, rather than a value changing. */
+  turn: number;
 }
 
 export interface RowDrums {
@@ -37,7 +39,7 @@ const PANEL_LAP = 8;
  * past three and a half seconds. Two ticks still reads as a beat between
  * columns; the rounding supplies the rest.
  */
-const GAP = 2;
+const GAP = 1;
 
 /**
  * The order the answer arrives in: region, then city, then payout.
@@ -54,37 +56,23 @@ export function rowDrums(
   to: RowText,
   panelFaces: readonly string[]
 ): RowDrums | null {
-  const changed =
-    from.status !== to.status || from.text !== to.text || from.amount !== to.amount;
+  const announcing = from.turn !== to.turn;
+  const changed = announcing
+    || from.status !== to.status || from.text !== to.text || from.amount !== to.amount;
   if (!changed) return null;
 
-  // A column that is blank before and after has nothing to say and stays
-  // still, however long the sequence around it runs. Without this, every row
-  // on the setup screens — where the panel and the payout are both empty —
-  // would flick through the board's whole vocabulary to arrive back at
-  // nothing, and a blank payout would hold the row flapping after the name
-  // it was waiting on had already landed.
-  //
-  // Note this asks whether the field is *empty*, not whether it changed. A
-  // baron who rolls the region they are already in, or is sent home for the
-  // same payout twice, still gets a full turn — a field that sat still would
-  // answer the question before the city had finished asking it.
-  const idle = (before: string, after: string) => before === '' && after === '';
-  const spin = (before: string, after: string, at: number) => (idle(before, after) ? 0 : at);
-
+  // A column turns because it is announcing something, or because what it
+  // says has changed — never merely because it is not blank. That distinction
+  // is the whole gate: the panel turns on the announcement, so a baron who
+  // rolled the region they are already in sees exactly what everyone else
+  // sees, and the board gives nothing away by sitting still. Meanwhile the
+  // city and payout stay put during that announcement, because they have
+  // nothing to say yet, and turn when the roll is finally told.
   const status = panelDrum(
-    from.status, to.status, panelFaces, spin(from.status, to.status, PANEL_LAP)
+    from.status, to.status, panelFaces,
+    (announcing || from.status !== to.status) && to.status !== '' ? PANEL_LAP : 0
   );
 
-  // Each column waits on the one before it, and only on a column that
-  // actually moves: a screen where the panel stays put should not pay for a
-  // gap it is not using.
-  // The city is the one column not made to turn when its value has not
-  // changed. Holding a drum is done in whole laps, and this drum carries the
-  // whole alphabet — a lap here is 42 ticks, well over two seconds, against
-  // eight for the panel and twelve for the payout. A baron sent to their own
-  // home town has not moved, so a still city column says something true; the
-  // region and payout still turn, and still land in order around it.
   const statusFor = duration(status);
   const text = buildDrum({
     from: from.text,
@@ -99,7 +87,7 @@ export function rowDrums(
   const before = Math.max(statusFor, duration(text));
   const amount = amountDrum(
     from.amount, to.amount, AMOUNT_WIDTH,
-    spin(from.amount, to.amount, before === 0 ? 0 : before + GAP)
+    from.amount === to.amount ? 0 : (before === 0 ? 0 : before + GAP)
   );
 
   return { status, text, amount };

@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { BoardRow, BOARD_COLUMN_WIDTHS, BOARD_TILE } from './BoardRow';
 import { RowInput } from './RowInput';
 import { useFlap } from './useFlap';
@@ -10,6 +10,12 @@ export interface BoardProps {
   screen: ScreenDef;
   onRowAct: (row: Row, index: number) => void;
   onBack: () => void;
+  /**
+   * Fires once the region panel on this row has finished turning. The board
+   * is the only thing that knows when that is, and a roll may not reach the
+   * log until it has — see `roll` in useGame.
+   */
+  awaitRegion?: { row: number; onLanded: () => void } | null;
   /** The seat currently being typed into, if any. */
   editing?: { seat: SeatId; placeholder: string } | null;
   onCommit?: (value: string) => void;
@@ -17,14 +23,24 @@ export interface BoardProps {
 }
 
 export function Board({
-  screen, onRowAct, onBack, editing = null, onCommit, onCancel
+  screen, onRowAct, onBack, awaitRegion = null, editing = null, onCommit, onCancel
 }: BoardProps) {
   const rows = useMemo(() => padRows(screen.rows), [screen.rows]);
   const texts = useMemo(
-    () => rows.map(row => ({ status: row.status, text: row.text, amount: row.amount })),
+    () => rows.map(row =>
+      ({ status: row.status, text: row.text, amount: row.amount, turn: row.turn ?? 0 })),
     [rows]
   );
   const { rows: faces, settled, flapping, snap } = useFlap(texts);
+
+  // Reported from an effect rather than during render: the caller's handler
+  // appends to the event log, and a render that writes state is a render that
+  // runs twice under StrictMode and rolls twice.
+  const landed = awaitRegion !== null && settled[awaitRegion.row]?.status === true;
+  const onLanded = awaitRegion?.onLanded;
+  useEffect(() => {
+    if (landed && onLanded) onLanded();
+  }, [landed, onLanded]);
 
   const headings = [
     BOARD_COLUMN_WIDTHS.label,

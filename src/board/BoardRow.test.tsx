@@ -123,7 +123,10 @@ describe('a board row', () => {
     expect(destination.querySelector('input')).not.toBeNull();
     expect(destination.querySelectorAll('[data-flap]')).toHaveLength(0);
     expect(screen.getByText('SEAT 1')).toBeInTheDocument();
-    expect(screen.getByText('READY')).toBeInTheDocument();
+    // The panel's own leaves, not its rendered text — each leaf carries the
+    // value, so textContent holds it twice.
+    expect(container.querySelector('[data-column="status"] [data-flap]')!
+      .getAttribute('data-flap')).toBe('Ready');
   });
 
   it('does not act on a tap while it is being typed into', () => {

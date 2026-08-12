@@ -23,7 +23,11 @@ export const DOLLAR_WIDTH = 16;
 
 export const BOARD_TILE = {
   width: 27,
+  /** The payout carries fewer, wider tiles than the destination — the design's own sizes. */
+  amountWidth: 30,
   height: 40,
+  /** Each leaf is a 19px window; the 2px between them is the black gap showing through. */
+  leafHeight: 19,
   gap: 1,
   columnGap: 22,
   rowPadding: 14,
@@ -51,57 +55,95 @@ export interface BoardRowProps {
 }
 
 /**
- * A single flap panel showing a whole string at once, rather than one tile
- * per character. Status and the right-hand note are labels, not fixed-width
- * character grids, so each gets one physical flap the width of its column.
+ * A panel is the same flap at a different size: one leaf-pair carrying a
+ * whole word rather than a single character. Region names and the train note
+ * are labels, not fixed-width character grids.
  */
-function Panel({ value, width }: { value: string; width: number }) {
+function Panel({ face, width }: { face: FlapChar; width: number }) {
+  return <Leaf face={face} width={width} fontSize={17} colour={TOKENS.pale} align="left" />;
+}
+
+/**
+ * One physical flap: two leaves over a black gap.
+ *
+ * The top leaf carries the character arriving, the bottom leaf the one being
+ * left behind, and each is a 19px window onto a full-height line of text —
+ * the bottom one offset upwards so its own lower half shows through. On the
+ * tick a tile lands the two disagree, which is the flap; a tick later they
+ * meet. Rendering only the arriving character collapses that into a
+ * character that simply changes.
+ */
+function Leaf(
+  { face, width, fontSize, colour, align }: {
+    face: FlapChar; width: number; fontSize: number; colour: string; align: 'center' | 'left';
+  }
+) {
+  const line = {
+    height: BOARD_TILE.height,
+    lineHeight: `${BOARD_TILE.height}px`,
+    textAlign: align,
+    whiteSpace: 'nowrap' as const,
+    paddingLeft: align === 'left' ? 11 : 0,
+    boxSizing: 'border-box' as const,
+    fontSize,
+    color: colour,
+    ...(align === 'left'
+      ? { letterSpacing: '0.02em', textTransform: 'uppercase' as const }
+      : {})
+  };
+  const half = {
+    position: 'absolute' as const,
+    left: 0,
+    width,
+    height: BOARD_TILE.leafHeight,
+    overflow: 'hidden' as const,
+    boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.16)'
+  };
   return (
     <span
+      data-flap={face.top}
+      aria-hidden="true"
       style={{
-        display: 'inline-block', width, height: BOARD_TILE.height,
-        lineHeight: `${BOARD_TILE.height}px`, paddingLeft: 11,
-        boxSizing: 'border-box', borderRadius: 3, overflow: 'hidden',
-        // NORTH CENTRAL is the longest word this panel carries and at 18px
-        // with the design's 0.05em it runs past 168px and is cut mid-L. The
-        // panel is now the column that answers first, so the one value that
-        // did not fit had to.
-        whiteSpace: 'nowrap', fontSize: 17, letterSpacing: '0.02em',
-        textTransform: 'uppercase', color: TOKENS.pale,
-        background: `linear-gradient(180deg, ${TOKENS.flapTop} 0 50%, ${TOKENS.flapBottom} 50% 100%)`,
-        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.16)'
+        position: 'relative', display: 'inline-block', width, height: BOARD_TILE.height,
+        borderRadius: 3, background: '#000', verticalAlign: 'top', overflow: 'hidden'
       }}
     >
-      {value.toUpperCase()}
+      {/* aria-hidden on the leaves themselves, not only on the tile: the
+          value a panel carries is a whole word, so without it every panel
+          would offer its text twice to anything reading the page — once per
+          leaf — beside the copy that is actually meant to be read. */}
+      <span style={{ ...half, top: 0, background: TOKENS.flapTop }} aria-hidden="true">
+        <span aria-hidden="true" style={{ display: 'block', ...line }}>{blank(face.top)}</span>
+      </span>
+      <span style={{ ...half, bottom: 0, background: TOKENS.flapBottom }} aria-hidden="true">
+        <span
+          aria-hidden="true"
+          style={{ display: 'block', ...line, marginTop: -(BOARD_TILE.height - BOARD_TILE.leafHeight) }}
+        >
+          {blank(face.bottom)}
+        </span>
+      </span>
     </span>
   );
 }
 
+const blank = (character: string) => (character === ' ' ? '\u00a0' : character);
+
 /**
  * A strip of flaps, one per character. The destination and the payout are
- * both these — same tile, same gap, same leading edge — so the payout turns
- * like part of the board rather than like a number that changed.
+ * both these — same leaves, same gap — so the payout turns like part of the
+ * board rather than like a number that changed.
  */
 function Tiles(
-  { faces, colour, fontSize }: { faces: FlapChar[]; colour: string; fontSize: number }
+  { faces, colour, fontSize, width }: {
+    faces: FlapChar[]; colour: string; fontSize: number; width: number;
+  }
 ) {
   return (
     <>
       {faces.map((face, index) => (
-        <span
-          key={index}
-          data-flap={face.top}
-          aria-hidden="true"
-          style={{
-            display: 'inline-block', width: BOARD_TILE.width, height: BOARD_TILE.height,
-            marginLeft: index === 0 ? 0 : BOARD_TILE.gap,
-            lineHeight: `${BOARD_TILE.height}px`, textAlign: 'center', fontSize,
-            borderRadius: 3, color: colour,
-            background: `linear-gradient(180deg, ${TOKENS.flapTop} 0 50%, ${TOKENS.flapBottom} 50% 100%)`,
-            boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.16)'
-          }}
-        >
-          {face.top === ' ' ? '\u00a0' : face.top}
+        <span key={index} style={{ marginLeft: index === 0 ? 0 : BOARD_TILE.gap }}>
+          <Leaf face={face} width={width} fontSize={fontSize} colour={colour} align="center" />
         </span>
       ))}
     </>
@@ -114,7 +156,8 @@ export function BoardRow({
   // Both columns read only the arriving half. The destination column shows a
   // physical flap with two halves; these two are printed text on a panel, and
   // a panel does not have a leading edge to show mid-turn.
-  const statusFace = status[0]?.top ?? '';
+  // Both halves of the panel, so it flips like every other field.
+  const statusFace = status[0] ?? { top: '', bottom: '' };
   const amountFace = amount.map(face => face.top).join('').trimEnd();
   const interactive = row.action !== null && row.tone !== 'disabled' && input === undefined;
   const colour =
@@ -149,7 +192,7 @@ export function BoardRow({
         data-column="status"
         style={{ width: BOARD_COLUMN_WIDTHS.status, flex: `0 0 ${BOARD_COLUMN_WIDTHS.status}px` }}
       >
-        <Panel value={statusFace} width={BOARD_COLUMN_WIDTHS.status - 2} />
+        <Panel face={statusFace} width={BOARD_COLUMN_WIDTHS.status - 2} />
       </span>
       <span
         data-column="destination"
@@ -169,7 +212,7 @@ export function BoardRow({
         >
           {row.text}
         </span>
-        <Tiles faces={faces} colour={colour} fontSize={29} />
+        <Tiles faces={faces} colour={colour} fontSize={29} width={BOARD_TILE.width} />
         </>}
       </span>
       <span
@@ -203,13 +246,21 @@ export function BoardRow({
         >
           $
         </span>
-        <Tiles faces={amount} colour={TOKENS.amber} fontSize={25} />
+        <Tiles faces={amount} colour={TOKENS.amber} fontSize={31} width={BOARD_TILE.amountWidth} />
       </span>
       <span
         data-column="right"
         style={{ width: BOARD_COLUMN_WIDTHS.right, flex: `0 0 ${BOARD_COLUMN_WIDTHS.right}px` }}
       >
-        <Panel value={row.right} width={BOARD_COLUMN_WIDTHS.right - 2} />
+        {/* The leaves are decoration; this is the note itself. It arrives with
+            the payout, so a screen reader is not told HOME while the board is
+            still turning toward it. */}
+        <span
+          style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clipPath: 'inset(50%)' }}
+        >
+          {row.right}
+        </span>
+        <Panel face={{ top: row.right, bottom: row.right }} width={BOARD_COLUMN_WIDTHS.right - 2} />
       </span>
     </>
   );

@@ -79,16 +79,30 @@ describe('the board', () => {
     expect(screen.getByText('PLAY ONLINE')).toBeInTheDocument();
   });
 
-  it('clears the status and note columns while the destination is spinning', () => {
-    // Columns B and E blank and come back; A and D swap instantly. That
-    // asymmetry is the effect — without it the board reads as a page swap.
+  it('turns the status panel rather than blanking it', () => {
+    // It used to blank and come back, which read as a page swap. Now it is a
+    // panel that flips like every other field on the board.
     vi.useFakeTimers();
-    const { rerender } = render(board(screenDef([choice('PASS AND PLAY')])));
-    expect(screen.getByText('LOCAL')).toBeInTheDocument();
+    const face = (container: HTMLElement) =>
+      container.querySelector('[data-column="status"] [data-flap]')!.getAttribute('data-flap');
 
-    rerender(board(screenDef([choice('PLAY ONLINE')])));
-    act(() => { vi.advanceTimersByTime(52); });
-    expect(screen.queryByText('LOCAL')).toBeNull();
+    const { container, rerender } = render(board(screenDef([choice('PASS AND PLAY')])));
+    expect(face(container)).toBe('Local');
+
+    rerender(board(screenDef([{ ...choice('PLAY ONLINE'), status: 'Online' }])));
+
+    // It turns a full lap rather than stepping straight across, so it passes
+    // through values that are neither where it started nor where it lands —
+    // including the target itself, which it does not stop on first time past.
+    const seen = new Set<string | null>();
+    for (let tick = 0; tick < 12; tick++) {
+      act(() => { vi.advanceTimersByTime(52); });
+      seen.add(face(container));
+    }
+    expect(seen.size).toBeGreaterThan(2);
+
+    act(() => { vi.advanceTimersByTime(52 * 60); });
+    expect(face(container)).toBe('Online');
   });
 });
 
@@ -105,9 +119,14 @@ describe('the order a roll is revealed in', () => {
 
   const rollScreen = (row: Row) => screenDef([row]);
 
+  // Each flap renders its character twice — once per leaf — so textContent
+  // doubles. The arriving face is what is on show.
   const columnText = (container: HTMLElement, column: string) =>
-    container.querySelectorAll('[data-board-row]')[0]!
-      .querySelector(`[data-column="${column}"]`)!.textContent!.trim();
+    [...container.querySelectorAll('[data-board-row]')[0]!
+      .querySelector(`[data-column="${column}"]`)!.querySelectorAll('[data-flap]')]
+      .map(flap => flap.getAttribute('data-flap'))
+      .join('')
+      .trim();
 
   const tick = (ms: number) => act(() => { vi.advanceTimersByTime(ms); });
 
@@ -134,7 +153,7 @@ describe('the order a roll is revealed in', () => {
     const arrived = { status: -1, text: -1, amount: -1 };
     for (let t = 1; t <= 120; t++) {
       tick(52);
-      if (arrived.status < 0 && columnText(container, 'status') === 'PLAINS') arrived.status = t;
+      if (arrived.status < 0 && columnText(container, 'status') === 'Plains') arrived.status = t;
       if (arrived.text < 0 && tilesOfRow(container, 0) === 'DENVER') arrived.text = t;
       if (arrived.amount < 0 && columnText(container, 'amount').includes('21,000')) {
         arrived.amount = t;
@@ -156,6 +175,6 @@ describe('the order a roll is revealed in', () => {
     expect(columnText(container, 'right')).toBe('');
 
     tick(52 * 200);
-    expect(columnText(container, 'right')).toBe('HOME');
+    expect(columnText(container, 'right')).toBe('Home');
   });
 });

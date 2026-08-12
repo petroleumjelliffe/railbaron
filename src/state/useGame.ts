@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
-import { destinationInRegion, rollDestination, type RegionId, type Rng } from '../../engine';
+import {
+  destinationInRegion, rollDestination,
+  type RegionId, type Rng, type RollOutcome
+} from '../../engine';
 import type { GameEvent, SeatId } from './events';
 import { currentCity, replay, undo } from './game';
 import { clearLog, loadLog, saveLog } from './storage';
@@ -40,25 +43,43 @@ export function useGame(rng: Rng = Math.random) {
   // app where taps are sequential and each one waits for its own render,
   // that's not a real risk in practice — but it is a real trade-off, not an
   // oversight.
-  const activate = useCallback((seat: SeatId) => {
+  /**
+   * Rolls, and returns what was rolled. Deliberately appends nothing.
+   *
+   * THE GATE. A roll's consequence — the destination, the payout, or the
+   * ballot that a baron's own region hands back to them — is visible the
+   * moment the event describing it exists, because every screen on this board
+   * is a pure function of the log. So the roll does not enter the log until
+   * the board has finished announcing the region it produced.
+   *
+   * Splitting the two is what makes that structural rather than a convention
+   * somebody has to remember. There is no way to append a roll except through
+   * `commitRoll`, and its only caller is the handler that fires when the
+   * region panel lands. A future screen cannot leak the outcome early by
+   * reading the wrong thing, because until that moment there is nothing to
+   * read.
+   */
+  const roll = useCallback((seat: SeatId): RollOutcome | null => {
     const current = state.seats[seat];
-    if (current.awaiting !== null || current.name === null) return;
-
-    const outcome = rollDestination(currentCity(current), rng);
-    switch (outcome.kind) {
-      case 'home':
-        setEvents(log => [...log,
-          { type: 'arrived', seat, city: outcome.city, region: outcome.region, payout: null }]);
-        return;
-      case 'arrived':
-        setEvents(log => [...log,
-          { type: 'arrived', seat, city: outcome.city, region: outcome.region, payout: outcome.payout }]);
-        return;
-      case 'chooseRegion':
-        setEvents(log => [...log, { type: 'regionRequested', seat, rolled: outcome.rolled }]);
-        return;
-    }
+    if (current.awaiting !== null || current.name === null) return null;
+    return rollDestination(currentCity(current), rng);
   }, [state, rng]);
+
+  /** The only way a roll reaches the log. See `roll`. */
+  const commitRoll = useCallback((seat: SeatId, outcome: RollOutcome) => {
+    setEvents(log => {
+      switch (outcome.kind) {
+        case 'home':
+          return [...log,
+            { type: 'arrived', seat, city: outcome.city, region: outcome.region, payout: null }];
+        case 'arrived':
+          return [...log,
+            { type: 'arrived', seat, city: outcome.city, region: outcome.region, payout: outcome.payout }];
+        case 'chooseRegion':
+          return [...log, { type: 'regionRequested', seat, rolled: outcome.rolled }];
+      }
+    });
+  }, []);
 
   const chooseRegion = useCallback((seat: SeatId, region: RegionId) => {
     const current = state.seats[seat];
@@ -90,5 +111,5 @@ export function useGame(rng: Rng = Math.random) {
   const undoLast = useCallback(() => setEvents(log => undo(log)), []);
   const reset = useCallback(() => { clearLog(); setEvents([]); }, []);
 
-  return { state, savedAt, activate, chooseRegion, rename, start, undoLast, reset };
+  return { state, savedAt, roll, commitRoll, chooseRegion, rename, start, undoLast, reset };
 }

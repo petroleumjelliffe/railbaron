@@ -26,6 +26,20 @@ export type RowAction =
  * live action — and this cannot.
  */
 export interface Row {
+  /**
+   * Which announcement this row is showing. It is not displayed anywhere.
+   *
+   * The board animates when what a row says changes — which cannot express
+   * the case that matters most here: a baron rolling the region they are
+   * already in. Nothing changes, so nothing turns, so the board sits still
+   * and the stillness itself is the answer. Stamping the row makes the roll,
+   * not the text, the thing that starts the flap, so the same region and a
+   * new one are indistinguishable while the panel is moving.
+   *
+   * Only the in-play screen sets it; everywhere else a row has nothing to
+   * announce and leaves it alone.
+   */
+  turn?: number;
   label: string;
   status: string;
   text: string;

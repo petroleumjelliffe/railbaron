@@ -116,7 +116,10 @@ export const amountDrum = (from: string, to: string, width: number, settleAt = 0
 export function duration(tiles: readonly Tile[]): number {
   return tiles.reduce((longest, tile) => {
     const travel = (tile.target - tile.cur + tile.faces.length) % tile.faces.length;
-    return Math.max(longest, tile.hold + travel);
+    const turning = tile.hold + travel;
+    // Plus the tick its trailing leaf takes to fall. A tile that never turns
+    // has no leaf in the air and needs none.
+    return Math.max(longest, turning === 0 ? 0 : turning + 1);
   }, 0);
 }
 
@@ -125,25 +128,33 @@ export function duration(tiles: readonly Tile[]): number {
  * tiles hold. The cascade an onlooker sees is not choreographed anywhere —
  * it falls out of tiles having different distances left to travel.
  *
- * A tile that lands on this tick sets `prev` to where it landed, so both
- * halves show the arriving character the moment it arrives. Leaving `prev`
- * behind would hold the outgoing character on the bottom half for one extra
- * tick after the flap had visibly stopped.
+ * `prev` is always the character the tile is leaving, never the one it is
+ * arriving at, including on the tick it lands. A physical leaf takes a moment
+ * to fall: the top half of the tile shows the new character while the bottom
+ * half is still the old one, and only on the following tick do the two agree.
+ * Collapsing them the instant a tile lands removes the flap and leaves a
+ * character that simply changes.
  */
 export function advance(tiles: readonly Tile[]): Tile[] {
   return tiles.map(tile => {
-    if (tile.hold === 0 && tile.cur === tile.target) return tile;
-
+    // Arrived and the leaf has fallen: nothing left to do.
+    if (tile.hold === 0 && tile.cur === tile.target) {
+      return tile.prev === tile.cur ? tile : { ...tile, prev: tile.cur };
+    }
     const next = (tile.cur + 1) % tile.faces.length;
-    const hold = Math.max(0, tile.hold - 1);
-    // Still under hold, so it turns past its target rather than landing on it.
-    const landed = hold === 0 && next === tile.target;
-    return { ...tile, cur: next, prev: landed ? next : tile.cur, hold };
+    return { ...tile, cur: next, prev: tile.cur, hold: Math.max(0, tile.hold - 1) };
   });
 }
 
+/**
+ * Settled means arrived *and* the trailing leaf has fallen. Requiring both is
+ * what buys the last tile the extra tick it needs — a strip reported settled
+ * the moment its last character arrived would be frozen mid-fall, showing one
+ * tile as half old and half new for good.
+ */
 export function isSettled(tiles: readonly Tile[]): boolean {
-  return tiles.every(tile => tile.hold === 0 && tile.cur === tile.target);
+  return tiles.every(tile =>
+    tile.hold === 0 && tile.cur === tile.target && tile.prev === tile.cur);
 }
 
 const show = (tile: Tile, index: number): string => tile.faces[index] ?? ' ';

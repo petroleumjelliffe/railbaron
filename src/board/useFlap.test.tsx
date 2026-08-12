@@ -25,7 +25,7 @@ function setReducedMotion(reduced: boolean) {
  */
 function Probe({ text, status = '', amount = '' }:
   { text: string; status?: string; amount?: string }) {
-  const { rows, settled, flapping, snap } = useFlap([{ status, text, amount }]);
+  const { rows, settled, flapping, snap } = useFlap([{ status, text, amount, turn: 0 }]);
   const column = (faces: { top: string }[]) =>
     faces.map(face => face.top).join('').trimEnd();
   return (
@@ -72,8 +72,10 @@ describe('the flap hook', () => {
     expect(row0()).toBe('B');            // en route, not yet arrived
     expect(flapping()).toBe('true');
 
+    // Two more ticks to arrive, then one for the trailing leaf to fall.
     act(() => { vi.advanceTimersByTime(52 * 2); });
     expect(row0()).toBe('D');
+    act(() => { vi.advanceTimersByTime(52); });
     expect(flapping()).toBe('false');
   });
 

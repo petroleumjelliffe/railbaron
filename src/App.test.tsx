@@ -1,8 +1,8 @@
-import { render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { StrictMode } from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from './App';
 import { STORAGE_KEY } from './state/storage';
 import type { GameEvent } from './state/events';
@@ -119,6 +119,9 @@ describe('asking for the game board when there is no game', () => {
   });
 });
 
+/** The flap leaves carry the same text for show; only the real copy counts. */
+const HIDDEN = '[aria-hidden="true"], script, style';
+
 describe('the full ballot path', () => {
   it('scripts dice through the ballot and shows the payout that lands', async () => {
     const values = [
@@ -145,13 +148,18 @@ describe('the full ballot path', () => {
 
     // Roll #1: the home town.
     await userEvent.click(screen.getByRole('button', { name: /pete/i }));
-    expect(screen.getByText('Los Angeles')).toBeInTheDocument();
-    expect(screen.getByText('HOME')).toBeInTheDocument();
+    // Even snapped, the roll is told before it is logged, so this waits for
+    // the board to finish rather than reading it on the same tick as the tap.
+    expect(await screen.findByText('Los Angeles')).toBeInTheDocument();
+    // The note lands with the payout, at the end of the reveal, so this waits
+    // rather than reading the board the instant it was tapped.
+    expect(await screen.findByText('Home', { ignore: HIDDEN }, { timeout: 5000 }))
+      .toBeInTheDocument();
 
     // Roll #2: names the seat's own region, so the ballot takes over the
     // whole board instead of a destination arriving.
     await userEvent.click(screen.getByRole('button', { name: /pete/i }));
-    const northeast = screen.getByRole('button', { name: /northeast/i });
+    const northeast = await screen.findByRole('button', { name: /northeast/i });
     expect(northeast).toBeInTheDocument();
 
     await userEvent.click(northeast);
@@ -202,5 +210,77 @@ describe('discarding a saved game', () => {
     // useGame's save effect skips persisting when the log is empty, so
     // reset()'s clearLog() isn't undone by the render it triggers.
     expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
+  });
+});
+
+/**
+ * The gate. Everything above runs with reduced motion on, where the reveal
+ * is instant; these run it for real, because the whole point is what the
+ * board does *during* the turning.
+ */
+describe('holding a roll back until the board has told it', () => {
+  const motion = () => {
+    window.matchMedia = ((query: string) => ({
+      matches: false, media: query, onchange: null,
+      addEventListener: () => {}, removeEventListener: () => {},
+      addListener: () => {}, removeListener: () => {}, dispatchEvent: () => false
+    })) as unknown as typeof window.matchMedia;
+  };
+
+  // The same scripted dice as the ballot walk-through above: roll one is a
+  // home town, roll two names the seat's own region.
+  const scripted = () => {
+    const values = [0.05, 0.10, 0.20, 0.02, 0.08, 0.40, 0.10, 0.15, 0.45, 0.01, 0.12, 0.49];
+    let i = 0;
+    return () => {
+      const value = values[i++];
+      if (value === undefined) throw new Error('rng exhausted');
+      return value;
+    };
+  };
+
+  const tick = (ms: number) => act(() => { vi.advanceTimersByTime(ms); });
+  const pete = () => screen.getByRole('button', { name: /pete/i });
+  const ballot = () => screen.queryByRole('button', { name: /northeast/i });
+
+  beforeEach(() => { motion(); vi.useFakeTimers(); });
+  afterEach(() => { vi.useRealTimers(); });
+
+  const startGame = () => {
+    seed([
+      { type: 'joined', seat: 'red', name: 'PETE' },
+      { type: 'joined', seat: 'blue', name: 'ALEX' },
+      { type: 'started' }
+    ]);
+    at('/pass-and-play/game', scripted());
+  };
+
+  it('keeps the ballot off the board while the region is still turning', () => {
+    startGame();
+
+    fireEvent.click(pete());          // roll one: the home town
+    tick(52 * 300);
+
+    fireEvent.click(pete());          // roll two: the seat's own region
+    expect(ballot()).toBeNull();      // nothing said yet
+    tick(52 * 3);
+    expect(ballot()).toBeNull();      // panel still turning
+
+    tick(52 * 300);
+    expect(ballot()).not.toBeNull();  // and only now
+  });
+
+  it('writes nothing to the log until the region has landed', () => {
+    startGame();
+    fireEvent.click(pete());
+    tick(52 * 300);
+    const before = storedTypes();
+
+    fireEvent.click(pete());
+    tick(52 * 3);
+    expect(storedTypes()).toEqual(before);
+
+    tick(52 * 300);
+    expect(storedTypes()).toEqual([...before, 'regionRequested']);
   });
 });

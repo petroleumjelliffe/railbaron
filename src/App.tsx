@@ -1,6 +1,6 @@
 import { lazy, Suspense, useState } from 'react';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { REGIONS, type Rng } from '../engine';
+import { REGIONS, type RegionId, type Rng, type RollOutcome } from '../engine';
 import { Board } from './board/Board';
 import { home } from './board/screens/home';
 import { passAndPlay } from './board/screens/passAndPlay';
@@ -36,6 +36,10 @@ type KnownRoute = (typeof ROUTES)[number];
 const isKnown = (path: string): path is KnownRoute =>
   (ROUTES as readonly string[]).includes(path);
 
+/** Every outcome names a region — it is the one thing a roll always produces. */
+const regionOf = (outcome: RollOutcome): RegionId =>
+  outcome.kind === 'chooseRegion' ? outcome.rolled : outcome.region;
+
 /**
  * There is exactly one Board, mounted above the routing, and the route only
  * decides which ScreenDef it is handed.
@@ -50,9 +54,21 @@ const isKnown = (path: string): path is KnownRoute =>
 export default function App({ rng }: AppProps = {}) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  const { state, savedAt, activate, chooseRegion, rename, start, reset } = useGame(rng);
+  const { state, savedAt, roll, commitRoll, chooseRegion, rename, start, reset } = useGame(rng);
   const [editing, setEditing] = useState<{ seat: SeatId; placeholder: string } | null>(null);
   const [confirming, setConfirming] = useState(false);
+  /**
+   * A roll that has been made but not yet told. It is held here, out of the
+   * log, until the board's region panel finishes turning — see `roll` in
+   * useGame for why that is the gate rather than a rule to remember.
+   */
+  const [rolling, setRolling] = useState<{ seat: SeatId; outcome: RollOutcome } | null>(null);
+  /**
+   * How many rolls each seat has had told. Kept across the commit, so the
+   * board sees one announcement per roll rather than a second one when the
+   * roll finally reaches the log.
+   */
+  const [turns, setTurns] = useState<Partial<Record<SeatId, number>>>({});
 
   if (!isKnown(pathname)) return <Navigate to="/" replace />;
 
@@ -102,7 +118,11 @@ export default function App({ rng }: AppProps = {}) {
   const screens: Record<Exclude<KnownRoute, '/pass-and-play/map'>, ScreenDef> = {
     '/': home(),
     '/pass-and-play': passAndPlayScreen(),
-    '/pass-and-play/game': awaiting ? regionBallot(awaiting) : play(state)
+    // The ballot cannot appear early: `awaiting` comes from the log, and a
+    // roll only reaches the log once its region has landed.
+    '/pass-and-play/game': awaiting
+      ? regionBallot(awaiting)
+      : play(state, turns, rolling && { seat: rolling.seat, region: regionOf(rolling.outcome) })
   };
 
   const onRowAct = (row: Row, index: number) => {
@@ -112,8 +132,13 @@ export default function App({ rng }: AppProps = {}) {
       // The ballot's choice is its row position: RowAction carries no
       // region, and widening it for one screen would cost every other
       // screen a field it never sets.
-      if (awaiting) chooseRegion(row.action.seat, REGIONS[index]!.id);
-      else activate(row.action.seat);
+      if (awaiting) { chooseRegion(row.action.seat, REGIONS[index]!.id); return; }
+      if (rolling !== null) return;      // one roll is already being told
+      const seat = row.action.seat;
+      const outcome = roll(seat);
+      if (outcome === null) return;
+      setTurns(counted => ({ ...counted, [seat]: (counted[seat] ?? 0) + 1 }));
+      setRolling({ seat, outcome });
       return;
     }
 
@@ -155,6 +180,10 @@ export default function App({ rng }: AppProps = {}) {
     <main style={{ height: '100%' }}>
       <Board
         screen={screens[pathname]}
+        awaitRegion={rolling && {
+          row: SEATS.filter(id => state.seats[id].name !== null).indexOf(rolling.seat),
+          onLanded: () => { commitRoll(rolling.seat, rolling.outcome); setRolling(null); }
+        }}
         editing={editing}
         onCommit={value => {
           if (editing) rename(editing.seat, value || null);
