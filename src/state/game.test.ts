@@ -71,13 +71,72 @@ describe('replaying the log', () => {
   });
 });
 
-describe('undo', () => {
-  it('drops the last event', () => {
-    const log: GameEvent[] = [
-      join('red', 'Pete'),
+describe('the begin gate', () => {
+  it('starts in setup, with no game under way', () => {
+    expect(replay([]).phase).toBe('setup');
+    expect(replay([join('red', 'ADA')]).phase).toBe('setup');
+  });
+
+  it('is playing once the log says it started', () => {
+    expect(replay([join('red', 'ADA'), { type: 'started' }]).phase).toBe('playing');
+  });
+});
+
+describe('renaming a seat', () => {
+  it('changes the name without disturbing the journeys', () => {
+    const state = replay([
+      join('red', 'ADA'),
+      { type: 'arrived', seat: 'red', city: 20, region: 'NC', payout: 4500 },
+      { type: 'renamed', seat: 'red', name: 'MARGO' }
+    ]);
+    expect(state.seats.red.name).toBe('MARGO');
+    expect(state.seats.red.stops).toHaveLength(1);
+  });
+
+  it('vacates the seat when the name is cleared', () => {
+    const state = replay([join('red', 'ADA'), { type: 'renamed', seat: 'red', name: null }]);
+    expect(state.seats.red.name).toBeNull();
+  });
+});
+
+describe('what a seat has earned', () => {
+  it('sums the payouts, counting a zero-paying journey as zero', () => {
+    const state = replay([
+      join('red', 'ADA'),
+      { type: 'arrived', seat: 'red', city: 20, region: 'NC', payout: 4500 },
+      { type: 'arrived', seat: 'red', city: 47, region: 'PL', payout: 0 },
+      { type: 'arrived', seat: 'red', city: 59, region: 'SW', payout: 8500 }
+    ]);
+    expect(state.seats.red.earned).toBe(13000);
+  });
+
+  it('ignores home towns, which pay nothing at all', () => {
+    const state = replay([
+      join('red', 'ADA'),
       { type: 'arrived', seat: 'red', city: 20, region: 'NC', payout: null }
+    ]);
+    expect(state.seats.red.earned).toBe(0);
+  });
+});
+
+describe('undo', () => {
+  it('does nothing during setup — a taken seat is renamed, not undone', () => {
+    const log: GameEvent[] = [join('red', 'ADA')];
+    expect(undo(log)).toEqual(log);
+  });
+
+  it('refuses to rewind back across the start of the game', () => {
+    const log: GameEvent[] = [join('red', 'ADA'), { type: 'started' }];
+    expect(undo(log)).toEqual(log);
+  });
+
+  it('takes back the last move once play is under way', () => {
+    const log: GameEvent[] = [
+      join('red', 'ADA'),
+      { type: 'started' },
+      { type: 'arrived', seat: 'red', city: 20, region: 'NC', payout: 4500 }
     ];
-    expect(undo(log)).toHaveLength(1);
+    expect(undo(log)).toHaveLength(2);
     expect(replay(undo(log)).seats.red.stops).toEqual([]);
   });
 

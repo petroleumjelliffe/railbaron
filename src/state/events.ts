@@ -14,6 +14,8 @@ export const SEATS: readonly SeatId[] = ['red', 'green', 'blue', 'yellow', 'blac
  */
 export type GameEvent =
   | { type: 'joined'; seat: SeatId; name: string }
+  | { type: 'renamed'; seat: SeatId; name: string | null }
+  | { type: 'started' }
   | { type: 'regionRequested'; seat: SeatId; rolled: RegionId }
   | { type: 'arrived'; seat: SeatId; city: CityId; region: RegionId; payout: number | null };
 
@@ -36,6 +38,15 @@ export function isGameEvent(value: unknown): value is GameEvent {
   switch (event.type) {
     case 'joined':
       return VALID_SEATS.has(event.seat as string) && typeof event.name === 'string';
+    case 'started':
+      // No payload to check: its presence is the whole fact.
+      return true;
+    case 'renamed':
+      // null is a real value here — it vacates the seat.
+      return (
+        VALID_SEATS.has(event.seat as string) &&
+        (event.name === null || typeof event.name === 'string')
+      );
     case 'regionRequested':
       return VALID_SEATS.has(event.seat as string) && VALID_REGIONS.has(event.rolled as RegionId);
     case 'arrived':

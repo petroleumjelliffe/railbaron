@@ -91,6 +91,21 @@ describe('persistence', () => {
     expect(loadLog()).toHaveLength(0);
   });
 
+  it('keeps a log containing started and renamed, rather than discarding it', () => {
+    // isGameEvent is applied all-or-nothing by loadLog: one unrecognised
+    // event and the WHOLE log becomes []. A new event type the validator
+    // does not know about therefore does not degrade the save — it destroys
+    // it, silently, and only on the next reload.
+    const withNewEvents: GameEvent[] = [
+      { type: 'joined', seat: 'red', name: 'ADA' },
+      { type: 'renamed', seat: 'red', name: 'MARGO' },
+      { type: 'renamed', seat: 'blue', name: null },
+      { type: 'started' }
+    ];
+    saveLog(withNewEvents);
+    expect(loadLog()).toHaveLength(4);
+  });
+
   it('round-trips a well-formed log of all three event variants unchanged', () => {
     const full: GameEvent[] = [
       { type: 'joined', seat: 'red', name: 'Pete' },

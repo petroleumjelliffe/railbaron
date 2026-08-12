@@ -19,7 +19,8 @@ const seat = (awaiting: Seat['awaiting']): Seat => ({
   id: 'red',
   name: 'Pete',
   stops: [],
-  awaiting
+  awaiting,
+  earned: 0
 });
 
 describe('the region ballot', () => {
@@ -78,7 +79,12 @@ describe('the region ballot', () => {
   });
 
   it('falls back to the seat id when the seat has no name yet', () => {
-    render(<RegionBallot seat={{ id: 'blue', name: null, stops: [], awaiting: 'NE' }} onChoose={() => {}} />);
+    render(
+      <RegionBallot
+        seat={{ id: 'blue', name: null, stops: [], awaiting: 'NE', earned: 0 }}
+        onChoose={() => {}}
+      />
+    );
     expect(screen.getByRole('group', { name: /blue/i })).toBeInTheDocument();
   });
 });

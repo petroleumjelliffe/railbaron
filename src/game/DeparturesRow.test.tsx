@@ -41,7 +41,8 @@ const seat: Seat = {
   id: 'red',
   name: 'Pete',
   stops: [{ city: 20, region: 'NC', payout: 21500 }],
-  awaiting: null
+  awaiting: null,
+  earned: 21500
 };
 
 describe('departures row column budgets', () => {
