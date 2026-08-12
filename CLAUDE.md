@@ -7,12 +7,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 A **companion app** for the Avalon Hill board game *Rail Baron*, not an implementation of
 it. Players use the physical board; the app rolls each baron's next destination — region,
 then city — and looks up the payout for the journey. Nothing else about the game is
-modelled: no movement, no railroad ownership, no cash.
+modelled: no movement, no railroad ownership, no purchases or fees. It does keep a running
+total of what each baron has been paid (`earned` in
+[`src/state/game.ts`](src/state/game.ts)), which is a sum of rolled payouts for naming the
+leader — not the game's cash, which players still track themselves.
 
 The repo holds the React port. The original 2013 jQuery app was deleted once the port
 was complete and tested — it remains in git history, but there is only one Rail Baron in
-this repo now. [ROADMAP.md](ROADMAP.md) has the phases and the reasoning; Phase 1 (the
-roller) is done, Phases 2 and 3 (pass-and-play menu, online multiplayer) are ahead.
+this repo now. [ROADMAP.md](ROADMAP.md) has the phases and the reasoning; Phases 1 and 2
+(the roller, the pass-and-play front door) are done. The map view and Phase 3 (online
+multiplayer) are ahead.
 
 ## Commands
 
@@ -84,12 +88,16 @@ Defects carried across from the source rather than reproduced-and-fixed:
 Minneapolis↔St. Paul and San Francisco↔Oakland are the board's only two zero-paying
 journeys — legal destinations, worth nothing to land on. `payoutBetween` returns `0` for
 them, a real, displayable amount. This is unrelated to `payout: null`, which means "no
-payout applies" (the roll landed on the baron's own home town) and renders as `HOME`
-instead of a dollar figure — see `formatMoney` in
-[`src/game/SplitFlap.tsx`](src/game/SplitFlap.tsx). Anywhere on this path, `if (payout)`
-or `payout || fallback` is a bug: both are falsy-on-zero and would treat a real $0 payout
-as if it were the null case. `engine/payouts.test.ts` and
-`src/game/SplitFlap.test.tsx` guard this distinction.
+payout applies" (the roll landed on the baron's own home town) and renders as `Home`
+instead of a dollar figure — see the `paid` derivation in
+[`src/board/screens/play.ts`](src/board/screens/play.ts). Anywhere on this path,
+`if (payout)` or `payout || fallback` is a bug: both are falsy-on-zero and would treat a
+real $0 payout as if it were the null case. Three tests guard the distinction —
+`engine/payouts.test.ts` for the matrix, `src/board/screens/play.test.ts` for the two
+render cases ("says HOME rather than a payout for a home town", "shows a zero-paying
+journey as a real zero, not as blank"), and `src/state/events.ts`'s validator, which
+accepts `payout: 0` and would silently discard every saved $0 journey if written as a
+truthiness check.
 
 ## The map graph
 
@@ -140,7 +148,10 @@ as its intended second consumer. That lobby plugs into a particular shape, so th
 adopts it from the start rather than refactoring into it:
 
 - A pure **`engine/`** at the top level, no React
-- Game components under **`src/game/`**
+- Game components under **`src/board/`** — the extraction design says `src/game/`, and the
+  board-as-lobby refactor moved them. The requirement is that components live under one
+  directory separate from `engine/` and `src/state/`, not that it carries a particular
+  name; rename at the lift if the shared lobby turns out to care.
 - **State derived by replaying an event log**, not mutated in place
 - **Namespaced `localStorage` keys** — both games share the GitHub Pages origin
 

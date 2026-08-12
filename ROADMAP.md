@@ -27,8 +27,8 @@ Output is `data/rail-baron-graph.json` (scan pixel space, hand-verified) plus
 Replace the 2013 jQuery app. Same game, redesigned board, plus the map.
 
 - [x] Vite + React + TypeScript, tablet landscape
-- [x] Departures-board UI: six player rows of split-flap, region ballot on a same-region
-      roll, tap-to-join-and-name signup
+- [x] Departures-board UI: split-flap rows, region ballot on a same-region roll, naming.
+      Rebuilt in Phase 2 as one board driven by screen definitions — see below
 - [ ] Map as a second view: real US geometry, one bulb per real dot, region and city blink
       choreography on a roll — still ahead; depends on Phase 0's data pipeline, which has
       unchecked steps above
@@ -41,10 +41,20 @@ The roller — departures board plus the ported game logic — is done. Scope fo
 roller only: no movement, no railroad ownership, no cash. The graph carries dot counts and
 railroad attribution anyway, so those can be layered on without redoing the extraction.
 
-## Phase 2 — pass-and-play menu
+## Phase 2 — pass-and-play menu — done
 
-A front door: start a game, pick how many barons, name them, resume the game in progress.
-Currently the app drops you straight into a board with six colour-named seats.
+A front door: start a game, pick how many barons, name them, resume a game in progress.
+
+Landed as **board-as-lobby** rather than as a menu bolted onto the roller. The split-flap
+board is the whole interface, and every screen — home, setup, saved games, discard confirm,
+play, region ballot — is a `ScreenDef` in [`src/board/screens/`](src/board/screens/)
+rendered by one `Board`. Adding a screen means adding a definition, not a component, and
+the flap animation is written once in `useFlap` instead of per screen. The original
+`SplitFlap`/`DeparturesRow`/`DeparturesBoard`/`RegionBallot` components were retired in the
+process; they are in git history.
+
+Saved games carry an age and migrate from the v1 record shape, so an in-progress game
+survives the upgrade rather than being silently dropped.
 
 ## Phase 3 — online multiplayer
 
@@ -75,7 +85,8 @@ The lobby plugs into a particular shape, so the port adopts it from the start ra
 refactoring into it later:
 
 - A pure **`engine/`** with no React
-- Game components under **`src/game/`**
+- Game components under **`src/board/`** (the extraction design says `src/game/`; the name
+  moved in Phase 2, the separation it was asking for did not)
 - **State derived by replaying an event log**, not mutated in place
 - **Namespaced `localStorage` keys** — both games will share the GitHub Pages origin
 
