@@ -59,7 +59,10 @@ describe('the in-play board', () => {
       { type: 'arrived', seat: 'red', city: 20, region: 'NC', payout: null }
     ];
     expect(rows(home)[0]!.right).toBe('Home');
-    expect(rows(home)[0]!.showDollar).toBe(false);
+    // No figure — but the sign stays printed on the row, as it would on a
+    // board. What says "no payout" is the empty field and the note.
+    expect(rows(home)[0]!.amount).toBe('');
+    expect(rows(home)[0]!.showDollar).toBe(true);
   });
 
   it('shows a zero-paying journey as a real zero, not as blank', () => {

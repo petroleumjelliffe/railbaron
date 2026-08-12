@@ -88,22 +88,23 @@ describe('a board row', () => {
     expect(onAct).not.toHaveBeenCalled();
   });
 
-  it('shows the dollar sign only when the row asks for one', () => {
-    // Present either way, so the tiles beside it do not shift when it
-    // arrives; hidden rather than absent when the row has no payout.
-    const shown = dollar(render1(row).container);
-    expect(shown).not.toBeNull();
-    expect(getComputedStyle(shown!).visibility).toBe('visible');
+  it('prints the dollar sign on every row, lit only where a baron is playing', () => {
+    const playing = dollar(render1(row).container)!;
+    expect(getComputedStyle(playing).visibility).toBe('visible');
+    expect(getComputedStyle(playing).color).toBe('rgb(245, 196, 81)');
 
-    const without = dollar(render1({ ...row, showDollar: false }).container);
-    expect(getComputedStyle(without!).visibility).toBe('hidden');
+    const empty = dollar(render1({ ...row, showDollar: false }).container)!;
+    expect(getComputedStyle(empty).visibility).toBe('visible');
+    expect(getComputedStyle(empty).color).not.toBe('rgb(245, 196, 81)');
   });
 
-  it('holds the dollar sign back until the payout has landed', () => {
+  it('leaves the dollar sign alone while the payout is turning', () => {
+    // It is printed on the board, not flapped onto it. A sign that came and
+    // went would say something about the figure before the figure landed.
     const turning = render(
       <BoardRow {...settledProps(row)} amountSettled={false} onAct={() => {}} />
     );
-    expect(getComputedStyle(dollar(turning.container)!).visibility).toBe('hidden');
+    expect(getComputedStyle(dollar(turning.container)!).visibility).toBe('visible');
   });
 
   it('renders a blank row with no action and a full set of blank tiles', () => {

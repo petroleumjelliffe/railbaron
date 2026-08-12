@@ -34,7 +34,9 @@ export function play(
           : (latest ? regionById(latest.region).name : ''),
         text: latest ? cityById(latest.city).name : '',
         amount: paid ? latest.payout!.toLocaleString('en-US') : '',
-        showDollar: paid,
+        // Every baron's row carries the printed sign, whatever this roll
+        // paid — a home town does not rub it off the board.
+        showDollar: true,
         right: latest !== undefined && latest.payout === null ? 'Home' : '',
         chip: SEAT_COLORS[seat.id],
         tone: 'normal',

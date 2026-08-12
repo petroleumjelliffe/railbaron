@@ -230,18 +230,20 @@ export function BoardRow({
         >
           {amountSettled ? amountFace : ''}
         </span>
-        {/* A printed label, not a flap: the tiles carry digits and a comma
-            and nothing else. It arrives with the figure rather than ahead of
-            it — a dollar sign over a still-turning drum announces that a
-            payout is coming, which is the one thing the home-town case has to
-            be able to not say. */}
+        {/* Printed on the board, not a flap. It never turns, never arrives
+            and never leaves: it is amber on a row that is in play and dim on
+            one that is not, and nothing a roll does can change it. Tying it
+            to the payout made it vanish mid-roll, which is both wrong for a
+            printed label and a tell — a sign that comes and goes says
+            something about the figure beside it before the figure has
+            landed. */}
         <span
           data-dollar=""
           aria-hidden="true"
           style={{
-            display: 'inline-block', width: DOLLAR_WIDTH, fontSize: 25,
+            display: 'inline-block', width: DOLLAR_WIDTH, fontSize: 27,
             lineHeight: `${BOARD_TILE.height}px`, verticalAlign: 'top',
-            color: TOKENS.amber, visibility: row.showDollar && amountSettled ? 'visible' : 'hidden'
+            color: row.showDollar ? TOKENS.amber : '#3a3730'
           }}
         >
           $

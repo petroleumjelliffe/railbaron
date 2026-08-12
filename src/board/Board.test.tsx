@@ -141,8 +141,6 @@ describe('the order a roll is revealed in', () => {
     tick(52 * 6);
     expect(tilesOfRow(container, 0)).not.toBe('DENVER');
     expect(columnText(container, 'amount')).not.toContain('21,000');
-    expect(getComputedStyle(container.querySelector('[data-dollar]')!).visibility)
-      .toBe('hidden');
   });
 
   it('lands the region, then the city, then the payout', () => {
