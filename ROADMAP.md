@@ -15,12 +15,22 @@ each attributed to one or more of the 28 railroads.
 - [x] Attach names and regions to city nodes — `data/city-names.json`, all 67
       confirmed against `engine/cities.ts`
 - [x] Validate: no dead-end dots, no orphan edges, one connected component
-- [ ] Fit the scan→lat/lon warp so every node has real coordinates
+- [x] Fit the scan→lat/lon warp so every node has real coordinates —
+      `npm run network:build`
 
-Output is `data/rail-baron-graph.json` (scan pixel space, hand-verified) plus
-`data/city-names.json` (names and regions, keyed by node id), built into
-`src/data/network.json` (lat/lon, named, validated) by `scripts/build-network.mjs`
-— the one step still to write.
+**Phase 0 is done.** `data/rail-baron-graph.json` (scan pixel space, hand-verified)
+plus `data/city-names.json` (names and regions, keyed by node id) build into
+`src/data/network.json` — 550 nodes in WGS84 degrees, each city carrying the
+`cityId` that indexes [`engine/cities.ts`](engine/cities.ts), so the map and the
+roller agree about what a destination is without matching strings at runtime.
+
+The warp is a thin-plate spline over the 67 cities, fitted scan→Albers so the
+spline corrects only the drawing's distortions rather than also learning the
+projection; lat/lon comes back by inverting Albers. Control points are
+reproduced to 3e-12°. `src/data/network.test.ts` re-checks the build's output
+against the real engine module — the build reads city ids by parsing
+`engine/cities.ts`, which it cannot import, so the test is what makes a drifting
+parse fail rather than ship.
 
 ## Phase 1 — the React port
 

@@ -8,7 +8,10 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "graph:validate": "node scripts/validate-graph.mjs",
+    "graph:names": "node scripts/propose-city-names.mjs",
+    "network:build": "node scripts/build-network.mjs --write"
   },
   "dependencies": {
     "react": "^19.2.8",
