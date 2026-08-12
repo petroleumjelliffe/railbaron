@@ -5,7 +5,10 @@ import { currentCity, replay, undo } from './game';
 import { clearLog, loadLog, saveLog } from './storage';
 
 export function useGame(rng: Rng = Math.random) {
-  const [events, setEvents] = useState<GameEvent[]>(() => loadLog());
+  const [events, setEvents] = useState<GameEvent[]>(() => loadLog().events);
+  // Read once, at mount: this is the age of the record we resumed from, not
+  // of the save this session goes on to write.
+  const [savedAt] = useState<number | null>(() => loadLog().savedAt);
 
   // loadLog() already defaults to [] when nothing is stored, so an empty log
   // needs no entry of its own — persisting `{version,events:[]}` here would
@@ -18,14 +21,18 @@ export function useGame(rng: Rng = Math.random) {
 
   const state = replay(events);
 
-  // Side effects (window.prompt, the dice roll) happen here, in the event
-  // handler body, reading `state` from this render's closure. They must not
-  // live inside the setEvents updater below: React 19's StrictMode
-  // deliberately invokes updaters twice to catch ones that aren't pure, and
-  // a prompt() or rng() call inside one fires twice for a single tap. The
-  // updater itself does nothing but append the one event it was handed, so
-  // calling it twice is harmless — both invocations compute the same result
-  // from the same input and React keeps only the last.
+  // The dice roll happens here, in the event handler body, reading `state`
+  // from this render's closure. It must not live inside the setEvents
+  // updater below: React 19's StrictMode deliberately invokes updaters
+  // twice to catch ones that aren't pure, and an rng() call inside one
+  // consumes two rolls for a single tap. The updater itself does nothing
+  // but append the one event it was handed, so calling it twice is
+  // harmless — both invocations compute the same result from the same
+  // input and React keeps only the last.
+  //
+  // Naming used to be the other half of this hazard, via window.prompt.
+  // The board's inline input replaced it, so only the roll remains — but
+  // the roll is enough to keep the rule.
   //
   // Reading `state` from the render closure (rather than re-deriving it from
   // the updater's own `log` argument) means two taps landing in the same
@@ -35,14 +42,7 @@ export function useGame(rng: Rng = Math.random) {
   // oversight.
   const activate = useCallback((seat: SeatId) => {
     const current = state.seats[seat];
-    if (current.awaiting !== null) return;
-
-    if (current.name === null) {
-      const name = window.prompt('Name this baron')?.trim();
-      if (!name) return;
-      setEvents(log => [...log, { type: 'joined', seat, name }]);
-      return;
-    }
+    if (current.awaiting !== null || current.name === null) return;
 
     const outcome = rollDestination(currentCity(current), rng);
     switch (outcome.kind) {
@@ -69,8 +69,26 @@ export function useGame(rng: Rng = Math.random) {
       { type: 'arrived', seat, city: arrival.city, region: arrival.region, payout: arrival.payout }]);
   }, [state, rng]);
 
+  /**
+   * An empty name vacates the seat. Whether that is a `joined` or a
+   * `renamed` event is decided from the log itself rather than from this
+   * render's `state`, so two commits in one tick cannot both read a seat
+   * as empty and append two `joined` events for it.
+   */
+  const rename = useCallback((seat: SeatId, name: string | null) => {
+    setEvents(log => {
+      const seated = replay(log).seats[seat].name !== null;
+      if (!seated && name) return [...log, { type: 'joined', seat, name }];
+      return [...log, { type: 'renamed', seat, name: name || null }];
+    });
+  }, []);
+
+  const start = useCallback(() => {
+    setEvents(log => (log.some(e => e.type === 'started') ? log : [...log, { type: 'started' }]));
+  }, []);
+
   const undoLast = useCallback(() => setEvents(log => undo(log)), []);
   const reset = useCallback(() => { clearLog(); setEvents([]); }, []);
 
-  return { state, activate, chooseRegion, undoLast, reset };
+  return { state, savedAt, activate, chooseRegion, rename, start, undoLast, reset };
 }
