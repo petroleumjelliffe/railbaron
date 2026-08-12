@@ -100,6 +100,25 @@ describe('seating and starting', () => {
 //   ...) for destinationInRegion: row 0, NE's column is 1, CODES[0][1]=4,
 //   citiesIn('NE')[4]='New York' (id 4). payoutBetween(59, 4) = 31000, i.e.
 //   $31,000 (PAYOUT_TABLE[59][4] = 31, in thousands).
+describe('asking for the game board when there is no game', () => {
+  it('sends you to the setup board rather than an empty one', () => {
+    // A stale bookmark or a typed URL. Rendering the play screen anyway
+    // gives seven blank rows with nothing tappable on them.
+    at('/pass-and-play/game');
+    expect(screen.getAllByRole('button', { name: /tap to join/i })).toHaveLength(6);
+  });
+
+  it('does not intercept a game that is genuinely under way', () => {
+    seed([
+      { type: 'joined', seat: 'red', name: 'PETE' },
+      { type: 'joined', seat: 'blue', name: 'ALEX' },
+      { type: 'started' }
+    ]);
+    at('/pass-and-play/game');
+    expect(screen.getByRole('button', { name: /pete/i })).toBeInTheDocument();
+  });
+});
+
 describe('the full ballot path', () => {
   it('scripts dice through the ballot and shows the payout that lands', async () => {
     const values = [

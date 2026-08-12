@@ -51,6 +51,13 @@ export default function App({ rng }: AppProps = {}) {
 
   const resuming = state.phase === 'playing';
 
+  // A stale bookmark or a typed URL can ask for the game board when there
+  // is no game. Rendering it anyway gives a board of seven blank rows with
+  // nothing tappable on it — a dead end whose only affordance is BACK.
+  if (pathname === '/pass-and-play/game' && !resuming) {
+    return <Navigate to="/pass-and-play" replace />;
+  }
+
   const passAndPlayScreen = (): ScreenDef => {
     if (confirming) return confirm();
     return resuming ? saved(state, savedAt) : passAndPlay(state);
