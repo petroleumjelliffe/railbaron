@@ -65,7 +65,12 @@ export function BoardRow({ row, faces, onAct }: BoardRowProps) {
       <span
         aria-hidden="true"
         style={{
-          width: BOARD_COLUMN_WIDTHS.chip, height: 74,
+          // Proportional, not the design's flat 74px. The design's board is
+          // a fixed 788px tall, giving ~92px rows and a 9px gap above each
+          // chip; ours is fluid, and on a short viewport a 74px chip exactly
+          // fills a 74px row, fusing every seat colour into one stripe.
+          // 80% holds the design's ratio at any height. Measured, not guessed.
+          width: BOARD_COLUMN_WIDTHS.chip, height: '80%',
           flex: `0 0 ${BOARD_COLUMN_WIDTHS.chip}px`, borderRadius: 2,
           background: row.chip ?? '#141414',
           boxShadow: row.chip ? '0 0 0 2px rgba(255,255,255,0.14)' : 'inset 0 0 0 1px #2c2c2c'
