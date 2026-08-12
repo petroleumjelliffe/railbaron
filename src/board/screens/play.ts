@@ -34,7 +34,8 @@ export function play(state: GameState): ScreenDef {
   withMap.push({
     ...blankRow(),
     label: 'Map',
-    text: 'View the network',
+    // Fourteen tiles. "View the network" is sixteen and lost its last two.
+    text: 'View the map',
     action: { kind: 'navigate', to: 'map' }
   });
 

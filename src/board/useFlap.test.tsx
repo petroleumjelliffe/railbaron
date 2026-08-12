@@ -23,11 +23,19 @@ function setReducedMotion(reduced: boolean) {
  * hook a stable reference that the real caller never has, and would hide
  * exactly the bug the "keeps spinning" test is here to catch.
  */
-function Probe({ text }: { text: string }) {
-  const { rows, flapping, snap } = useFlap([text]);
+function Probe({ text, status = '', amount = '' }:
+  { text: string; status?: string; amount?: string }) {
+  const { rows, settled, flapping, snap } = useFlap([{ status, text, amount }]);
+  const column = (faces: { top: string }[]) =>
+    faces.map(face => face.top).join('').trimEnd();
   return (
     <div>
-      <span data-testid="row0">{rows[0]!.map(face => face.top).join('').trimEnd()}</span>
+      <span data-testid="row0">{column(rows[0]!.text)}</span>
+      <span data-testid="status0">{column(rows[0]!.status)}</span>
+      <span data-testid="amount0">{column(rows[0]!.amount)}</span>
+      <span data-testid="settled0">
+        {`${settled[0]!.status}/${settled[0]!.text}/${settled[0]!.amount}`}
+      </span>
       <span data-testid="flapping">{String(flapping)}</span>
       <button onClick={snap}>snap</button>
     </div>
@@ -35,6 +43,9 @@ function Probe({ text }: { text: string }) {
 }
 
 const row0 = () => screen.getByTestId('row0').textContent;
+const status0 = () => screen.getByTestId('status0').textContent;
+const amount0 = () => screen.getByTestId('amount0').textContent;
+const settled0 = () => screen.getByTestId('settled0').textContent;
 const flapping = () => screen.getByTestId('flapping').textContent;
 
 beforeEach(() => {

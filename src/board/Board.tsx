@@ -20,14 +20,11 @@ export function Board({
   screen, onRowAct, onBack, editing = null, onCommit, onCancel
 }: BoardProps) {
   const rows = useMemo(() => padRows(screen.rows), [screen.rows]);
-  const texts = useMemo(() => rows.map(row => row.text), [rows]);
-  const { rows: faces, flapping, snap } = useFlap(texts);
-
-  // Columns B and E clear while the destination column is spinning, then
-  // return. That asymmetry is the effect; without it every field changes at
-  // once and the board reads as a page swap rather than one object
-  // re-lettering itself.
-  const settledOnly = (value: string) => (flapping ? '' : value);
+  const texts = useMemo(
+    () => rows.map(row => ({ status: row.status, text: row.text, amount: row.amount })),
+    [rows]
+  );
+  const { rows: faces, settled, flapping, snap } = useFlap(texts);
 
   const headings = [
     BOARD_COLUMN_WIDTHS.label,
@@ -116,8 +113,12 @@ export function Board({
           return (
             <div key={index} data-board-row="" style={{ display: 'flex', flex: 1 }}>
               <BoardRow
-                row={{ ...row, status: settledOnly(row.status), right: settledOnly(row.right) }}
-                faces={faces[index] ?? []}
+                // The HOME note lands with the payout it stands in for.
+                row={{ ...row, right: settled[index]?.amount === false ? '' : row.right }}
+                faces={faces[index]?.text ?? []}
+                status={faces[index]?.status ?? []}
+                amount={faces[index]?.amount ?? []}
+                amountSettled={settled[index]?.amount ?? true}
                 input={isEditing ? (
                   <RowInput
                     initial={row.text === 'TAP TO JOIN' ? '' : row.text}

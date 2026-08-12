@@ -9,7 +9,7 @@ const spin = (tiles: Tile[], ticks: number) => {
 };
 
 const ticksToSettle = (from: string, to: string) => {
-  let tiles = buildDrum(from, to);
+  let tiles = buildDrum({ from, to });
   let n = 0;
   while (!isSettled(tiles) && n < 200) { tiles = advance(tiles); n++; }
   return n;
@@ -45,12 +45,12 @@ describe('a flap drum', () => {
 
   it('settles immediately when the text has not changed', () => {
     expect(ticksToSettle('DENVER', 'DENVER')).toBe(0);
-    expect(isSettled(buildDrum('DENVER', 'DENVER'))).toBe(true);
+    expect(isSettled(buildDrum({ from: 'DENVER', to: 'DENVER' }))).toBe(true);
   });
 
   it('lets each tile settle at its own tick — the cascade is not choreographed', () => {
     // 'AA' -> 'BZ': tile 0 travels 1 step, tile 1 travels 25.
-    const tiles = buildDrum('AA', 'BZ', 2);
+    const tiles = buildDrum({ from: 'AA', to: 'BZ', width: 2 });
     const [first, second] = advance(tiles);
     expect(first!.cur).toBe(first!.target);
     expect(second!.cur).not.toBe(second!.target);
@@ -58,12 +58,12 @@ describe('a flap drum', () => {
   });
 
   it('shows the outgoing character on the bottom half while spinning', () => {
-    const mid = spin(buildDrum('A', 'D', 1), 1);
+    const mid = spin(buildDrum({ from: 'A', to: 'D', width: 1 }), 1);
     expect(faces(mid)[0]).toEqual({ top: 'B', bottom: 'A' });
   });
 
   it('shows the same character on both halves as soon as it lands', () => {
-    const done = spin(buildDrum('A', 'C', 1), 2);
+    const done = spin(buildDrum({ from: 'A', to: 'C', width: 1 }), 2);
     expect(faces(done)[0]).toEqual({ top: 'C', bottom: 'C' });
   });
 

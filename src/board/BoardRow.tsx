@@ -29,7 +29,14 @@ export const BOARD_TILE = {
 
 export interface BoardRowProps {
   row: Row;
+  /** The destination column's tiles, mid-flap or settled. */
   faces: FlapChar[];
+  /** The region panel's single face — a whole word, not a letter. */
+  status: FlapChar[];
+  /** The payout's tiles. Rendered as plain text, so only the top halves show. */
+  amount: FlapChar[];
+  /** Whether the payout has landed. The `$` and the HOME note wait for it. */
+  amountSettled: boolean;
   onAct: () => void;
   /**
    * Rendered in the destination column in place of the tiles. The rest of
@@ -51,7 +58,11 @@ function Panel({ value, width }: { value: string; width: number }) {
         display: 'inline-block', width, height: BOARD_TILE.height,
         lineHeight: `${BOARD_TILE.height}px`, paddingLeft: 11,
         boxSizing: 'border-box', borderRadius: 3, overflow: 'hidden',
-        whiteSpace: 'nowrap', fontSize: 18, letterSpacing: '0.05em',
+        // NORTH CENTRAL is the longest word this panel carries and at 18px
+        // with the design's 0.05em it runs past 168px and is cut mid-L. The
+        // panel is now the column that answers first, so the one value that
+        // did not fit had to.
+        whiteSpace: 'nowrap', fontSize: 17, letterSpacing: '0.02em',
         textTransform: 'uppercase', color: TOKENS.pale,
         background: `linear-gradient(180deg, ${TOKENS.flapTop} 0 50%, ${TOKENS.flapBottom} 50% 100%)`,
         boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.16)'
@@ -62,7 +73,14 @@ function Panel({ value, width }: { value: string; width: number }) {
   );
 }
 
-export function BoardRow({ row, faces, onAct, input }: BoardRowProps) {
+export function BoardRow({
+  row, faces, status, amount, amountSettled, onAct, input
+}: BoardRowProps) {
+  // Both columns read only the arriving half. The destination column shows a
+  // physical flap with two halves; these two are printed text on a panel, and
+  // a panel does not have a leading edge to show mid-turn.
+  const statusFace = status[0]?.top ?? '';
+  const amountFace = amount.map(face => face.top).join('').trimEnd();
   const interactive = row.action !== null && row.tone !== 'disabled' && input === undefined;
   const colour =
     row.tone === 'disabled' ? '#4a463e' : row.tone === 'dim' ? TOKENS.dim : TOKENS.pale;
@@ -96,7 +114,7 @@ export function BoardRow({ row, faces, onAct, input }: BoardRowProps) {
         data-column="status"
         style={{ width: BOARD_COLUMN_WIDTHS.status, flex: `0 0 ${BOARD_COLUMN_WIDTHS.status}px` }}
       >
-        <Panel value={row.status} width={BOARD_COLUMN_WIDTHS.status - 2} />
+        <Panel value={statusFace} width={BOARD_COLUMN_WIDTHS.status - 2} />
       </span>
       <span
         data-column="destination"
@@ -142,8 +160,11 @@ export function BoardRow({ row, faces, onAct, input }: BoardRowProps) {
           fontSize: 27, color: TOKENS.amber, whiteSpace: 'nowrap'
         }}
       >
-        {row.showDollar && <span data-dollar="">$</span>}
-        {row.amount}
+        {/* The dollar sign waits with the figure. Showing it while the drum
+            is still turning announces that a payout is coming, which is the
+            one thing the HOME case has to be able to not say. */}
+        {row.showDollar && amountSettled && <span data-dollar="">$</span>}
+        {amountFace}
       </span>
       <span
         data-column="right"

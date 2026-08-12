@@ -90,3 +90,70 @@ describe('the board', () => {
     expect(screen.queryByText('LOCAL')).toBeNull();
   });
 });
+
+/**
+ * The staged reveal. These drive the board the way a roll does — one row's
+ * three fields all change at once — and watch what is legible at each stage.
+ */
+describe('the order a roll is revealed in', () => {
+  const rolled = (status: string, text: string, amount: string): Row => ({
+    label: 'Ada', status, text, amount, showDollar: amount !== '',
+    right: '', chip: '#e02b1d', tone: 'normal',
+    action: { kind: 'act', seat: 'red' }
+  });
+
+  const rollScreen = (row: Row) => screenDef([row]);
+
+  const columnText = (container: HTMLElement, column: string) =>
+    container.querySelectorAll('[data-board-row]')[0]!
+      .querySelector(`[data-column="${column}"]`)!.textContent!.trim();
+
+  const tick = (ms: number) => act(() => { vi.advanceTimersByTime(ms); });
+
+  it('says nothing about the payout while the city is still turning', () => {
+    // The defect this sequence exists to fix: the figure used to be printed
+    // the instant the row was tapped, so the answer was on the board for the
+    // two seconds the city spent pretending to look for it.
+    vi.useFakeTimers();
+    const { container, rerender } = render(board(rollScreen(rolled('Northeast', 'Boston', ''))));
+    rerender(board(rollScreen(rolled('Plains', 'Denver', '21,000'))));
+
+    tick(52 * 6);
+    expect(tilesOfRow(container, 0)).not.toBe('DENVER');
+    expect(columnText(container, 'amount')).not.toContain('21,000');
+    expect(container.querySelector('[data-dollar]')).toBeNull();
+  });
+
+  it('lands the region, then the city, then the payout', () => {
+    vi.useFakeTimers();
+    const { container, rerender } = render(board(rollScreen(rolled('Northeast', 'Boston', ''))));
+    rerender(board(rollScreen(rolled('Plains', 'Denver', '21,000'))));
+
+    const arrived = { status: -1, text: -1, amount: -1 };
+    for (let t = 1; t <= 120; t++) {
+      tick(52);
+      if (arrived.status < 0 && columnText(container, 'status') === 'PLAINS') arrived.status = t;
+      if (arrived.text < 0 && tilesOfRow(container, 0) === 'DENVER') arrived.text = t;
+      if (arrived.amount < 0 && columnText(container, 'amount').includes('21,000')) {
+        arrived.amount = t;
+      }
+    }
+
+    expect(arrived.status).toBeGreaterThan(0);
+    expect(arrived.status).toBeLessThan(arrived.text);
+    expect(arrived.text).toBeLessThan(arrived.amount);
+  });
+
+  it('holds the HOME note back with the payout it stands in for', () => {
+    vi.useFakeTimers();
+    const home: Row = { ...rolled('Plains', 'Denver', ''), right: 'Home' };
+    const { container, rerender } = render(board(rollScreen(rolled('Northeast', 'Boston', '5,000'))));
+    rerender(board(rollScreen(home)));
+
+    tick(52 * 4);
+    expect(columnText(container, 'right')).toBe('');
+
+    tick(52 * 200);
+    expect(columnText(container, 'right')).toBe('HOME');
+  });
+});

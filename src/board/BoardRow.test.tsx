@@ -2,7 +2,8 @@ import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { BoardRow, BOARD_COLUMN_WIDTHS, BOARD_TILE } from './BoardRow';
 import { FLAP_WIDTH } from './alphabet';
-import { staticFaces } from './drum';
+import { staticFaces, staticPanel } from './drum';
+import { AMOUNT_WIDTH } from './choreography';
 import { blankRow, type Row } from './types';
 
 const row: Row = {
@@ -12,8 +13,17 @@ const row: Row = {
   action: { kind: 'navigate', to: 'play' }
 };
 
+/** Settled in every column: the flap sequence has its own tests. */
+const settledProps = (r: Row) => ({
+  row: r,
+  faces: staticFaces(r.text),
+  status: staticPanel(r.status),
+  amount: staticFaces(r.amount, AMOUNT_WIDTH),
+  amountSettled: true
+});
+
 const render1 = (r: Row, onAct = () => {}) =>
-  render(<BoardRow row={r} faces={staticFaces(r.text)} onAct={onAct} />);
+  render(<BoardRow {...settledProps(r)} onAct={onAct} />);
 
 /**
  * jsdom runs no layout, so it cannot see tiles spilling out of a column —
@@ -86,7 +96,7 @@ describe('a board row', () => {
     // Typing a name happens *in* the board, not in place of a row of it:
     // the chip, seat label, state and note all stay put.
     const { container } = render(
-      <BoardRow row={row} faces={staticFaces(row.text)} onAct={() => {}} input={<input />} />
+      <BoardRow {...settledProps(row)} onAct={() => {}} input={<input />} />
     );
     const destination = container.querySelector('[data-column="destination"]')!;
     expect(destination.querySelector('input')).not.toBeNull();
@@ -98,7 +108,7 @@ describe('a board row', () => {
   it('does not act on a tap while it is being typed into', () => {
     const onAct = vi.fn();
     const { container } = render(
-      <BoardRow row={row} faces={staticFaces(row.text)} onAct={onAct} input={<input />} />
+      <BoardRow {...settledProps(row)} onAct={onAct} input={<input />} />
     );
     container.querySelector('button')?.click();
     expect(onAct).not.toHaveBeenCalled();
