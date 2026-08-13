@@ -151,4 +151,53 @@ describe('playing a turn on the map', () => {
     play();
     expect(screen.getAllByLabelText('ADA').length).toBeGreaterThan(0);
   });
+
+  /**
+   * Portland, OR — d432 — d393, an edge carrying both the GN and the UP, so
+   * crossing it once on each line is a legal there-and-back and the route
+   * arrives at d432 twice. 33 edges permit that, and the network has around
+   * 161 independent cycles, so a route that revisits a node is ordinary play.
+   */
+  it('draws every segment of a route that doubles back on itself', async () => {
+    // React only *warns* about duplicate keys and may still render both
+    // children, so counting segments does not on its own catch this — the
+    // damage is to reconciliation on later updates, which is undefined
+    // behaviour rather than a reliable symptom. The warning is the signal
+    // that discriminates, so it is asserted alongside what the player sees.
+    const complaints = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const user = userEvent.setup();
+    const { container } = render(
+      <MapView
+        state={replay([
+          { type: 'joined', seat: 'red', name: 'ADA' },
+          { type: 'started' },
+          { type: 'arrived', seat: 'red', city: 52, region: 'NW', payout: null },
+          { type: 'orderRolled', seat: 'red', first: 'red' },
+          { type: 'arrived', seat: 'red', city: 55, region: 'NW', payout: 3000 },
+          { type: 'turnRolled', seat: 'red', white: [2, 2], bonus: null }
+        ])}
+        onBack={() => {}}
+        onMove={vi.fn()}
+        dice={{ roll: null, live: false }}
+        onRollDice={() => {}}
+        onDiceLanded={() => {}}
+      />
+    );
+
+    const segments = () => container.querySelectorAll('[data-route="draft"] line');
+    await user.click(screen.getByRole('button', { name: 'Dot d432' }));
+    await user.click(screen.getByRole('button', { name: 'Dot d393' }));
+    await user.click(screen.getByRole('button', { name: 'Dot d432' }));
+
+    // Three steps walked, so three lines drawn...
+    expect(segments()).toHaveLength(3);
+    // ...each of them its own child. Keying by node id collides on the
+    // repeated d432, and React is explicit that two children sharing a key
+    // no longer keep their identity across updates.
+    const keyed = complaints.mock.calls
+      .map(call => String(call[0]))
+      .filter(message => message.includes('same key'));
+    expect(keyed).toEqual([]);
+    complaints.mockRestore();
+  });
 });

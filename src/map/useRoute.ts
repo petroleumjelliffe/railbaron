@@ -74,29 +74,33 @@ export function useRoute(
    * many junctions lie between. The player taps dots, which is what the
    * printed board is made of, and never learns that the graph carries extra
    * nodes — so the pawn is never left at rest on one.
+   *
+   * The whole walk happens here in the handler body, reading this render's
+   * `draft`, and only finished values are handed to the setters. Nothing is
+   * computed inside a state updater: React invokes those twice under
+   * StrictMode to catch impure ones, and this repo has already been bitten
+   * once by that — see the note above `roll` in `src/state/useGame.ts`.
    */
   const tap = useCallback((id: NodeId) => {
-    setDraft(current => {
-      if (current === null) return current;
-      const reach = tappable(current).find(one => one.to === id);
-      if (reach === undefined) {
-        // A junction is a legal step and still not a place, so `extend` would
-        // accept one — there is simply nothing to report and nothing to do.
-        const refusal = extend(current, id);
-        if (isRejection(refusal)) setRefused(refusal);
-        return current;
-      }
-      setRefused(null);
-      let walked = current;
-      for (const step of reach.via) {
-        const next = extend(walked, step.to);
-        // Unreachable: every step in `via` was built by extending this draft.
-        if (isRejection(next)) return current;
-        walked = next;
-      }
-      return walked;
-    });
-  }, []);
+    if (draft === null) return;
+    const reach = tappable(draft).find(one => one.to === id);
+    if (reach === undefined) {
+      // A junction is a legal step and still not a place, so `extend` would
+      // accept one — there is simply nothing to report and nothing to do.
+      const refusal = extend(draft, id);
+      if (isRejection(refusal)) setRefused(refusal);
+      return;
+    }
+    let walked = draft;
+    for (const step of reach.via) {
+      const next = extend(walked, step.to);
+      // Unreachable: every step in `via` was built by extending this draft.
+      if (isRejection(next)) return;
+      walked = next;
+    }
+    setRefused(null);
+    setDraft(walked);
+  }, [draft]);
 
   const undo = useCallback(() => {
     setRefused(null);

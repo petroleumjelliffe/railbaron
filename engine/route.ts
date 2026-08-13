@@ -75,9 +75,6 @@ export interface Reach {
   readonly via: readonly Step[];
 }
 
-const chainCost = (steps: readonly Step[]): number =>
-  steps.reduce((total, step) => total + step.cost, 0);
-
 /**
  * Every **place** the pawn can reach from where it stands — dots and cities,
  * never junctions.
@@ -94,9 +91,12 @@ const chainCost = (steps: readonly Step[]): number =>
  * spent, the company the run is committed to since the last dot, the
  * destination it must not be stranded from.
  *
- * `seen` is per-branch and stops two adjoining bend points handing the pawn
- * back and forth: their shared edge may carry several railroads, so a
- * re-crossing can be perfectly legal and still be nothing a player wanted.
+ * `seen` is per-branch and guards against a graph whose bend points adjoin:
+ * two of those would hand the pawn back and forth, since their shared edge
+ * may carry several railroads and a re-crossing would be perfectly legal. No
+ * junction in the shipped network touches another — all twelve have only dot
+ * and city neighbours, so no chain here is longer than two steps — which
+ * makes the guard defensive rather than load-bearing. It costs one set.
  */
 export function tappable(draft: Draft): Reach[] {
   const best = new Map<NodeId, Step[]>();
@@ -114,12 +114,11 @@ export function tappable(draft: Draft): Reach[] {
         continue;
       }
       // Two chains can arrive at the same dot round opposite sides of a fork.
-      // The cheaper wins; equal costs keep the one found first, so the result
-      // is stable between renders.
+      // The shorter walk wins — a direct edge beats the same dot reached the
+      // long way round — and equal lengths keep the one found first, so the
+      // result is stable between renders.
       const known = best.get(step.to);
-      if (known === undefined || chainCost(chain) < chainCost(known)) {
-        best.set(step.to, chain);
-      }
+      if (known === undefined || chain.length < known.length) best.set(step.to, chain);
     }
   };
 

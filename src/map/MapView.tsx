@@ -135,9 +135,10 @@ function RouteLamp({ node, lit, candidate, onTap }: {
   const { x, y } = node;
   return (
     <Tappable label={`Dot ${node.id}`} onTap={onTap}>
-      {/* A dot is two and a half pixels across. Tapping one needs a target
-          the size of a fingertip, drawn only where there is something to tap. */}
-      {onTap && <circle cx={x} cy={y} r={r * 5} fill="transparent" />}
+      {/* A dot is two and a half pixels across. Tapping one needs a target the
+          size of a fingertip, drawn only where there is something to tap and
+          sized by the room this lamp has — see `sizeTargets` in geo.ts. */}
+      {onTap && <circle cx={x} cy={y} r={node.hit} fill="transparent" />}
       <circle cx={x} cy={y} r={r * 1.5} fill="#2a1c0d" />
       <g style={{ opacity: lit ? 1 : DIM, transition: 'opacity 110ms cubic-bezier(.2,.8,.3,1)' }}>
         <circle cx={x} cy={y} r={r * 4.2} fill="#fff6e2" opacity={0.1} />
@@ -250,13 +251,19 @@ export function MapView({
           {/* The route as tapped out so far, drawn over the track so it reads
               as the line the pawn is about to walk. */}
           {drafted && (
-            <g>
+            <g data-route="draft">
+              {/* Keyed by position, deliberately. A route may pass through the
+                  same node twice — an edge carrying two railroads may be
+                  crossed once on each — so keying by node id would collide and
+                  React would reconcile two segments into one, dropping a leg
+                  of the drawn route. The list is positional and never
+                  reordered, which is exactly when an index key is right. */}
               {drafted.slice(1).map((id, i) => {
                 const a = board.byId.get(drafted[i]!);
                 const b = board.byId.get(id);
                 if (!a || !b) return null;
                 return (
-                  <line key={id} x1={a.x} y1={a.y} x2={b.x} y2={b.y}
+                  <line key={i} x1={a.x} y1={a.y} x2={b.x} y2={b.y}
                         stroke="#fff6e2" strokeWidth={3.4} strokeLinecap="round"
                         opacity={0.9} />
                 );

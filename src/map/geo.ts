@@ -9,6 +9,13 @@ export interface Placed {
   kind: NodeKind;
   x: number;
   y: number;
+  /**
+   * How far a tap aimed at this lamp may land and still count, in the same
+   * pixels as x and y. See `sizeTargets` — it is always shorter than the
+   * distance to the nearest other lamp, so no lamp can swallow taps meant
+   * for its neighbour.
+   */
+  hit: number;
   /** Present on cities only. */
   name?: string;
   cityId?: number;
@@ -65,6 +72,37 @@ function separateCities(cities: Placed[]): void {
   }
 }
 
+/**
+ * A route dot is 2.6px across, which no fingertip can hit, so a tappable lamp
+ * carries an invisible target far larger than the bulb. Left unbounded that
+ * target reaches past its neighbours: lamps sit as close as 6.4px apart, so a
+ * flat 13px radius puts one candidate's centre inside another's target and the
+ * later-drawn lamp quietly eats taps meant for the earlier one.
+ *
+ * So the radius is per-node and bounded by the room the node actually has.
+ * `SHARE` aims at under half the gap, so two neighbouring targets do not even
+ * overlap; `FLOOR` keeps a lamp in a dense cluster worth aiming at; and the
+ * gap itself is the hard ceiling, because a target that reaches a neighbour's
+ * centre is the bug. Open country is untouched, at `MAX`.
+ */
+const HIT = { share: 0.45, floor: 5, max: 13, ceiling: 0.8 } as const;
+
+function sizeTargets(nodes: Placed[]): void {
+  for (const node of nodes) {
+    let nearest = Infinity;
+    for (const other of nodes) {
+      if (other === node) continue;
+      const distance = Math.hypot(other.x - node.x, other.y - node.y);
+      if (distance < nearest) nearest = distance;
+    }
+    node.hit = Math.min(
+      Math.max(nearest * HIT.share, HIT.floor),
+      nearest * HIT.ceiling,
+      HIT.max
+    );
+  }
+}
+
 const isKind = (k: string): k is NodeKind => k === 'city' || k === 'dot' || k === 'junction';
 
 /**
@@ -91,11 +129,16 @@ export function layout(width: number, height: number, inset = 74): Layout {
       kind: node.kind,
       x: point[0],
       y: point[1],
+      // Replaced by sizeTargets below, once every node has its final place.
+      hit: 0,
       ...(node.name !== undefined ? { name: node.name, cityId: node.cityId } : {})
     });
   }
 
   separateCities(nodes.filter(n => n.kind === 'city'));
+  // After separation, never before: nudging a city apart changes the room it
+  // and its neighbours have.
+  sizeTargets(nodes);
 
   return {
     width,

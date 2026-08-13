@@ -248,9 +248,19 @@ describe('where a tap may land', () => {
     expect(offered.map(one => one.to)).not.toContain('d195');
   });
 
-  it('names each place once, however many ways round it is reachable', () => {
-    const offered = tappable(startDraft(TWO_BENDS, MINNEAPOLIS, 6)).map(one => one.to);
-    expect(new Set(offered).size).toBe(offered.length);
+  it('hands back a chain that really walks from the head to the place', () => {
+    // Uniqueness is structural — `tappable` accumulates into a Map — so it is
+    // not worth asserting. This is the part that could be wrong: every `via`
+    // must be walkable step by step from this draft, must end on the place it
+    // names, and must cross nothing but junctions on the way.
+    const draft = startDraft(TWO_BENDS, MINNEAPOLIS, 6);
+    for (const one of tappable(draft)) {
+      const walked = walk(draft, ...one.via.map(step => step.to));
+      expect(here(walked), one.to).toBe(one.to);
+      for (const step of one.via.slice(0, -1)) {
+        expect(nodeById(step.to).kind, step.to).toBe('junction');
+      }
+    }
   });
 
   it('offers nothing once the destination is underfoot', () => {

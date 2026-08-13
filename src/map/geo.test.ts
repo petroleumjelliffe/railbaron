@@ -83,6 +83,32 @@ describe('placing the network on the cabinet', () => {
     }
   });
 
+  it('never lets one lamp take a tap aimed at its neighbour', () => {
+    // The property, not one instance of it: a tap target that reaches another
+    // lamp's centre means the later-drawn lamp eats taps meant for the
+    // earlier one, and lamps sit as close as 6.4px apart.
+    for (const node of board.nodes) {
+      let nearest = Infinity;
+      for (const other of board.nodes) {
+        if (other === node) continue;
+        nearest = Math.min(nearest, Math.hypot(other.x - node.x, other.y - node.y));
+      }
+      expect(node.hit, `${node.id} (nearest ${nearest.toFixed(2)})`).toBeLessThan(nearest);
+    }
+  });
+
+  it('keeps every lamp worth aiming at, and only shrinks the ones with no room', () => {
+    // Bounding the target must not quietly shrink every dot back to the 2.6px
+    // bulb nobody can hit. The floor holds everywhere — the closest two lamps
+    // on the map are 6.4px apart, which still leaves 5.
+    for (const node of board.nodes) {
+      expect(node.hit, node.id).toBeGreaterThanOrEqual(5);
+      expect(node.hit, node.id).toBeLessThanOrEqual(13);
+    }
+    // And a lamp with room around it keeps the whole fingertip.
+    expect(board.nodes.some(node => node.hit === 13)).toBe(true);
+  });
+
   it('fits a smaller cabinet without leaking outside it', () => {
     const small = layout(700, 394);
     for (const node of small.nodes) {
