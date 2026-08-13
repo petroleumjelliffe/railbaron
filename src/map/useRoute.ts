@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   arrived as hasArrived, back, complete, extend, here, isRejection, movement,
-  nodeById, nodeForCity, options, path as pathOf, remaining as leftOf, startDraft,
+  nodeForCity, path as pathOf, remaining as leftOf, startDraft, tappable,
   type Draft, type NodeId, type Rejection
 } from '../../engine';
 import type { SeatId } from '../state/events';
@@ -23,32 +23,6 @@ export interface RouteApi {
 }
 
 const NOTHING: ReadonlySet<NodeId> = new Set();
-
-/**
- * A junction is not a place. Taking it automatically means the player taps
- * dots — which is what the printed board looks like — and never has to notice
- * that the graph carries extra nodes. Only an unambiguous continuation is
- * taken: at a genuine fork the player must choose, and the dots beyond both
- * branches are offered instead.
- *
- * The `seen` set is not decoration. Two junctions can adjoin, and an edge
- * carrying several railroads may legally be re-crossed — so without it a pair
- * of bend points would hand each other the pawn back and forth until the
- * sections ran out.
- */
-function throughJunctions(draft: Draft): Draft {
-  const seen = new Set<NodeId>([here(draft)]);
-  let landed = draft;
-  for (;;) {
-    const onward = options(landed)
-      .filter(step => nodeById(step.to).kind === 'junction' && !seen.has(step.to));
-    if (onward.length !== 1) return landed;
-    const through = extend(landed, onward[0]!.to);
-    if (isRejection(through)) return landed;
-    seen.add(onward[0]!.to);
-    landed = through;
-  }
-}
 
 /**
  * The route a player is tapping out, held here and nowhere else.
@@ -95,13 +69,32 @@ export function useRoute(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
 
+  /**
+   * One tap moves the pawn from where it stands to the place tapped, however
+   * many junctions lie between. The player taps dots, which is what the
+   * printed board is made of, and never learns that the graph carries extra
+   * nodes — so the pawn is never left at rest on one.
+   */
   const tap = useCallback((id: NodeId) => {
     setDraft(current => {
       if (current === null) return current;
-      const next = extend(current, id);
-      if (isRejection(next)) { setRefused(next); return current; }
+      const reach = tappable(current).find(one => one.to === id);
+      if (reach === undefined) {
+        // A junction is a legal step and still not a place, so `extend` would
+        // accept one — there is simply nothing to report and nothing to do.
+        const refusal = extend(current, id);
+        if (isRejection(refusal)) setRefused(refusal);
+        return current;
+      }
       setRefused(null);
-      return throughJunctions(next);
+      let walked = current;
+      for (const step of reach.via) {
+        const next = extend(walked, step.to);
+        // Unreachable: every step in `via` was built by extending this draft.
+        if (isRejection(next)) return current;
+        walked = next;
+      }
+      return walked;
     });
   }, []);
 
@@ -121,7 +114,9 @@ export function useRoute(
 
   return {
     draft,
-    legal: draft === null ? NOTHING : new Set(options(draft).map(step => step.to)),
+    // Places, not steps: a junction is never in here, so no lamp lights for
+    // one and no tap can be aimed at one.
+    legal: draft === null ? NOTHING : new Set(tappable(draft).map(one => one.to)),
     at: draft === null ? (seat?.at ?? null) : here(draft),
     remaining: draft === null ? 0 : leftOf(draft),
     tap, undo, canCommit, commit, refused

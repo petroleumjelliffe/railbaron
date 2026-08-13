@@ -68,6 +68,65 @@ export const tripOf = (draft: Draft): Trip => ({
 
 export const options = (draft: Draft): Step[] => legalSteps(tripOf(draft));
 
+/** A place the pawn may be tapped to, and every step it takes to get there. */
+export interface Reach {
+  to: NodeId;
+  /** One step to a neighbouring dot or city; more when junctions lie between. */
+  readonly via: readonly Step[];
+}
+
+const chainCost = (steps: readonly Step[]): number =>
+  steps.reduce((total, step) => total + step.cost, 0);
+
+/**
+ * Every **place** the pawn can reach from where it stands — dots and cities,
+ * never junctions.
+ *
+ * A junction is where a printed line forks or bends. Nothing is drawn there
+ * and the player cannot tap one, so a junction is not a destination for a tap
+ * but a thing a tap passes through: the search walks on through it and offers
+ * the dots on the far side instead. At a genuine fork that means each branch's
+ * first real dot is offered separately, which is exactly the choice the
+ * printed board asks the player to make.
+ *
+ * The walk extends the draft at every hop rather than reading adjacency, so
+ * each intermediate step is judged by the real rules — the section already
+ * spent, the company the run is committed to since the last dot, the
+ * destination it must not be stranded from.
+ *
+ * `seen` is per-branch and stops two adjoining bend points handing the pawn
+ * back and forth: their shared edge may carry several railroads, so a
+ * re-crossing can be perfectly legal and still be nothing a player wanted.
+ */
+export function tappable(draft: Draft): Reach[] {
+  const best = new Map<NodeId, Step[]>();
+
+  const walk = (from: Draft, via: readonly Step[], seen: ReadonlySet<NodeId>): void => {
+    for (const step of options(from)) {
+      if (seen.has(step.to)) continue;
+      const chain = [...via, step];
+      if (nodeById(step.to).kind === 'junction') {
+        const through = extend(from, step.to);
+        // Unreachable: `step` came from options(), which is stepTo() over the
+        // same trip. Kept so a future change to either cannot throw here.
+        if (isRejection(through)) continue;
+        walk(through, chain, new Set([...seen, step.to]));
+        continue;
+      }
+      // Two chains can arrive at the same dot round opposite sides of a fork.
+      // The cheaper wins; equal costs keep the one found first, so the result
+      // is stable between renders.
+      const known = best.get(step.to);
+      if (known === undefined || chainCost(chain) < chainCost(known)) {
+        best.set(step.to, chain);
+      }
+    }
+  };
+
+  walk(draft, [], new Set([here(draft)]));
+  return [...best].map(([to, via]) => ({ to, via }));
+}
+
 export function extend(draft: Draft, to: NodeId): Draft | Rejection {
   const step = stepTo(tripOf(draft), to);
   if (isRejection(step)) return step;

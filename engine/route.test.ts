@@ -3,7 +3,7 @@ import { legalSteps } from './movement';
 import { nodeById, nodeForCity, sectionKey } from './network';
 import {
   arrived, back, companies, complete, extend, here, options,
-  path, remaining, rideNow, spent, startDraft, tripOf, usedAfter, type Draft
+  path, remaining, rideNow, spent, startDraft, tappable, tripOf, usedAfter, type Draft
 } from './route';
 
 const MINNEAPOLIS = nodeForCity(43);
@@ -192,6 +192,69 @@ describe('legalSteps through options(), with nothing left', () => {
   it('still offers a free step onto a junction even with the roll fully spent', () => {
     const draft = startDraft(BESIDE, FAR, 0);
     expect(options(draft).map(step => step.to)).toContain(JUNCTION);
+  });
+});
+
+describe('where a tap may land', () => {
+  // A bend, not a fork: d53 — j5 — d65/d368 on the CB&Q, and d53 — j6 —
+  // d74/d108 on the C&NW. Two junctions on one dot, which is the case the
+  // scan-onward rule this replaced could not offer at all.
+  const TWO_BENDS = 'd53';
+  const PAST_J5 = ['d65', 'd368'];
+  const PAST_J6 = ['d74', 'd108'];
+  const OFF_BENDS = 'd625';         // TWO_BENDS's one ordinary neighbour
+
+  // Boston has two exits and one of them is the junction j4, so a leg that
+  // starts there can only use the B&M if a tap may reach through j4.
+  const BOSTON = nodeForCity(2);
+  const PAST_J4 = 'd273';           // through j4, on toward Albany
+  const OFF_J4 = 'd647';
+
+  const reached = (draft: Draft) => tappable(draft).map(one => one.to).sort();
+
+  it('offers places, never junctions', () => {
+    const draft = startDraft(BESIDE, FAR, 6);
+    expect(options(draft).map(step => step.to)).toContain(JUNCTION);
+    expect(reached(draft)).not.toContain(JUNCTION);
+    for (const one of tappable(draft)) {
+      expect(nodeById(one.to).kind).not.toBe('junction');
+    }
+  });
+
+  it('carries the whole chain of steps to a place beyond a junction', () => {
+    // d4 — j0 — d612: one junction in the way, so two steps in one tap.
+    const beyond = tappable(startDraft(BESIDE, FAR, 6)).find(one => one.to === 'd612');
+    expect(beyond?.via.map(step => step.to)).toEqual([JUNCTION, 'd612']);
+  });
+
+  it('reaches one step to an ordinary neighbour', () => {
+    const near = tappable(startDraft(BESIDE, FAR, 6)).find(one => one.to === 'd184');
+    expect(near?.via.map(step => step.to)).toEqual(['d184']);
+  });
+
+  it('offers both branches when two junctions meet at one dot', () => {
+    const offered = reached(startDraft(TWO_BENDS, MINNEAPOLIS, 6));
+    expect(offered).toEqual([...PAST_J5, ...PAST_J6, OFF_BENDS].sort());
+  });
+
+  it('lets a leg that starts beside a junction use that line on its first tap', () => {
+    const offered = tappable(startDraft(BOSTON, nodeForCity(0), 6));
+    expect(offered.find(one => one.to === PAST_J4)?.via.map(step => step.to))
+      .toEqual(['j4', PAST_J4]);
+    expect(offered.map(one => one.to)).toContain(OFF_J4);
+    // d195 is j4's third arm and is refused for an unrelated, correct reason:
+    // nothing lies past it but Portland, ME, so taking it would strand the
+    // pawn away from Albany. The B&M through j4 is open either way.
+    expect(offered.map(one => one.to)).not.toContain('d195');
+  });
+
+  it('names each place once, however many ways round it is reachable', () => {
+    const offered = tappable(startDraft(TWO_BENDS, MINNEAPOLIS, 6)).map(one => one.to);
+    expect(new Set(offered).size).toBe(offered.length);
+  });
+
+  it('offers nothing once the destination is underfoot', () => {
+    expect(tappable(walk(startDraft(MINNEAPOLIS, ST_PAUL, 7), ST_PAUL))).toEqual([]);
   });
 });
 

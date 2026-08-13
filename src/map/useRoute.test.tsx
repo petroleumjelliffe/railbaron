@@ -1,6 +1,6 @@
 import { act, renderHook } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { nodeForCity } from '../../engine';
+import { nodeById, nodeForCity, path as pathOf } from '../../engine';
 import type { GameEvent } from '../state/events';
 import { replay } from '../state/game';
 import { useRoute } from './useRoute';
@@ -88,27 +88,43 @@ describe('the draft route on the map', () => {
 
   /**
    * Columbus — d185 — j10 — Pittsburgh. `j10` is a bend in the printed line,
-   * not a place, so no lamp is drawn there and it can never be tapped. The
-   * tap that reaches d185 has to carry the pawn onto it, or the dots on the
-   * far side would never be offered at all.
+   * not a place: no lamp is drawn there, so it is never offered and never
+   * tapped. The tap on Pittsburgh has to walk the whole chain in one go.
    */
-  it('walks onto a junction rather than offering one', () => {
-    const acrossAJunction: GameEvent[] = [
-      { type: 'joined', seat: 'red', name: 'ADA' },
-      { type: 'started' },
-      { type: 'arrived', seat: 'red', city: 23, region: 'NC', payout: null },
-      { type: 'orderRolled', seat: 'red', first: 'red' },
-      { type: 'arrived', seat: 'red', city: 6, region: 'NE', payout: 2000 },
-      { type: 'turnRolled', seat: 'red', white: [1, 1], bonus: null }
-    ];
+  const acrossAJunction: GameEvent[] = [
+    { type: 'joined', seat: 'red', name: 'ADA' },
+    { type: 'started' },
+    { type: 'arrived', seat: 'red', city: 23, region: 'NC', payout: null },
+    { type: 'orderRolled', seat: 'red', first: 'red' },
+    { type: 'arrived', seat: 'red', city: 6, region: 'NE', payout: 2000 },
+    { type: 'turnRolled', seat: 'red', white: [1, 1], bonus: null }
+  ];
+
+  it('walks a whole chain through a junction on one tap', () => {
     const { result } = renderHook(() => useRoute(replay(acrossAJunction), vi.fn()));
     act(() => { result.current.tap('d185'); });
-    expect(result.current.at).toBe('j10');
-    // The dot beyond the bend, offered from the junction the pawn was carried to.
+    expect(result.current.at).toBe('d185');
+
+    // Pittsburgh is two steps away, the first of them onto j10.
     expect(result.current.legal.has(nodeForCity(6))).toBe(true);
-    // A pawn may not be left standing on a junction — Task 5's clause.
-    expect(result.current.canCommit).toBe(false);
     act(() => { result.current.tap(nodeForCity(6)); });
+
+    // The pawn is on the city, not parked on the bend it went through...
+    expect(result.current.at).toBe(nodeForCity(6));
+    // ...and the bend is in the route, so the leg records the line it rode.
+    expect(pathOf(result.current.draft!)).toEqual(
+      [nodeForCity(23), 'd185', 'j10', nodeForCity(6)]);
     expect(result.current.canCommit).toBe(true);
+  });
+
+  it('never offers a junction, even standing right beside one', () => {
+    const { result } = renderHook(() => useRoute(replay(acrossAJunction), vi.fn()));
+    act(() => { result.current.tap('d185'); });
+    // d185's neighbours are Columbus and j10, so the head is beside a junction.
+    expect(result.current.at).toBe('d185');
+    expect(result.current.legal.size).toBeGreaterThan(0);
+    for (const id of result.current.legal) {
+      expect(nodeById(id).kind).not.toBe('junction');
+    }
   });
 });

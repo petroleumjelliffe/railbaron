@@ -17,6 +17,6 @@ export {
 export type { Rejection, Step, Trip } from './movement';
 export {
   arrived, back, companies, complete, extend, here, options, path,
-  remaining, rideNow, spent, startDraft, tripOf, usedAfter
+  remaining, rideNow, spent, startDraft, tappable, tripOf, usedAfter
 } from './route';
-export type { Draft } from './route';
+export type { Draft, Reach } from './route';
