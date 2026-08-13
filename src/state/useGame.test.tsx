@@ -83,6 +83,16 @@ describe('rolling the movement dice', () => {
     const { result } = renderHook(() => useGame(dice(1, 1)));
     expect(result.current.rollDice('red')).toBeNull();
   });
+
+  it('refuses movement dice to a baron who still owes a destination roll', () => {
+    // seated: red holds only a home town — the state right after homes and
+    // turn order, before their first trip has anywhere to go. A destination
+    // is rolled once per trip, at its start; movement dice every turn in
+    // between. A baron with nowhere to go yet cannot roll to move.
+    saveLog(seated);
+    const { result } = renderHook(() => useGame(dice(3, 4)));
+    expect(result.current.rollDice('red')).toBeNull();
+  });
 });
 
 describe('rolling a destination', () => {

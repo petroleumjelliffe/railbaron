@@ -152,22 +152,25 @@ export function useGame(rng: Rng = Math.random) {
    * "The players roll to see who goes first, the high roll." Rolled once and
    * recorded, so a replayed game deals the same turns; ties are settled by
    * rolling again rather than by seat order, which would quietly favour red.
+   * A tie surviving 100 rerolls is astronomically unlikely — throwing rather
+   * than falling back to `best[0]` matches `rollDestination`'s precedent for
+   * an exhausted guard: a loud failure beats a silent, seat-order first
+   * player that contradicts this very comment.
    */
   const rollOrder = useCallback(() => {
     const seated = SEATS.filter(id => state.seats[id].name !== null);
     if (seated.length === 0) return;
     let best: SeatId[] = [];
-    let high = 0;
-    let guard = 0;
-    do {
+    for (let attempt = 0; attempt < 100 && best.length !== 1; attempt++) {
       best = [];
-      high = 0;
+      let high = 0;
       for (const id of seated) {
         const score = Math.floor(rng() * 6) + Math.floor(rng() * 6) + 2;
         if (score > high) { high = score; best = [id]; }
         else if (score === high) best.push(id);
       }
-    } while (best.length > 1 && ++guard < 100);
+    }
+    if (best.length > 1) throw new Error('turn order stayed tied after 100 rerolls');
     const first = best[0]!;
     setEvents(log => (log.some(e => e.type === 'orderRolled')
       ? log
