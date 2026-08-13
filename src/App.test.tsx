@@ -302,3 +302,75 @@ describe('holding a roll back until the board has told it', () => {
     expect(storedTypes()).toEqual([...before, 'regionRequested']);
   });
 });
+
+/**
+ * The dice's half of the same gate, and the seam it hangs from.
+ *
+ * `DiceReadout` and `useGame` each have their own tests, and both stayed green
+ * with `awaitDice`, `onRollDice` or `play()`'s `dice` deleted from the App —
+ * three separate cuts, each of which leaves a board whose dice cannot be
+ * rolled or cannot be recorded. Only a walk-through from the real board can
+ * see them, so this is the mirror of the region gate above.
+ */
+describe('rolling the turn dice from the board', () => {
+  const tick = (ms: number) => act(() => { vi.advanceTimersByTime(ms); });
+
+  beforeEach(() => { vi.useFakeTimers(); });
+  afterEach(() => { vi.useRealTimers(); });
+
+  /**
+   * PETE is up, standing in Minneapolis and bound for St. Paul — a baron with
+   * somewhere to go and no dice yet, which is the only state the readout is
+   * live in.
+   */
+  const upAndReadyToRoll = () => {
+    seed([
+      { type: 'joined', seat: 'red', name: 'PETE' },
+      { type: 'joined', seat: 'blue', name: 'ALEX' },
+      { type: 'started' },
+      { type: 'arrived', seat: 'red', city: 43, region: 'PL', payout: null },
+      { type: 'arrived', seat: 'blue', city: 20, region: 'NC', payout: null },
+      { type: 'orderRolled', seat: 'red', first: 'red' },
+      { type: 'arrived', seat: 'red', city: 47, region: 'PL', payout: 0 }
+    ]);
+  };
+
+  /**
+   * `rollTurn` takes `d6` twice — `floor(rng() * 6) + 1` each — and a third
+   * time only on a Freight double six, which 3 and 4 is not. So two draws,
+   * and any further draw is a bug rather than a face.
+   */
+  const dice = (a: number, b: number) => {
+    const values = [(a - 1) / 6 + 0.01, (b - 1) / 6 + 0.01];
+    let i = 0;
+    return () => {
+      const value = values[i++];
+      if (value === undefined) throw new Error('rng exhausted: the dice drew more than twice');
+      return value;
+    };
+  };
+
+  const readout = () => screen.getByRole('button', { name: /roll the dice/i });
+
+  it('holds the roll back until the drums have told it, then names the faces', () => {
+    upAndReadyToRoll();
+    at('/pass-and-play/game', dice(3, 4));
+    const before = storedTypes();
+
+    fireEvent.click(readout());
+
+    // Three ticks in: the white drums take eleven or more to land, so the
+    // faces are unreadable — and the log must not have the roll either.
+    // queryAll, not query: a readout that never started turning rests with
+    // both drums on a readable face, and `queryBy` would throw on the two
+    // matches rather than report what it found.
+    tick(3 * 52);
+    expect(screen.queryAllByRole('img', { name: /White die, \d/ })).toEqual([]);
+    expect(storedTypes()).toEqual(before);
+
+    tick(4000);
+    expect(storedTypes()).toEqual([...before, 'turnRolled']);
+    expect(screen.getByRole('img', { name: 'White die, 3' })).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'White die, 4' })).toBeInTheDocument();
+  });
+});
