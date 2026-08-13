@@ -45,7 +45,10 @@ export default defineConfig({
         test: {
           name: 'app',
           environment: 'jsdom',
-          include: ['src/**/*.test.{ts,tsx}'],
+          // The shared lobby's client half runs here too. A consumer that
+          // does not run the shared tests will not notice when a submodule
+          // bump breaks it.
+          include: ['src/**/*.test.{ts,tsx}', 'vendor/lobby/client/**/*.test.{ts,tsx}'],
           setupFiles: ['src/test/setup.ts']
         }
       }
