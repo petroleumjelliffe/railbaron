@@ -275,6 +275,16 @@ edge cases and every one of them is awkward to reach by playing normally:
 | arriving on the white dice, then a bonus leg | a *new* destination and released sections |
 | two barons rolling the same home city | the reroll, and no duplicates |
 
+**The set above is movement only, and it is expected to change.** Scenarios that turn on
+money — a fee that forces a sale, a route a player cannot afford, a bankruptcy — belong
+with the money spec and are not written yet. When they arrive they will make some of
+these games wrong rather than merely incomplete: a game asserting a legal route says
+nothing about whether that player could pay for it.
+
+The rule for that is to **delete a golden game a later rule invalidates, not patch around
+it**. Their value is that each one states a rule exactly; a game kept alive by
+qualifications no longer does. The set is a living spec, so it shrinks as well as grows.
+
 Acquire also seeds dev-only routes from its golden games so any state is two clicks away
 in a browser, and guards the data out of the production bundle with a `check:bundle`
 script. Both are worth having here for the same reason — these states are otherwise
