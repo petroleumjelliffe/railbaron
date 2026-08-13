@@ -47,8 +47,9 @@ describe('rolling a turn', () => {
   });
 
   it('never rolls a second bonus die, however the dice fall', () => {
-    // Four faces are scripted; a second bonus die would throw on the fourth.
-    expect(rollTurn('superchief', dice(6, 6, 6, 6)).bonus).toBe(6);
+    // Every scripted face is distinct: a bug that rolled the bonus die twice
+    // and kept the second would return 4, not 3.
+    expect(rollTurn('superchief', dice(1, 2, 3, 4)).bonus).toBe(3);
   });
 
   it('adds the bonus into the movement it grants', () => {
