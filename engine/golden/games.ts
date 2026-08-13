@@ -67,6 +67,42 @@ export const GAMES: readonly GoldenGame[] = [
   },
 
   {
+    id: 'reuse-survives-a-commit',
+    title: 'a section crossed twice stays crossed twice once the leg is committed',
+    /**
+     * The rule above, carried across the end of a turn. A trip counts
+     * crossings, not sections touched: Minneapolis–d417 carries two lines, so
+     * a leg may go out and come back, and committing that leg must record
+     * *two* crossings rather than "this section has been used". Record it as a
+     * mark instead and the third crossing — a turn later, on a line that no
+     * longer exists — is quietly offered.
+     *
+     * The state it leaves is also the only one the app's cross-check can see
+     * the difference in (`src/state/replay.golden.test.ts`): a committed leg
+     * whose spent-section tally holds a count above one.
+     */
+    setup: { at: 'c13', destination: 'c17' },
+    steps: [
+      { name: 'roll two', intent: { kind: 'roll', faces: [1, 1, 2] },
+        then: { remaining: 2, bonus: null } },
+      { name: 'out to d417 on one of its two lines',
+        intent: { kind: 'step', to: 'd417' }, then: { spent: 1 } },
+      { name: 'and back into Minneapolis on the other',
+        intent: { kind: 'step', to: 'c13' },
+        then: { spent: 2, remaining: 0, arrived: false, complete: true } },
+      { name: 'end the turn where it started', intent: { kind: 'commit' },
+        then: { at: 'c13', usedCount: 1, legOwed: false } },
+      { name: 'roll again next turn', intent: { kind: 'roll', faces: [1, 2, 2] },
+        then: { remaining: 3, usedCount: 1 } },
+      { name: 'a third crossing is refused a turn later, exactly as it was during it',
+        intent: { kind: 'step', to: 'd417' }, expectError: 'section-used' },
+      { name: 'while the untouched C&NW section is still there',
+        intent: { kind: 'step', to: 'd131' }, then: { spent: 1, companies: ['C&NW'] } }
+    ],
+    final: { at: 'c13', usedCount: 1 }
+  },
+
+  {
     id: 'trip-across-turns',
     title: 'a trip that spans several turns',
     /**

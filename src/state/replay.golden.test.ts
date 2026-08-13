@@ -18,6 +18,10 @@ import { replay } from './game';
  * this test is about where the pawn ends and what the trip has spent, not
  * about the dice.
  */
+/** Both spent-section tallies in one comparable shape: key and count, ordered. */
+const sections = (used: ReadonlyMap<string, number>): [string, number][] =>
+  [...used].sort(([a], [b]) => a.localeCompare(b));
+
 describe('replay agrees with the golden runner', () => {
   for (const game of GAMES) {
     it(`${game.id}: leaves the pawn and the trip in the same state`, () => {
@@ -50,7 +54,12 @@ describe('replay agrees with the golden runner', () => {
 
       const seat = replay(log).seats.red;
       expect(seat.at, 'where the pawn ended').toBe(finished.at);
-      expect(seat.used.size, 'sections the trip has spent').toBe(finished.used.size);
+      // The map, not its size. A section carrying two railroads may be
+      // crossed twice, so the counts are the rule — comparing sizes alone
+      // passes even if replay marks each section used without ever counting
+      // it, and an app built on that would offer a third crossing.
+      expect(sections(seat.used), 'sections the trip has spent')
+        .toEqual(sections(finished.used));
     });
   }
 });
