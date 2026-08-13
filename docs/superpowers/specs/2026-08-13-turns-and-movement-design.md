@@ -109,7 +109,9 @@ white dice on the table and everyone uses them. The board grows a dice readout w
 
 - two white dice, always
 - **a third slot for the bonus die**, which stays empty on the turns it is not earned and
-  fills on the turns it is
+  fills on the turns it is — but only **after the white movement has been walked**, when
+  the Bonus Roll is actually taken (see "The Bonus Roll is taken after the white
+  movement")
 
 The empty slot is the point: it shows a Freight player what a Superchief gets every turn,
 and it makes the upgrade legible before you buy it rather than after.
@@ -222,21 +224,29 @@ the same thing. Undo is already unlimited within the turn.
 **This is why 18 is not a problem.** The per-tap check is depth-independent, so it makes
 no difference whether the dice on the table total 12 or 18.
 
-### One thing rolling up front does change
+### The Bonus Roll is taken after the white movement, not with it
 
-Under the book, movement is two legs: the white dice, then the Bonus Roll after the
-normal turn ends. Rolling all the dice at once and moving 18 continuously is equivalent
-**only while the pawn does not arrive** — same trip, same destination, same used
-sections.
+*(Amended after playtest. The first draft rolled every die up front and argued the two
+stagings were equivalent while the pawn did not arrive. They are not equivalent to
+**play**: a player who knows the bonus face plans an 18-dot route; a player at the table
+does not know it until the die is thrown, after the normal move. The staging is part of
+the rule.)*
 
-If the destination is reachable within the white roll, the two are *not* equivalent: the
-book stops the pawn dead on arrival, pays the player, has them roll a **new** destination,
-and spends the Bonus Roll starting that new trip — with used sections released. So the
-bonus movement can belong to a different trip entirely.
+A turn with an entitlement is always two legs, in the book's own order:
 
-The engine therefore keeps the two legs distinct even when the dice are shown together:
-a leg ends on arrival, and the bonus leg re-asks for a destination if the first leg
-arrived. What the player sees is one roll; what the rules see is still two moves.
+1. The white dice are rolled and announced. **Entitlement is fixed at that moment** by the
+   doubles rules — but only the entitlement, not the face.
+2. The pawn walks the full white roll (or arrives and stops dead).
+3. If entitled, the player **must** then take the Bonus Roll — a separate roll, separately
+   announced on the third slot. If the first leg arrived, the new destination is rolled
+   first, and the bonus starts the new trip with used sections released; otherwise the
+   bonus leg continues the same trip over the same used sections.
+4. The pawn walks the bonus face. The turn ends after it (or immediately after the white
+   leg when nothing was earned).
+
+The engine records the bonus die as its own event, appended only after its announcement —
+the same gate as every other roll. A turn cannot advance past an untaken entitlement: "if
+entitled, he must take it" is enforced, not offered.
 
 ## Interface
 
