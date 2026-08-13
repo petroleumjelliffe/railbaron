@@ -86,6 +86,32 @@ on the destination. There is no half-committed turn.
 annoyance, not a lost game. If it grates, persisting the draft as screen state is a small
 addition that does not disturb the log.
 
+## Rolling, and what the board shows
+
+There is no dice UI at all today — tapping a baron's row rolls their *destination*. Under
+these rules that is the wrong verb for most turns: you roll a destination only when a
+trip begins, and movement dice every turn in between.
+
+**A destination is rolled once per trip, and only at its start.** Re-rolling mid-trip is
+not a thing the rules allow, and the app must refuse it rather than rely on nobody
+tapping. The guard belongs in the engine, not the screen: a baron with a destination and
+no arrival yet cannot be given another. This is the same shape as the existing rule that a
+seat already awaiting a region choice cannot roll again.
+
+**The dice are shown on the board, once, shared.** Not per row — there is one pair of
+white dice on the table and everyone uses them. The board grows a dice readout with:
+
+- two white dice, always
+- **a third slot for the bonus die**, which stays empty on the turns it is not earned and
+  fills on the turns it is
+
+The empty slot is the point: it shows a Freight player what a Superchief gets every turn,
+and it makes the upgrade legible before you buy it rather than after.
+
+Both are flap fields, like everything else on this board, and land under the same rules
+the roll reveal already follows — the value is not readable until the flaps stop, and the
+gate that holds a roll out of the log until it has been announced applies unchanged.
+
 ## Setup, before anyone moves
 
 The rulebook has an order to this and strict turns make it matter:
@@ -128,6 +154,29 @@ Derived at replay:
 Positions are node ids, not city ids. A baron between cities is the normal case; the
 companion could get away with "which city are you heading for", and this cannot.
 
+### The board and the map must follow the log across tabs
+
+Not captured by the previous draft, and it stops being a nicety here.
+
+Today each tab holds its own `useGame`, reads the stored log once at mount, and never
+looks again. Two tabs — the board on the tablet, the map on a second screen — therefore
+drift apart the moment either acts, and the stale one overwrites the other's work when it
+next writes. It is already a trap in v1.0.1; with committed moves and strict turns it
+becomes a way to lose a game.
+
+The fix is small and belongs in this spec because this spec is what makes it load-bearing:
+listen for the `storage` event, which fires in *other* tabs when a key changes, and
+re-derive state from the reloaded log. Both views already render from replayed state, so
+neither needs to know it happened.
+
+Two consequences worth stating:
+
+- **A follower tab must not act out of turn.** With strict turn order this mostly falls
+  out — only the current baron's controls are live, in whichever tab is showing them.
+- **A draft route is not in the log**, so it does not cross tabs. Route-building happens
+  in the tab that is playing; the other tab watches the committed move play back like any
+  other spectator. That is the right split, and it is the same one Phase 3 will need.
+
 ## The movement engine
 
 Pure, in `engine/`, no React — following the split the project already holds. Its whole
@@ -139,22 +188,49 @@ pairs collapse to a single dot for the pair. Company-switching legality falls ou
 same way — you may change company only at a dot, and a junction is precisely the
 not-a-dot case the rulebook is describing.
 
-### The hard part, named up front
+### Two questions, not one — and only the cheap one runs per tap
 
-A step is legal only if the **remaining movement can still be spent legally from there**.
-The rulebook says so directly: you may not move to a dot that strands you. So offering
-legal taps means searching forward from each candidate, not checking the edge in front of
-you. With the no-reuse constraint this is trail-finding, which is unpleasant in general.
+The first draft of this spec treated every tap as needing a full look-ahead: *can the
+remaining movement still be spent legally from here?* That is exact-length trail-finding,
+it gets rapidly worse with depth, and rolling all the dice up front makes the depth 18
+rather than 12. It would have been the hardest thing in the spec.
 
-Why it should be fine here: most dots are degree two — a line with a dot on it — so the
-branching factor is tiny, and the depth is capped at 12 — the two white dice. The Bonus
-Roll is a *separate* move of up to 6, not an extension of the first, so it never deepens
-the search. A bounded depth-first search with memoisation on (node, remaining, used-set)
-should be comfortable.
+It is also not what the rulebook asks for. There are two separate requirements:
 
-**This gets measured against the real 550-node graph early, not assumed.** If it does
-bite, the fallback is to allow the tap and validate at commit — the player then finds out
-a moment later rather than being prevented, which is worse but not wrong.
+- **Stranding is a rule about reachability.** "If moving to a particular dot would mean
+  that a pawn could not get to its destination city without going over the same rail
+  section twice, then the pawn cannot move to that particular dot." That is: *is the
+  destination still reachable at all, over sections not yet used this trip?* A breadth-
+  first search on the graph minus the used sections answers it, and its cost does not
+  depend on how much movement is left. **This runs on every tap.**
+- **Spending the whole roll is a rule about the finished route.** "A player must always
+  move the full number of dots that he rolls." That is a property of the route the player
+  commits, not of each step along it. **This is enforced at commit** — the commit control
+  stays unavailable until the draft is exactly the full roll or ends on the destination.
+
+So the expensive search does not need to exist. A player can still tap themselves into a
+corner — a terminus with movement left and no unused way out — and when they do, they
+undo, which costs nothing and is exactly what a player at the table does on discovering
+the same thing. Undo is already unlimited within the turn.
+
+**This is why 18 is not a problem.** The per-tap check is depth-independent, so it makes
+no difference whether the dice on the table total 12 or 18.
+
+### One thing rolling up front does change
+
+Under the book, movement is two legs: the white dice, then the Bonus Roll after the
+normal turn ends. Rolling all the dice at once and moving 18 continuously is equivalent
+**only while the pawn does not arrive** — same trip, same destination, same used
+sections.
+
+If the destination is reachable within the white roll, the two are *not* equivalent: the
+book stops the pawn dead on arrival, pays the player, has them roll a **new** destination,
+and spends the Bonus Roll starting that new trip — with used sections released. So the
+bonus movement can belong to a different trip entirely.
+
+The engine therefore keeps the two legs distinct even when the dice are shown together:
+a leg ends on arrival, and the bonus leg re-asks for a destination if the first leg
+arrived. What the player sees is one roll; what the rules see is still two moves.
 
 ## Interface
 
@@ -176,14 +252,40 @@ be unambiguous. Undo takes back the last turn if someone acts for the wrong baro
 `engine/` is pure, so it tests directly, and the dice are injected exactly as they are
 today — a whole turn can be scripted.
 
-- the cost model, including **both** twin pairs and a junction costing nothing
-- no-reuse held **across turns** within one trip, and released on arrival
-- company switching allowed at a dot, refused at a junction
-- the stranding rule: a step that would trap the pawn is not offered
+### Golden games — the rules spec, stored as data
+
+Borrowed from `acquire-startups-m1`, which holds seventeen of them in `engine/golden/`
+and calls them the executable rules spec. The shape there is worth copying closely: a
+`setup` fixture, then a list of steps, each carrying an intent plus the state it must
+produce — **or the rejection code it must produce**, with the state unchanged. A runner
+replays them against the engine.
+
+It fits Rail Baron's Phase 4 better than it fits Acquire, because these rules are mostly
+edge cases and every one of them is awkward to reach by playing normally:
+
+| Golden game | What it pins |
+|---|---|
+| a trip that re-crosses its own dots by a different line | no-reuse is per *section*, not per dot |
+| a trip that spans several turns | used sections survive turns and release on arrival |
+| a route through a junction | company may not change except at a dot |
+| a route through each twin pair | the pair costs one dot, both pairs |
+| a step that would strand the pawn | offered as illegal, state unchanged |
+| a roll that arrives with movement to spare | stops dead, remainder lost |
+| double six on Freight, any double on Express, every turn on Superchief | the bonus die, and never twice |
+| arriving on the white dice, then a bonus leg | a *new* destination and released sections |
+| two barons rolling the same home city | the reroll, and no duplicates |
+
+Acquire also seeds dev-only routes from its golden games so any state is two clicks away
+in a browser, and guards the data out of the production bundle with a `check:bundle`
+script. Both are worth having here for the same reason — these states are otherwise
+twenty minutes of tapping away — but they are a follow-on, not part of this spec.
+
+### The rest
+
+- the cost model, including a junction costing nothing
 - "must spend the whole roll" — a route short of the roll is not committable
-- the bonus die earned by each train, and never twice in a turn
-- home cities never collide
-- a **performance test of the look-ahead against the real graph**, not a toy one
+- a destination cannot be re-rolled mid-trip
+- the `storage` event bringing a second tab into line, which jsdom can fire
 
 The house rule stands: prove a new test can fail by breaking the code and reading real
 output, never by reading the assertion.
@@ -197,3 +299,6 @@ output, never by reading the assertion.
 - **A roll is not told until the board has finished announcing it** — the gate built into
   `useGame.roll`/`commitRoll`. Movement adds a second thing worth announcing and must not
   reintroduce the leak.
+- **The map's own invariants**: one lamp per real dot at its real place, and the two
+  separated twin pairs staying two lamps. Movement makes them tappable; it must not make
+  them move.
