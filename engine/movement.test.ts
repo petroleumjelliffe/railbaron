@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { neighbours, nodeForCity, sectionKey } from './network';
-import { canReach, pathCost, sectionsLeft, stepCost, useSection } from './movement';
+import {
+  canReach, legalSteps, pathCost, sectionsLeft, stepCost, stepTo, useSection, type Trip
+} from './movement';
 
 const MINNEAPOLIS = nodeForCity(43);
 const ST_PAUL = nodeForCity(47);
@@ -73,5 +75,77 @@ describe('whether the destination can still be reached', () => {
   it('still says yes with the spur partly spent', () => {
     const used = new Map([[sectionKey(MINNEAPOLIS, ST_PAUL), 3]]);
     expect(canReach(ST_PAUL, DALLAS, used)).toBe(true);
+  });
+});
+
+const trip = (over: Partial<Trip>): Trip => ({
+  from: 'c13', destination: DALLAS, remaining: 6, used: new Map(), ride: null, ...over
+});
+
+describe('a single candidate step', () => {
+  it('refuses a node that is not next door', () => {
+    expect(stepTo(trip({}), DALLAS)).toBe('not-a-neighbour');
+  });
+
+  it('refuses a section whose every railroad has been ridden', () => {
+    const used = new Map([[sectionKey(MINNEAPOLIS, ST_PAUL), 4]]);
+    expect(stepTo(trip({ from: MINNEAPOLIS, used }), ST_PAUL)).toBe('section-used');
+  });
+
+  it('refuses a step that costs more than is left', () => {
+    expect(stepTo(trip({ remaining: 0 }), 'd66')).toBe('no-movement-left');
+  });
+
+  it('allows a free step with nothing left, because it costs no dots', () => {
+    const step = stepTo(trip({ from: MINNEAPOLIS, destination: DALLAS, remaining: 0 }), ST_PAUL);
+    expect(step).toEqual({ to: ST_PAUL, cost: 0, ride: expect.any(Array) });
+  });
+
+  it('refuses every step once the destination is underfoot', () => {
+    expect(stepTo(trip({ from: DALLAS, destination: DALLAS }), FORT_WORTH))
+      .toBe('already-arrived');
+    expect(legalSteps(trip({ from: DALLAS, destination: DALLAS }))).toEqual([]);
+  });
+
+  it('refuses a step that would strand the pawn', () => {
+    // Standing on Minneapolis with St. Paul as the destination, three of the
+    // spur's four railroads already ridden: stepping away and back is legal,
+    // but a step that used the last one would leave no way in.
+    const used = new Map([[sectionKey(MINNEAPOLIS, ST_PAUL), 4]]);
+    expect(stepTo(trip({ from: MINNEAPOLIS, destination: ST_PAUL, used }), 'd66'))
+      .toBe('would-strand');
+  });
+
+  it('reports which companies the step could have ridden', () => {
+    const step = stepTo(trip({ from: MINNEAPOLIS, destination: DALLAS }), ST_PAUL);
+    expect(step).not.toBe('section-used');
+    expect((step as { ride: readonly string[] }).ride).toEqual(
+      expect.arrayContaining(['C&NW', 'CMStP&P', 'NP', 'GN'])
+    );
+  });
+});
+
+describe('changing company', () => {
+  it('lets any company be boarded at a dot', () => {
+    expect(trip({ ride: null }).ride).toBeNull();
+    const steps = legalSteps(trip({ from: MINNEAPOLIS, ride: null }));
+    expect(steps.length).toBeGreaterThan(1);
+  });
+
+  it('refuses a step onto a line the current run cannot be riding', () => {
+    const step = stepTo(trip({ from: MINNEAPOLIS, ride: ['NOT-A-REAL-LINE'] }), ST_PAUL);
+    expect(step).toBe('wrong-company');
+  });
+});
+
+describe('every legal step from here', () => {
+  it('is the candidates that were not refused', () => {
+    const here = trip({ from: MINNEAPOLIS });
+    const all = neighbours(MINNEAPOLIS).map(e => (e.a === MINNEAPOLIS ? e.b : e.a));
+    const legal = legalSteps(here).map(s => s.to);
+    for (const to of all) {
+      const one = stepTo(here, to);
+      expect(legal.includes(to)).toBe(typeof one !== 'string');
+    }
   });
 });

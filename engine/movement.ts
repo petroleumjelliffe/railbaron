@@ -2,6 +2,7 @@ import {
   isTwinStep, neighbours, nodeById, sectionKey,
   type NetworkEdge, type NodeId
 } from './network';
+import type { RailroadId } from './network';
 
 /**
  * What one step costs, in dots.
@@ -87,4 +88,81 @@ export function canReach(
     }
   }
   return false;
+}
+
+/** Why a candidate step was refused. Every one of these is a rulebook rule. */
+export type Rejection =
+  | 'not-a-neighbour'
+  | 'section-used'
+  | 'wrong-company'
+  | 'no-movement-left'
+  | 'would-strand'
+  | 'already-arrived';
+
+export const isRejection = (value: unknown): value is Rejection => typeof value === 'string';
+
+export interface Trip {
+  from: NodeId;
+  destination: NodeId;
+  /** Dots still unspent this leg. */
+  remaining: number;
+  used: ReadonlyMap<string, number>;
+  /**
+   * The companies still consistent with the run since the last dot, or null
+   * when standing on one.
+   *
+   * "A player may change rail lines any number of times, but he can change
+   * rail lines only at a dot." An edge may carry several companies, so a run
+   * across a junction does not name one company — it narrows a set. Null at a
+   * dot means any line may be boarded; a set means the run must stay inside it
+   * until the next dot, and an empty intersection is the company change the
+   * book forbids.
+   */
+  ride: readonly RailroadId[] | null;
+}
+
+export interface Step {
+  to: NodeId;
+  cost: number;
+  /** The companies this step could have ridden. */
+  ride: readonly RailroadId[];
+}
+
+export function stepTo(trip: Trip, to: NodeId): Step | Rejection {
+  // "As soon as his pawn reaches its destination city, it must stop
+  // immediately — any extra movement is just lost."
+  if (trip.from === trip.destination) return 'already-arrived';
+
+  const edge = neighbours(trip.from).find(one => one.a === to || one.b === to);
+  if (!edge) return 'not-a-neighbour';
+  if (sectionsLeft(edge, trip.used) <= 0) return 'section-used';
+
+  const ride = trip.ride === null
+    ? edge.railroads
+    : edge.railroads.filter(id => trip.ride!.includes(id));
+  if (ride.length === 0) return 'wrong-company';
+
+  const cost = stepCost(trip.from, to);
+  if (cost > trip.remaining) return 'no-movement-left';
+
+  if (to !== trip.destination && !canReach(to, trip.destination, useSection(trip.used, trip.from, to))) {
+    return 'would-strand';
+  }
+
+  return { to, cost, ride: [...ride] };
+}
+
+/**
+ * No early return on `remaining === 0`: a free step is still legal with
+ * nothing left, which is how a pawn that has spent its whole roll crosses
+ * into the other half of a twin pair or off a junction onto a dot.
+ */
+export function legalSteps(trip: Trip): Step[] {
+  const out: Step[] = [];
+  for (const edge of neighbours(trip.from)) {
+    const to = edge.a === trip.from ? edge.b : edge.a;
+    const step = stepTo(trip, to);
+    if (!isRejection(step)) out.push(step);
+  }
+  return out;
 }
