@@ -9,3 +9,9 @@ export {
   neighbours, nodeById, nodeForCity, sectionKey
 } from './network';
 export type { NetworkEdge, NetworkNode, NodeId, NodeKind, Railroad, RailroadId } from './network';
+export { bonusLegOwed, d6, earnsBonus, movement, rollTurn } from './dice';
+export type { TrainType, TurnRoll } from './dice';
+export {
+  canReach, isRejection, legalSteps, pathCost, sectionsLeft, stepCost, stepTo, useSection
+} from './movement';
+export type { Rejection, Step, Trip } from './movement';

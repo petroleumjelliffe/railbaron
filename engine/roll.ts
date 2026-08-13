@@ -18,17 +18,29 @@ export interface Arrival {
  * A baron's first roll is their home town and pays nothing. After that, a
  * roll that names the region they are already in hands the choice to the
  * player instead of picking a city.
+ *
+ * `taken` is the home cities other barons already hold. "If two players roll
+ * the same home city, the second player must roll again — no players can have
+ * the same home city." The book says to roll again for region *and* city, so
+ * this rerolls the whole destination rather than picking another city inside
+ * the region it first named. It applies only to the home roll: two barons may
+ * perfectly well be heading for the same place.
  */
-export function rollDestination(from: CityId | null, rng: Rng): RollOutcome {
-  const region = rollRegion(rng);
-
+export function rollDestination(
+  from: CityId | null, rng: Rng, taken: ReadonlySet<CityId> = new Set()
+): RollOutcome {
   if (from === null) {
-    return { kind: 'home', city: rollCityIn(region, rng), region };
+    let guard = 0;
+    for (;;) {
+      const region = rollRegion(rng);
+      const city = rollCityIn(region, rng);
+      if (!taken.has(city)) return { kind: 'home', city, region };
+      if (++guard > 200) throw new Error('every home city is taken');
+    }
   }
 
-  if (region === cityById(from).region) {
-    return { kind: 'chooseRegion', rolled: region };
-  }
+  const region = rollRegion(rng);
+  if (region === cityById(from).region) return { kind: 'chooseRegion', rolled: region };
 
   const { city, payout } = destinationInRegion(from, region, rng);
   return { kind: 'arrived', city, region, payout };

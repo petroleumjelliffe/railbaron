@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { destinationInRegion, rollDestination } from './roll';
 import { CITIES, cityById } from './cities';
-import type { Rng } from './types';
+import type { CityId, Rng } from './types';
 
 const scripted = (...values: number[]): Rng => {
   let i = 0;
@@ -72,5 +72,28 @@ describe('choosing a region after a repeat roll', () => {
     expect(cityById(result.city).region).toBe('SW');
     expect(result.region).toBe('SW');
     expect(result.payout).toBeGreaterThan(0);
+  });
+});
+
+describe('rolling a home city', () => {
+  it('never lands on a home city another baron already holds', () => {
+    const taken = new Set<CityId>();
+    for (let baron = 0; baron < 6; baron++) {
+      const outcome = rollDestination(null, Math.random, taken);
+      expect(outcome.kind).toBe('home');
+      const city = (outcome as { city: CityId }).city;
+      expect(taken.has(city)).toBe(false);
+      taken.add(city);
+    }
+    expect(taken.size).toBe(6);
+  });
+
+  it('takes the first roll when nothing is taken', () => {
+    expect(rollDestination(null, () => 0, new Set())).toEqual(rollDestination(null, () => 0));
+  });
+
+  it('gives up rather than spinning for ever when every city is taken', () => {
+    const everywhere = new Set(CITIES.map(city => city.id));
+    expect(() => rollDestination(null, Math.random, everywhere)).toThrow(/home city/);
   });
 });
