@@ -8,7 +8,7 @@ import type { SeatId } from '../state/events';
  * destination would cost more than this note does.
  */
 export type ScreenId =
-  | 'home' | 'passAndPlay' | 'saved' | 'confirm' | 'play' | 'regionBallot' | 'map';
+  | 'home' | 'passAndPlay' | 'saved' | 'confirm' | 'play' | 'regionBallot' | 'homes' | 'map';
 
 /** What an editable row is editing. Seat names today. */
 export type FieldId = `seat:${SeatId}`;
@@ -17,6 +17,9 @@ export type RowAction =
   | { kind: 'navigate'; to: ScreenId }
   | { kind: 'edit'; field: FieldId; placeholder: string }
   | { kind: 'act'; seat: SeatId }
+  /** Roll for who goes first. One row, once per game, so it carries no payload. */
+  | { kind: 'order' }
+  | { kind: 'undo' }
   | null;
 
 /**

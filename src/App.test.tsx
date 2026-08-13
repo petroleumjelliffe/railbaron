@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { StrictMode } from 'react';
@@ -116,6 +116,10 @@ describe('asking for the game board when there is no game', () => {
     ]);
     at('/pass-and-play/game');
     expect(screen.getByRole('button', { name: /pete/i })).toBeInTheDocument();
+    // A `started` game with no home cities rolled yet lands in the homes
+    // phase, not straight into play — the sub-header is how the two screens
+    // are told apart, since both show a PETE row.
+    expect(screen.getByText(/home cities/i)).toBeInTheDocument();
   });
 });
 
@@ -142,18 +146,27 @@ describe('the full ballot path', () => {
     seed([
       { type: 'joined', seat: 'red', name: 'PETE' },
       { type: 'joined', seat: 'blue', name: 'ALEX' },
-      { type: 'started' }
+      { type: 'started' },
+      // ALEX's home and the roll for first are seeded directly rather than
+      // played through — this test is about PETE's roll, and giving ALEX a
+      // home this way spends none of the scripted rng draws below, which are
+      // accounted for down to the triple.
+      { type: 'arrived', seat: 'blue', city: 20, region: 'NC', payout: null },
+      { type: 'orderRolled', seat: 'red', first: 'red' }
     ]);
     at('/pass-and-play/game', rng);
 
     // Roll #1: the home town.
-    await userEvent.click(screen.getByRole('button', { name: /pete/i }));
+    const peteRow = screen.getByRole('button', { name: /pete/i });
+    await userEvent.click(peteRow);
     // Even snapped, the roll is told before it is logged, so this waits for
     // the board to finish rather than reading it on the same tick as the tap.
     expect(await screen.findByText('Los Angeles')).toBeInTheDocument();
     // The note lands with the payout, at the end of the reveal, so this waits
-    // rather than reading the board the instant it was tapped.
-    expect(await screen.findByText('Home', { ignore: HIDDEN }, { timeout: 5000 }))
+    // rather than reading the board the instant it was tapped. Scoped to
+    // PETE's own row: ALEX's seeded home carries the same HOME note on
+    // theirs, so an unscoped query would be ambiguous between the two.
+    expect(await within(peteRow).findByText('Home', { ignore: HIDDEN }, { timeout: 5000 }))
       .toBeInTheDocument();
 
     // Roll #2: names the seat's own region, so the ballot takes over the
@@ -250,7 +263,12 @@ describe('holding a roll back until the board has told it', () => {
     seed([
       { type: 'joined', seat: 'red', name: 'PETE' },
       { type: 'joined', seat: 'blue', name: 'ALEX' },
-      { type: 'started' }
+      { type: 'started' },
+      // Seeded directly, same as the ballot walk-through above: this test is
+      // about PETE's roll being held back, not about ALEX or turn order, and
+      // seeding costs none of the scripted rng draws below.
+      { type: 'arrived', seat: 'blue', city: 20, region: 'NC', payout: null },
+      { type: 'orderRolled', seat: 'red', first: 'red' }
     ]);
     at('/pass-and-play/game', scripted());
   };

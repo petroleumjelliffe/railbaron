@@ -1,6 +1,7 @@
-import { cityById, regionById, REGIONS, type RegionId } from '../../../engine';
+import { cityById, nodeForCity, regionById, REGIONS, type RegionId } from '../../../engine';
 import { SEATS, type SeatId } from '../../state/events';
 import type { GameState } from '../../state/game';
+import { needsDestination } from '../../state/turns';
 import { SEAT_COLORS } from '../../game/tokens';
 import { blankRow, BOARD_ROWS, padRows, type Row, type ScreenDef } from '../types';
 
@@ -39,10 +40,23 @@ export function play(
         showDollar: true,
         right: latest !== undefined && latest.payout === null ? 'Home' : '',
         chip: SEAT_COLORS[seat.id],
-        tone: 'normal',
-        action: { kind: 'act', seat: seat.id }
+        // Only the baron whose turn it is can act, and only to start a trip:
+        // the dice are rolled from the board's own readout and the pawn is
+        // walked on the map, so a row with a destination has nothing to offer.
+        tone: state.turn === null || state.turn === seat.id ? 'normal' : 'dim',
+        action: state.turn === seat.id && needsDestination(seat, nodeForCity)
+          ? { kind: 'act', seat: seat.id }
+          : (state.turn === null ? { kind: 'act', seat: seat.id } : null)
       };
     });
+
+  // Its own row: a row carries one action, so undo cannot ride on the map
+  // row. The board is seven rows, always — with six barons seated there is
+  // no spare and this is left off rather than the board growing.
+  if (state.phase === 'playing' && rows.length < BOARD_ROWS - 1) {
+    rows.push({ ...blankRow(), label: 'Undo', text: 'Take back a turn',
+                tone: 'dim', action: { kind: 'undo' } });
+  }
 
   // Seven rows, six barons: the last is always free, and the map takes it.
   // Padding to the row above first pins it to the bottom of the board, so it

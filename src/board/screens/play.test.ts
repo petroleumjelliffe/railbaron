@@ -85,3 +85,55 @@ describe('the in-play board', () => {
     expect(rows(zero)[0]!.showDollar).toBe(true);
   });
 });
+
+describe('strict turn order', () => {
+  const playing: GameEvent[] = [
+    { type: 'joined', seat: 'red', name: 'ADA' },
+    { type: 'joined', seat: 'green', name: 'GRACE' },
+    { type: 'started' },
+    { type: 'arrived', seat: 'red', city: 43, region: 'PL', payout: null },
+    { type: 'arrived', seat: 'green', city: 47, region: 'PL', payout: null },
+    { type: 'orderRolled', seat: 'red', first: 'green' }
+  ];
+
+  it('offers the roll only to the baron whose turn it is', () => {
+    const rows = play(replay(playing)).rows;
+    // green is first, and sits in the second row: seating order is unchanged.
+    expect(rows[0]!.action).toBeNull();
+    expect(rows[1]!.action).toEqual({ kind: 'act', seat: 'green' });
+  });
+
+  it('dims every baron who is not up', () => {
+    const rows = play(replay(playing)).rows;
+    expect(rows[0]!.tone).toBe('dim');
+    expect(rows[1]!.tone).toBe('normal');
+  });
+
+  it('offers nothing once the destination is rolled — movement is on the map', () => {
+    const rows = play(replay([...playing,
+      { type: 'arrived', seat: 'green', city: 43, region: 'PL', payout: 0 }])).rows;
+    expect(rows[1]!.action).toBeNull();
+  });
+
+  it('offers undo once anything has happened this game', () => {
+    const rows = play(replay(playing)).rows;
+    expect(rows.some(row => row.action?.kind === 'undo')).toBe(true);
+  });
+
+  it('offers no undo before the game has started', () => {
+    const rows = play(replay(playing.slice(0, 2))).rows;
+    expect(rows.some(row => row.action?.kind === 'undo')).toBe(false);
+  });
+
+  it('leaves undo off a full board rather than growing past seven rows', () => {
+    const full: GameEvent[] = [
+      ...(['red', 'green', 'blue', 'yellow', 'black', 'white'] as const)
+        .map(seat => ({ type: 'joined', seat, name: seat.toUpperCase() }) as GameEvent),
+      { type: 'started' },
+      { type: 'orderRolled', seat: 'red', first: 'red' }
+    ];
+    const screen = play(replay(full));
+    expect(screen.rows).toHaveLength(7);
+    expect(screen.rows.some(row => row.action?.kind === 'undo')).toBe(false);
+  });
+});

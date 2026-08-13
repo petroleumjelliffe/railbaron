@@ -8,6 +8,7 @@ import { saved } from './board/screens/saved';
 import { confirm } from './board/screens/confirm';
 import { play } from './board/screens/play';
 import { regionBallot } from './board/screens/regionBallot';
+import { homes } from './board/screens/homes';
 import type { Row, ScreenDef } from './board/types';
 
 /**
@@ -54,7 +55,8 @@ const regionOf = (outcome: RollOutcome): RegionId =>
 export default function App({ rng }: AppProps = {}) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  const { state, savedAt, roll, commitRoll, chooseRegion, rename, start, reset } = useGame(rng);
+  const { state, savedAt, roll, commitRoll, chooseRegion, rename, start,
+          rollOrder, undoLast, reset } = useGame(rng);
   const [editing, setEditing] = useState<{ seat: SeatId; placeholder: string } | null>(null);
   const [confirming, setConfirming] = useState(false);
   /**
@@ -72,7 +74,7 @@ export default function App({ rng }: AppProps = {}) {
 
   if (!isKnown(pathname)) return <Navigate to="/" replace />;
 
-  const resuming = state.phase === 'playing';
+  const resuming = state.phase !== 'setup';
 
   // A stale bookmark or a typed URL can ask for the game board when there
   // is no game. Rendering it anyway gives a board of seven blank rows with
@@ -120,9 +122,11 @@ export default function App({ rng }: AppProps = {}) {
     '/pass-and-play': passAndPlayScreen(),
     // The ballot cannot appear early: `awaiting` comes from the log, and a
     // roll only reaches the log once its region has landed.
-    '/pass-and-play/game': awaiting
-      ? regionBallot(awaiting)
-      : play(state, turns, rolling && { seat: rolling.seat, region: regionOf(rolling.outcome) })
+    '/pass-and-play/game': state.phase === 'homes'
+      ? homes(state, rolling && { seat: rolling.seat, region: regionOf(rolling.outcome) })
+      : awaiting
+        ? regionBallot(awaiting)
+        : play(state, turns, rolling && { seat: rolling.seat, region: regionOf(rolling.outcome) })
   };
 
   const onRowAct = (row: Row, index: number) => {
@@ -151,6 +155,10 @@ export default function App({ rng }: AppProps = {}) {
       });
       return;
     }
+
+    if (row.action.kind === 'order') { rollOrder(); return; }
+
+    if (row.action.kind === 'undo') { undoLast(); return; }
 
     if (row.action.kind !== 'navigate') return;
     switch (row.action.to) {
