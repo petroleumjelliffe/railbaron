@@ -1,17 +1,8 @@
 import { geoAlbers, geoPath, type GeoPermissibleObjects } from 'd3-geo';
-import network from '../data/network.json';
+import { EDGES, NODES, RAILROADS as LINES } from '../../engine';
 import outline from '../data/us-outline.json';
 
 export type NodeKind = 'city' | 'dot' | 'junction';
-
-export interface NetworkNode {
-  id: string;
-  kind: string;
-  lat: number;
-  lon: number;
-  name?: string;
-  cityId?: number;
-}
 
 export interface Placed {
   id: string;
@@ -30,7 +21,7 @@ export interface Layout {
   landPath: string;
   nodes: Placed[];
   byId: Map<string, Placed>;
-  edges: readonly { a: string; b: string; railroads: string[] }[];
+  edges: readonly { a: string; b: string; railroads: readonly string[] }[];
 }
 
 /**
@@ -92,7 +83,7 @@ export function layout(width: number, height: number, inset = 74): Layout {
   const landPath = geoPath(projection)(land) ?? '';
 
   const nodes: Placed[] = [];
-  for (const node of network.nodes as NetworkNode[]) {
+  for (const node of NODES) {
     const point = projection([node.lon, node.lat]);
     if (!point || !isKind(node.kind)) continue;
     nodes.push({
@@ -112,9 +103,10 @@ export function layout(width: number, height: number, inset = 74): Layout {
     landPath,
     nodes,
     byId: new Map(nodes.map(n => [n.id, n])),
-    edges: network.edges
+    edges: EDGES
   };
 }
 
-/** Railroad records, keyed by the id the edges carry. */
-export const RAILROADS = new Map(network.railroads.map(r => [r.id, r]));
+/** Railroad records, keyed by the id the edges carry. Re-exported so the map
+ *  has one import for the network rather than two. */
+export const RAILROADS = LINES;
