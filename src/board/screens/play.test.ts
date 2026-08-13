@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { REGIONS } from '../../../engine';
 import { play } from './play';
 import { replay } from '../../state/game';
 import { SEATS, type GameEvent } from '../../state/events';
@@ -33,6 +34,14 @@ describe('the in-play board', () => {
     expect(rows(full)).toHaveLength(BOARD_ROWS);
     expect(rows(full)[last]!.action).toEqual({ kind: 'navigate', to: 'map' });
     expect(rows(full)[last - 1]!.label).toBe('B5');
+  });
+
+  it('declares every region as the panel vocabulary, whoever is on the board', () => {
+    // Not derived from the rows: on the first roll of a game there is one
+    // region on the board at most, and a panel that can only turn through
+    // what is already showing announces the answer instead of withholding it.
+    const declared = play(replay(log)).panel;
+    expect(declared).toEqual(REGIONS.map(region => region.name));
   });
 
   it('makes a baron row roll when tapped', () => {

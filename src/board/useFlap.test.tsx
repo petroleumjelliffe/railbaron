@@ -23,9 +23,10 @@ function setReducedMotion(reduced: boolean) {
  * hook a stable reference that the real caller never has, and would hide
  * exactly the bug the "keeps spinning" test is here to catch.
  */
-function Probe({ text, status = '', amount = '' }:
-  { text: string; status?: string; amount?: string }) {
-  const { rows, settled, flapping, snap } = useFlap([{ status, text, amount, turn: 0 }]);
+function Probe({ text, status = '', amount = '', panel }:
+  { text: string; status?: string; amount?: string; panel?: string[] }) {
+  const { rows, settled, flapping, snap } =
+    useFlap([{ status, text, amount, turn: 0 }], panel);
   const column = (faces: { top: string }[]) =>
     faces.map(face => face.top).join('').trimEnd();
   return (
@@ -89,6 +90,23 @@ describe('the flap hook', () => {
     act(() => { vi.advanceTimersByTime(52 * 3); });
     expect(row0()).toBe('D');            // still moving, three ticks in
     expect(flapping()).toBe('true');
+  });
+
+  it('turns the panel through the vocabulary its screen declares', () => {
+    // The screen names what the panel may say; the rows only say what they
+    // are saying now. A panel built from the rows alone has nothing to turn
+    // through on the first roll of a game, when no region is on the board.
+    const panel = ['Northeast', 'Southeast', 'North Central', 'Plains'];
+    const { rerender } = render(<Probe text="DENVER" status="" panel={panel} />);
+    rerender(<Probe text="DENVER" status="Plains" panel={panel} />);
+
+    const seen = new Set<string>();
+    for (let tick = 0; tick < 40; tick++) {
+      seen.add(status0()!);
+      act(() => { vi.advanceTimersByTime(52); });
+    }
+    expect(seen).toContain('Southeast');   // on neither row, yet it goes past
+    expect(status0()).toBe('Plains');
   });
 
   it('snaps instantly and never spins when reduced motion is asked for', () => {

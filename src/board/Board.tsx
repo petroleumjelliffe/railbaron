@@ -31,7 +31,7 @@ export function Board({
       ({ status: row.status, text: row.text, amount: row.amount, turn: row.turn ?? 0 })),
     [rows]
   );
-  const { rows: faces, settled, flapping, snap } = useFlap(texts);
+  const { rows: faces, settled, flapping, snap } = useFlap(texts, screen.panel);
 
   // Reported from an effect rather than during render: the caller's handler
   // appends to the event log, and a render that writes state is a render that

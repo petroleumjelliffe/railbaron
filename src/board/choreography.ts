@@ -23,12 +23,22 @@ export interface RowDrums {
 export const AMOUNT_WIDTH = 6;
 
 /**
- * A panel with nothing to change to still turns a full lap, so that a baron
- * rolling the region they are already in sees the same flip as one who
- * rolled a new region. A panel that sat still would answer the question
- * before the city had finished asking it.
+ * How many complete revolutions of its ring a panel turns before it is
+ * allowed to land.
+ *
+ * Whole revolutions rather than a count of ticks, because the ring is a
+ * different size on each screen — seven regions in play, ROLLED and CHOOSE on
+ * the ballot — and a fixed count would be two laps of one and a fraction of
+ * the other. Two, because one shows each region for a single tick and stops,
+ * which reads as a panel arriving rather than one being spun: the region
+ * rolled has to go past and be passed over before it is landed on.
+ *
+ * It is also why a panel with nothing to change to still turns. A baron
+ * rolling the region they are already in sees the same flip as one who rolled
+ * a new region; a panel that sat still would answer the question before the
+ * city had finished asking it.
  */
-const PANEL_LAP = 8;
+const PANEL_LAPS = 2;
 
 /**
  * Ticks between one column landing and the next.
@@ -70,7 +80,9 @@ export function rowDrums(
   // nothing to say yet, and turn when the roll is finally told.
   const status = panelDrum(
     from.status, to.status, panelFaces,
-    (announcing || from.status !== to.status) && to.status !== '' ? PANEL_LAP : 0
+    (announcing || from.status !== to.status) && to.status !== ''
+      ? PANEL_LAPS * panelFaces.length
+      : 0
   );
 
   const statusFor = duration(status);
@@ -94,17 +106,28 @@ export function rowDrums(
 }
 
 /**
- * What the status panel can flip through: a blank, then every value on the
- * board before and after the change.
+ * What the status panel can flip through: a blank, then whatever vocabulary
+ * the screen declares, then every value actually on the board before and
+ * after the change.
  *
- * Derived rather than declared because the column means something different
- * on each screen — regions in play, ROLLED/CHOOSE on the ballot — and a
- * hardcoded list would land a panel on a blank the first time a screen used
- * a word that was not in it. Each drum freezes its own copy when built, so a
- * later change to the board cannot renumber a flip already under way.
+ * Both halves are needed, and for opposite reasons. The declared half is what
+ * makes the panel suspenseful: the values on the board are only the ones
+ * already known, and on the first roll of a game that is a blank and the
+ * region just rolled — a ring of two, which shows the answer the moment it
+ * starts turning. The derived half is the safety net, because the column
+ * means something different on each screen — regions in play, ROLLED/CHOOSE
+ * on the ballot, nothing at all during setup — and a panel asked to land on a
+ * value its ring does not carry lands on the blank instead.
+ *
+ * Each drum freezes its own copy when built, so a later change to the board
+ * cannot renumber a flip already under way.
  */
-export function panelFaces(from: readonly RowText[], to: readonly RowText[]): string[] {
-  const seen = new Set<string>(['']);
+export function panelFaces(
+  from: readonly RowText[],
+  to: readonly RowText[],
+  declared: readonly string[] = []
+): string[] {
+  const seen = new Set<string>(['', ...declared]);
   for (const row of [...from, ...to]) seen.add(row.status);
   return [...seen];
 }

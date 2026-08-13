@@ -1,4 +1,4 @@
-import { cityById, regionById, type RegionId } from '../../../engine';
+import { cityById, regionById, REGIONS, type RegionId } from '../../../engine';
 import { SEATS, type SeatId } from '../../state/events';
 import type { GameState } from '../../state/game';
 import { SEAT_COLORS } from '../../game/tokens';
@@ -62,6 +62,11 @@ export function play(
     sub: 'IN PLAY',
     back: 'home',
     cols: ['Baron', 'Region', 'Destination', 'Payout', ''],
-    rows: withMap
+    rows: withMap,
+    // Every region a roll could name, not the few already on the board. The
+    // first roll of a game is the case that needs it: nothing is showing yet,
+    // so a panel built from the rows would have the answer and a blank to
+    // turn between.
+    panel: REGIONS.map(region => region.name)
   };
 }

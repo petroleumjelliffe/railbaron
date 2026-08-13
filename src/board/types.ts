@@ -57,6 +57,17 @@ export interface ScreenDef {
   back: ScreenId | null;
   cols: [string, string, string, string, string];
   rows: Row[];
+  /**
+   * Everything this screen's status panel is allowed to say, whether or not a
+   * row is saying it. The panel turns through this on its way to the value it
+   * lands on, which is what makes a roll suspenseful rather than announced:
+   * without it the ring holds only the values already on the board, and the
+   * first roll of a game has none.
+   *
+   * Optional because a screen whose panel never turns has no vocabulary to
+   * declare — the values on its rows are the whole of it.
+   */
+  panel?: readonly string[];
 }
 
 /** The board is this many rows on every screen, without exception. */
