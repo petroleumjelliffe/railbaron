@@ -1,18 +1,26 @@
 import { useEffect, useRef, useState } from 'react';
 import type { TurnRoll } from '../../engine';
-import { BONUS_FACES, COLORS, DICE_MS, DIE, WHITE_FACES, dieTurn, pipCells } from './dice';
+import { BONUS_BEAT_TICKS, BONUS_FACES, COLORS, DICE_MS, DIE, WHITE_FACES, dieTurn, pipCells } from './dice';
 
-/** One drum: the face showing, the face still falling away, and ticks left. */
-interface Drum { cur: number; prev: number; left: number; faces: number; }
+/**
+ * One drum: the face showing, the face still falling away, ticks left to
+ * spin, and ticks left to wait before it may spin at all. `wait` is how the
+ * bonus drum holds still while the whites are still turning, and then for
+ * its own beat afterward — a drum with `wait > 0` renders unchanged and does
+ * not count as stopped, whatever `left` says.
+ */
+interface Drum { cur: number; prev: number; left: number; wait: number; faces: number; }
 
-const rest = (faces: number): Drum => ({ cur: 0, prev: 0, left: 0, faces });
+const rest = (faces: number): Drum => ({ cur: 0, prev: 0, left: 0, wait: 0, faces });
 
-const tick = (drum: Drum): Drum =>
-  drum.left <= 0
-    ? (drum.prev === drum.cur ? drum : { ...drum, prev: drum.cur })
-    : { ...drum, cur: (drum.cur + 1) % drum.faces, prev: drum.cur, left: drum.left - 1 };
+const tick = (drum: Drum): Drum => {
+  if (drum.wait > 0) return { ...drum, wait: drum.wait - 1 };
+  if (drum.left <= 0) return drum.prev === drum.cur ? drum : { ...drum, prev: drum.cur };
+  return { ...drum, cur: (drum.cur + 1) % drum.faces, prev: drum.cur, left: drum.left - 1 };
+};
 
-const stopped = (drum: Drum): boolean => drum.left <= 0 && drum.prev === drum.cur;
+const stopped = (drum: Drum): boolean =>
+  drum.wait <= 0 && drum.left <= 0 && drum.prev === drum.cur;
 
 export interface DiceReadoutProps {
   /** The dice of the turn under way, or null when none has been rolled. */
@@ -63,14 +71,28 @@ export function DiceReadout({ roll, live, onRoll, onLanded }: DiceReadoutProps) 
     if (timer.current !== null) { clearInterval(timer.current); timer.current = null; }
     if (roll === null) return;
 
-    setDrums(current => [
-      { ...current[0], left: dieTurn(current[0].cur, roll.white[0] - 1, WHITE_FACES, true) },
-      { ...current[1], left: dieTurn(current[1].cur, roll.white[1] - 1, WHITE_FACES, true) },
-      // The bonus drum laps only when it is showing something: falling round
-      // to the blank should look like the die being put away, not thrown.
-      { ...current[2],
-        left: dieTurn(current[2].cur, roll.bonus ?? 0, BONUS_FACES, roll.bonus !== null) }
-    ]);
+    setDrums(current => {
+      const whiteLeft0 = dieTurn(current[0].cur, roll.white[0] - 1, WHITE_FACES, true);
+      const whiteLeft1 = dieTurn(current[1].cur, roll.white[1] - 1, WHITE_FACES, true);
+      // The later of the two whites to land is when both have — they start
+      // together, so the larger `left` decides it. `+ 1` is the extra tick
+      // the trailing leaf takes to fall once a drum's `left` reaches zero,
+      // and `beat` is the design's pause, held only when a bonus was earned:
+      // the bonus drum does not wait its turn on the whites, but it does
+      // wait a beat past them before it moves at all.
+      const whiteTicks = Math.max(whiteLeft0, whiteLeft1);
+      const beat = roll.bonus !== null ? BONUS_BEAT_TICKS : 0;
+      return [
+        { ...current[0], left: whiteLeft0, wait: 0 },
+        { ...current[1], left: whiteLeft1, wait: 0 },
+        // The bonus drum laps only when it is showing something: falling
+        // round to the blank should look like the die being put away, not
+        // thrown.
+        { ...current[2],
+          left: dieTurn(current[2].cur, roll.bonus ?? 0, BONUS_FACES, roll.bonus !== null),
+          wait: whiteTicks + 1 + beat }
+      ];
+    });
 
     timer.current = setInterval(() => {
       setDrums(current => {

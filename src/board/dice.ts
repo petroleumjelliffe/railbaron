@@ -52,6 +52,14 @@ export const COLORS = {
 /** A die's own tick, slower than the board's 52ms — these are heavier leaves. */
 export const DICE_MS = 78;
 
+/**
+ * The bonus drum's pause before it turns, once the whites have landed and
+ * their trailing leaf has fallen — the design's 300ms, rounded to the
+ * nearest whole tick since a drum cannot stop between ticks (300 / 78 ≈
+ * 3.85, which rounds to 4 ticks, 312ms).
+ */
+export const BONUS_BEAT_TICKS = Math.round(300 / DICE_MS);
+
 export const WHITE_FACES = 6;
 /** Blank, then 1-6. The blank is the slot a Freight sees empty every turn. */
 export const BONUS_FACES = 7;

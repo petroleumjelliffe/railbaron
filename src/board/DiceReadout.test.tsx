@@ -1,6 +1,7 @@
 import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { COLORS, DICE_MS } from './dice';
 import { DiceReadout } from './DiceReadout';
 
 /**
@@ -62,6 +63,36 @@ describe('the dice readout', () => {
     expect(onLanded).not.toHaveBeenCalled();
     settle();
     expect(onLanded).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not report landing during the bonus drum\'s wait, only once it too has stopped', () => {
+    const onLanded = vi.fn();
+    // Both white drums reach index 5 (face 6) from rest in 11 ticks, plus one
+    // more for the trailing leaf to fall — fully stopped at tick 12. The
+    // bonus drum's wait (whiteTicks + 1 + BONUS_BEAT_TICKS = 11 + 1 + 4 = 16)
+    // holds it past that, so landing must not be reported anywhere through
+    // tick 16 — the whites being done is not the whole roll being done.
+    render(<DiceReadout roll={{ white: [6, 6], bonus: 5 }} live={false} onLanded={onLanded} />);
+    act(() => { vi.advanceTimersByTime(16 * DICE_MS); });
+    expect(onLanded).not.toHaveBeenCalled();
+    settle();
+    expect(onLanded).toHaveBeenCalledTimes(1);
+  });
+
+  it('holds the bonus drum on the blank until the whites have landed and its own beat has passed', () => {
+    render(<DiceReadout roll={{ white: [6, 6], bonus: 5 }} live={false} />);
+    // Tick 12 is exactly when both white drums have landed and their
+    // trailing leaf has fallen (see the timing note above). The bonus
+    // drum's wait has not elapsed at that point, so it must still be
+    // resting on the blank — not partway into its own spin toward 5. The
+    // accessible name can't tell these apart (the whole readout reports
+    // "turning" as one unit until every drum, bonus included, has genuinely
+    // stopped), so this checks what the drum is actually showing: the top
+    // leaf's colour is the blank's, not the numbered leaf's.
+    act(() => { vi.advanceTimersByTime(12 * DICE_MS); });
+    const bonusDie = screen.getByRole('img', { name: /Bonus die/i });
+    const topLeaf = bonusDie.querySelector('[aria-hidden]');
+    expect(topLeaf).toHaveStyle({ background: COLORS.bonusBlank });
   });
 
   it('rolls when tapped, but only when it is live', async () => {
