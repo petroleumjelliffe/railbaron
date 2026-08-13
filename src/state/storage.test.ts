@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { STORAGE_KEY, clearLog, loadLog, saveLog } from './storage';
+import { SAVE_VERSION, STORAGE_KEY, clearLog, loadLog, saveLog } from './storage';
 import type { GameEvent } from './events';
 
 const log: GameEvent[] = [
@@ -139,5 +139,44 @@ describe('persistence', () => {
     ];
     saveLog(full);
     expect(loadLog().events).toEqual(full);
+  });
+});
+
+describe('the new turn events survive a round trip', () => {
+  const good: GameEvent[] = [
+    { type: 'joined', seat: 'red', name: 'ADA' },
+    { type: 'started' },
+    { type: 'orderRolled', seat: 'red', first: 'red' },
+    { type: 'turnRolled', seat: 'red', white: [3, 4], bonus: null },
+    { type: 'moved', seat: 'red', path: ['c13', 'c95'], arrived: true }
+  ];
+
+  it('keeps them all', () => {
+    saveLog(good);
+    expect(loadLog().events).toEqual(good);
+  });
+
+  it('discards a log whose die face was never on a die', () => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      version: SAVE_VERSION, savedAt: Date.now(),
+      events: [{ type: 'turnRolled', seat: 'red', white: [3, 7], bonus: null }]
+    }));
+    expect(loadLog().events).toEqual([]);
+  });
+
+  it('discards a log naming a node that was never real', () => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      version: SAVE_VERSION, savedAt: Date.now(),
+      events: [{ type: 'moved', seat: 'red', path: ['c13', 'nowhere'], arrived: false }]
+    }));
+    expect(loadLog().events).toEqual([]);
+  });
+
+  it('discards a leg that never went anywhere', () => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      version: SAVE_VERSION, savedAt: Date.now(),
+      events: [{ type: 'moved', seat: 'red', path: ['c13'], arrived: false }]
+    }));
+    expect(loadLog().events).toEqual([]);
   });
 });

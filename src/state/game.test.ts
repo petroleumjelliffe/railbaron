@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { replay, undo } from './game';
 import type { GameEvent } from './events';
+import { nodeForCity } from '../../engine';
+import { destinationOf, homesDone, needsDestination, nextHomeSeat, rotate } from './turns';
 
 const join = (seat: 'red' | 'blue', name: string): GameEvent =>
   ({ type: 'joined', seat, name });
@@ -142,5 +144,164 @@ describe('undo', () => {
 
   it('does nothing to an empty log', () => {
     expect(undo([])).toEqual([]);
+  });
+});
+
+const MINNEAPOLIS_CITY = 43;
+const ST_PAUL_CITY = 47;
+const MINNEAPOLIS = nodeForCity(MINNEAPOLIS_CITY);
+const ST_PAUL = nodeForCity(ST_PAUL_CITY);
+
+/** Two seated barons, started, homes rolled, order settled on green. */
+const twoBarons: GameEvent[] = [
+  { type: 'joined', seat: 'red', name: 'ADA' },
+  { type: 'joined', seat: 'green', name: 'GRACE' },
+  { type: 'started' },
+  { type: 'arrived', seat: 'red', city: MINNEAPOLIS_CITY, region: 'PL', payout: null },
+  { type: 'arrived', seat: 'green', city: ST_PAUL_CITY, region: 'PL', payout: null },
+  { type: 'orderRolled', seat: 'red', first: 'green' }
+];
+
+describe('the phases', () => {
+  it('is setup before the game has started', () => {
+    expect(replay([{ type: 'joined', seat: 'red', name: 'ADA' }]).phase).toBe('setup');
+  });
+
+  it('is homes once started, while home cities are still being rolled', () => {
+    expect(replay(twoBarons.slice(0, 3)).phase).toBe('homes');
+  });
+
+  it('is playing once the order has been rolled', () => {
+    expect(replay(twoBarons).phase).toBe('playing');
+  });
+
+  it('resumes a game saved before turn order existed in the homes phase', () => {
+    // A v1.0.1 log: started, destinations rolled, no orderRolled. It lands in
+    // `homes` with every home already in, so the only thing left is the roll
+    // for first player — no migration code, and nothing discarded.
+    const old = twoBarons.slice(0, 5);
+    const state = replay(old);
+    expect(state.phase).toBe('homes');
+    expect(homesDone(state)).toBe(true);
+  });
+});
+
+describe('where a pawn stands', () => {
+  it('is nowhere until a home city is rolled', () => {
+    expect(replay(twoBarons.slice(0, 3)).seats.red.at).toBeNull();
+  });
+
+  it('is the home city once one is', () => {
+    expect(replay(twoBarons).seats.red.at).toBe(MINNEAPOLIS);
+  });
+
+  it('does not move when a destination is rolled', () => {
+    const log: GameEvent[] = [...twoBarons,
+      { type: 'arrived', seat: 'red', city: ST_PAUL_CITY, region: 'PL', payout: 0 }];
+    expect(replay(log).seats.red.at).toBe(MINNEAPOLIS);
+    expect(destinationOf(replay(log).seats.red)).toBe(ST_PAUL_CITY);
+  });
+
+  it('is the last node of the last leg once one has been walked', () => {
+    const log: GameEvent[] = [...twoBarons,
+      { type: 'arrived', seat: 'red', city: ST_PAUL_CITY, region: 'PL', payout: 0 },
+      { type: 'turnRolled', seat: 'red', white: [3, 4], bonus: null },
+      { type: 'moved', seat: 'red', path: [MINNEAPOLIS, ST_PAUL], arrived: true }];
+    expect(replay(log).seats.red.at).toBe(ST_PAUL);
+  });
+});
+
+describe('the sections a trip has spent', () => {
+  const trip = (arrived: boolean): GameEvent[] => [...twoBarons,
+    { type: 'arrived', seat: 'red', city: ST_PAUL_CITY, region: 'PL', payout: 0 },
+    { type: 'turnRolled', seat: 'red', white: [1, 1], bonus: null },
+    { type: 'moved', seat: 'red', path: [MINNEAPOLIS, ST_PAUL], arrived }];
+
+  it('records every section a leg crossed', () => {
+    expect(replay(trip(false)).seats.red.used.size).toBe(1);
+  });
+
+  it('releases them all on arrival', () => {
+    expect(replay(trip(true)).seats.red.used.size).toBe(0);
+  });
+});
+
+describe('turn order', () => {
+  it('rotates the seated barons to start with the high roll', () => {
+    expect(rotate(['red', 'green', 'blue'], 'green')).toEqual(['green', 'blue', 'red']);
+    expect(rotate(['red', 'green', 'blue'], 'red')).toEqual(['red', 'green', 'blue']);
+  });
+
+  it('gives the first turn to whoever won the roll', () => {
+    const state = replay(twoBarons);
+    expect(state.order).toEqual(['green', 'red']);
+    expect(state.turn).toBe('green');
+  });
+
+  it('stays with a baron whose turn is under way', () => {
+    const log: GameEvent[] = [...twoBarons,
+      { type: 'arrived', seat: 'green', city: MINNEAPOLIS_CITY, region: 'PL', payout: 0 },
+      { type: 'turnRolled', seat: 'green', white: [3, 4], bonus: null }];
+    const state = replay(log);
+    expect(state.turn).toBe('green');
+    expect(state.rolled).toEqual({ white: [3, 4], bonus: null });
+  });
+
+  it('passes to the left once the turn is spent', () => {
+    const log: GameEvent[] = [...twoBarons,
+      { type: 'arrived', seat: 'green', city: MINNEAPOLIS_CITY, region: 'PL', payout: 0 },
+      { type: 'turnRolled', seat: 'green', white: [3, 4], bonus: null },
+      { type: 'moved', seat: 'green', path: [ST_PAUL, MINNEAPOLIS], arrived: true }];
+    const state = replay(log);
+    expect(state.turn).toBe('red');
+    expect(state.rolled).toBeNull();
+  });
+
+  it('keeps the turn when a bonus leg is still owed', () => {
+    // Arrived inside the white dice with a bonus die rolled: the book has the
+    // player roll a new destination and spend the bonus starting that trip.
+    const log: GameEvent[] = [...twoBarons,
+      { type: 'arrived', seat: 'green', city: MINNEAPOLIS_CITY, region: 'PL', payout: 0 },
+      { type: 'turnRolled', seat: 'green', white: [6, 6], bonus: 4 },
+      { type: 'moved', seat: 'green', path: [ST_PAUL, MINNEAPOLIS], arrived: true }];
+    const state = replay(log);
+    expect(state.turn).toBe('green');
+    expect(state.rolled).toEqual({ white: [6, 6], bonus: 4 });
+  });
+
+  it('ends the turn after the bonus leg', () => {
+    const log: GameEvent[] = [...twoBarons,
+      { type: 'arrived', seat: 'green', city: MINNEAPOLIS_CITY, region: 'PL', payout: 0 },
+      { type: 'turnRolled', seat: 'green', white: [6, 6], bonus: 4 },
+      { type: 'moved', seat: 'green', path: [ST_PAUL, MINNEAPOLIS], arrived: true },
+      { type: 'arrived', seat: 'green', city: ST_PAUL_CITY, region: 'PL', payout: 0 },
+      { type: 'moved', seat: 'green', path: [MINNEAPOLIS, ST_PAUL], arrived: true }];
+    expect(replay(log).turn).toBe('red');
+  });
+});
+
+describe('who may be given a destination', () => {
+  const nodeOf = nodeForCity;
+
+  it('may be, with no home city yet', () => {
+    expect(needsDestination(replay(twoBarons.slice(0, 3)).seats.red, nodeOf)).toBe(true);
+  });
+
+  it('may be, standing on the last destination reached', () => {
+    expect(needsDestination(replay(twoBarons).seats.red, nodeOf)).toBe(true);
+  });
+
+  it('may not be, part-way along a trip', () => {
+    const log: GameEvent[] = [...twoBarons,
+      { type: 'arrived', seat: 'red', city: ST_PAUL_CITY, region: 'PL', payout: 0 }];
+    expect(needsDestination(replay(log).seats.red, nodeOf)).toBe(false);
+  });
+});
+
+describe('whose home city is owed', () => {
+  it('is the first seated baron without one, in seat order', () => {
+    expect(nextHomeSeat(replay(twoBarons.slice(0, 3)))).toBe('red');
+    expect(nextHomeSeat(replay(twoBarons.slice(0, 4)))).toBe('green');
+    expect(nextHomeSeat(replay(twoBarons))).toBeNull();
   });
 });

@@ -1,6 +1,7 @@
-import { CITIES, REGIONS, cityById, type CityId, type RegionId } from '../../engine';
+import { CITIES, NODES, REGIONS, cityById, type CityId, type RegionId } from '../../engine';
 
 export type SeatId = 'red' | 'green' | 'blue' | 'yellow' | 'black' | 'white';
+export type NodeId = string;
 
 export const SEATS: readonly SeatId[] = ['red', 'green', 'blue', 'yellow', 'black', 'white'];
 
@@ -17,13 +18,35 @@ export type GameEvent =
   | { type: 'renamed'; seat: SeatId; name: string | null }
   | { type: 'started' }
   | { type: 'regionRequested'; seat: SeatId; rolled: RegionId }
-  | { type: 'arrived'; seat: SeatId; city: CityId; region: RegionId; payout: number | null };
+  /**
+   * `arrived` fires when a destination is *rolled*, not when the pawn gets
+   * there: it is the companion app's event, kept under its old name because
+   * renaming it would break every saved game for one word. Arrival at the
+   * destination is `moved.arrived`.
+   */
+  | { type: 'arrived'; seat: SeatId; city: CityId; region: RegionId; payout: number | null }
+  /**
+   * Who goes first. "The players roll to see who goes first, the high roll" —
+   * recorded rather than re-rolled, so a replayed game deals the same turns.
+   * Its presence is also what moves the game from `homes` into `playing`.
+   */
+  | { type: 'orderRolled'; seat: SeatId; first: SeatId }
+  /** The dice for one turn: both white dice, and the bonus die when earned. */
+  | { type: 'turnRolled'; seat: SeatId; white: [number, number]; bonus: number | null }
+  /** One leg of movement: the path as node ids, and whether it ended on the
+   *  destination. Two of these in a turn means a Bonus Roll leg followed an
+   *  arrival — see `bonusLegOwed`. */
+  | { type: 'moved'; seat: SeatId; path: NodeId[]; arrived: boolean };
 
 // Derived from the engine rather than copied as literals, so a table change
 // can't silently drift away from what a loaded log is allowed to contain.
 const VALID_SEATS: ReadonlySet<string> = new Set(SEATS);
 const VALID_REGIONS: ReadonlySet<RegionId> = new Set(REGIONS.map(region => region.id));
 const VALID_CITIES: ReadonlySet<CityId> = new Set(CITIES.map(city => city.id));
+const VALID_NODES: ReadonlySet<string> = new Set(NODES.map(node => node.id));
+
+const isDie = (value: unknown): boolean =>
+  typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= 6;
 
 /**
  * A structurally-valid-but-wrong log (an unknown `type`, a city id that was
@@ -65,6 +88,25 @@ export function isGameEvent(value: unknown): value is GameEvent {
         cityById(event.city as CityId).region === event.region &&
         (event.payout === null ||
           (typeof event.payout === 'number' && Number.isFinite(event.payout)))
+      );
+    case 'orderRolled':
+      return VALID_SEATS.has(event.seat as string) && VALID_SEATS.has(event.first as string);
+    case 'turnRolled':
+      return (
+        VALID_SEATS.has(event.seat as string) &&
+        Array.isArray(event.white) && event.white.length === 2 && event.white.every(isDie) &&
+        (event.bonus === null || isDie(event.bonus))
+      );
+    case 'moved':
+      // Two nodes minimum: a leg with no step is not a leg. Every id is
+      // checked against the built network for the same reason cities are —
+      // a log naming a node that was never real throws deep inside nodeById
+      // on every replay and bricks the app.
+      return (
+        VALID_SEATS.has(event.seat as string) &&
+        Array.isArray(event.path) && event.path.length >= 2 &&
+        event.path.every(id => typeof id === 'string' && VALID_NODES.has(id)) &&
+        typeof event.arrived === 'boolean'
       );
     default:
       return false;
