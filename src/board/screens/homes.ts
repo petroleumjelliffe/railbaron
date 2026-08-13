@@ -10,8 +10,15 @@ import { blankRow, BOARD_ROWS, padRows, type Row, type ScreenDef } from '../type
  *
  * The rulebook has an order to setup and strict turns make it matter: every
  * baron takes a home city, in seat order and no two the same, and only then do
- * the players roll to see who starts. Both are rolls, so both go through the
- * board's existing gate — the value is not in the log until the panel lands.
+ * the players roll to see who starts.
+ *
+ * Only the home rolls go through the board's announce gate. The roll for first
+ * player rolls and appends in one tap (`rollOrder` in `useGame`), because
+ * there is nothing for the board to announce: it names no region and no city,
+ * and its whole result — whose turn it is — is on the next screen the moment
+ * the event exists. The gate protects a roll whose outcome the board would
+ * otherwise spoil while the panel was still turning; this one has no such
+ * outcome to hold back.
  */
 export function homes(
   state: GameState,

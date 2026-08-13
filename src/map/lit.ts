@@ -14,11 +14,14 @@ export interface Marker {
  * Which cities carry a baron's colour, and why.
  *
  * A baron's latest stop is where they are heading — the destination the roll
- * just produced. The stop before it is where they set out from. Nothing
- * between the two is lit: the app does not model movement, and the route a
- * baron actually takes depends on which railroads they can use, which is not
- * something this app knows. Drawing a line between the two lamps would be
- * asserting a path the game has not chosen.
+ * just produced. The stop before it is where they set out from. These are the
+ * two ends of the trip, and that is all this function knows about.
+ *
+ * Nothing between them is lit *here*. The route is no longer unknown — the
+ * player taps it out dot by dot and the committed leg is drawn as a trail in
+ * the mover's colour — but it comes from the log's `moved` events, not from
+ * the stops, and `MapView` draws it from `state.lastMove`. Lighting the dots
+ * of a path from a pair of cities would still mean inventing one.
  *
  * A city can hold several markers — barons share destinations, and a baron's
  * own origin can be another's destination. Destinations sort first so a

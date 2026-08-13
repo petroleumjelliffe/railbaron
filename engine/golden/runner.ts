@@ -62,7 +62,15 @@ function apply(state: GoldenState, step: GoldenGame['steps'][number]): GoldenSta
       // `state.leg === 0` is "a player can get no more than one Bonus Roll per
       // turn": a bonus leg that arrives inside the white dice would otherwise
       // earn a bonus leg of its own, for ever. `replay` states the same cap as
-      // `open.legs >= 2`, and the two must agree — see replay.golden.test.ts.
+      // `open.legs >= 2`.
+      //
+      // The two are pinned separately, not against each other:
+      // `src/state/replay.golden.test.ts` scripts every leg as [1,1], which
+      // earns a Freight nothing, so `replay`'s bonus branch never runs there
+      // and it could not hold the caps together even in principle. This side
+      // is pinned by the `bonus-leg` golden game below; replay's side by the
+      // bonus-leg pair in `src/state/game.test.ts` ("keeps the turn when a
+      // bonus leg is still owed", "ends the turn after the bonus leg").
       const owed = state.leg === 0
         && state.roll !== null && bonusLegOwed(state.roll, spent(draft), landed);
       return {

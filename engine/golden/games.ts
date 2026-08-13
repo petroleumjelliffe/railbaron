@@ -26,6 +26,22 @@ import type { GoldenGame } from './types';
  * Every fixture starts on a city, so `src/state/replay.golden.test.ts` can
  * build a real log for each one and hold the runner and `replay` together.
  *
+ * **A golden game invalidated by a later rule is deleted, not patched.** These
+ * are the rules as understood when they were written down; a later phase — the
+ * money spec first — may make one of them wrong rather than incomplete. The
+ * response is to remove the game and say in the commit message which rule
+ * retired it. Editing a fixture's steps until it passes again turns the record
+ * of what the game does into a record of what the code does, which is exactly
+ * what these exist not to be.
+ *
+ * Not every rule in the spec's table can live here. The runner plays one
+ * baron: it has no seats, no turn order and no log, so "two barons rolling the
+ * same home city" — the table's ninth row — cannot be written as a golden
+ * game at all. It is pinned instead by `engine/roll.test.ts` ("never lands on
+ * a home city another baron already holds") and by
+ * `src/state/useGame.test.tsx` ("refuses a home city another baron already
+ * holds"), which have the seats this file does not.
+ *
  * A Freight game that only needs two dice still scripts a third, unused
  * face. `earnsBonus`'s Freight case fires only on double six, so a correct
  * engine never draws it — but a broken one (forced to grant a Bonus Roll on

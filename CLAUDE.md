@@ -6,17 +6,20 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A **companion app** for the Avalon Hill board game *Rail Baron*, not an implementation of
 it. Players use the physical board; the app rolls each baron's next destination — region,
-then city — and looks up the payout for the journey. Nothing else about the game is
-modelled: no movement, no railroad ownership, no purchases or fees. It does keep a running
-total of what each baron has been paid (`earned` in
+then city — looks up the payout for the journey, and since Phase 4 walks the pawn: strict
+turn order, the movement dice, and a route tapped out dot by dot on the map. What is still
+not modelled is the money — no railroad ownership, no purchases, no user fees, no win
+condition. It does keep a running total of what each baron has been paid (`earned` in
 [`src/state/game.ts`](src/state/game.ts)), which is a sum of rolled payouts for naming the
 leader — not the game's cash, which players still track themselves.
 
 The repo holds the React port. The original 2013 jQuery app was deleted once the port
 was complete and tested — it remains in git history, but there is only one Rail Baron in
 this repo now. [ROADMAP.md](ROADMAP.md) has the phases and the reasoning; Phases 1 and 2
-(the roller, the pass-and-play front door) are done. The map view and Phase 3 (online
-multiplayer) are ahead.
+(the roller, the pass-and-play front door) are done, and so is Phase 4's first half —
+turns and movement, with the map as the play surface and the movement rules stored as
+data under [`engine/golden/`](engine/golden/). The money spec (ownership, fees, cash, the
+win condition) and Phase 3 (online multiplayer) are ahead.
 
 ## Commands
 
