@@ -321,3 +321,18 @@ describe('whose home city is owed', () => {
     expect(nextHomeSeat(replay(twoBarons))).toBeNull();
   });
 });
+
+describe('the last committed move', () => {
+  it('is nothing before anyone has moved', () => {
+    expect(replay(twoBarons).lastMove).toBeNull();
+  });
+
+  it('is the most recent leg, whoever walked it', () => {
+    const log: GameEvent[] = [...twoBarons,
+      { type: 'arrived', seat: 'green', city: MINNEAPOLIS_CITY, region: 'PL', payout: 0 },
+      { type: 'turnRolled', seat: 'green', white: [1, 1], bonus: null },
+      { type: 'moved', seat: 'green', path: [ST_PAUL, MINNEAPOLIS], arrived: true }];
+    expect(replay(log).lastMove)
+      .toEqual({ seat: 'green', path: [ST_PAUL, MINNEAPOLIS], arrived: true });
+  });
+});

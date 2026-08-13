@@ -50,6 +50,8 @@ export interface GameState {
    * or just the bonus die.
    */
   leg: number;
+  /** The leg most recently committed, for the map to walk. */
+  lastMove: { seat: SeatId; path: readonly NodeId[]; arrived: boolean } | null;
 }
 
 function emptyState(): GameState {
@@ -59,7 +61,9 @@ function emptyState(): GameState {
       id, name: null, stops: [], awaiting: null, earned: 0, at: null, used: new Map()
     };
   }
-  return { seats, phase: 'setup', order: [], turn: null, rolled: null, leg: 0 };
+  return {
+    seats, phase: 'setup', order: [], turn: null, rolled: null, leg: 0, lastMove: null
+  };
 }
 
 export function replay(events: readonly GameEvent[]): GameState {
@@ -115,6 +119,7 @@ export function replay(events: readonly GameEvent[]): GameState {
           // not just this leg's.
           used: event.arrived ? new Map() : addSections(seat.used, event.path)
         };
+        state.lastMove = { seat: event.seat, path: event.path, arrived: event.arrived };
         if (open !== null) {
           open.legs += 1;
           const over = open.legs >= 2

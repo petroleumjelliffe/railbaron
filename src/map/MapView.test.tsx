@@ -200,4 +200,35 @@ describe('playing a turn on the map', () => {
     expect(keyed).toEqual([]);
     complaints.mockRestore();
   });
+
+  it('will not take a tap while the last move is still playing back', () => {
+    const onMove = vi.fn();
+    // A Bonus Roll turn: the primary leg lands within the white dice with a
+    // bonus die still owed, so the turn stays open — a new destination is
+    // rolled, and the bonus leg (Minneapolis, one hop away) becomes a real,
+    // tappable candidate. Without the guard, `route.legal` genuinely holds
+    // it; this is the scenario the guard exists for, not one where there is
+    // nothing to tap regardless.
+    const played: GameEvent[] = [
+      { type: 'joined', seat: 'red', name: 'ADA' },
+      { type: 'started' },
+      { type: 'arrived', seat: 'red', city: MINNEAPOLIS, region: 'PL', payout: null },
+      { type: 'orderRolled', seat: 'red', first: 'red' },
+      { type: 'arrived', seat: 'red', city: ST_PAUL, region: 'PL', payout: 0 },
+      { type: 'turnRolled', seat: 'red', white: [6, 6], bonus: 4 },
+      { type: 'moved', seat: 'red', path: [nodeForCity(MINNEAPOLIS), nodeForCity(ST_PAUL)], arrived: true },
+      { type: 'arrived', seat: 'red', city: MINNEAPOLIS, region: 'PL', payout: 3000 }
+    ];
+    render(
+      <MapView
+        state={replay(played)}
+        onBack={() => {}}
+        onMove={onMove}
+        dice={{ roll: null, live: false }}
+        onRollDice={() => {}}
+        onDiceLanded={() => {}}
+      />
+    );
+    expect(screen.queryByRole('button', { name: /Minneapolis/ })).not.toBeInTheDocument();
+  });
 });

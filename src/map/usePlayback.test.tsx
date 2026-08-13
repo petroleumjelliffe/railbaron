@@ -1,0 +1,53 @@
+import { act, renderHook } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { usePlayback } from './usePlayback';
+
+beforeEach(() => vi.useFakeTimers());
+afterEach(() => vi.useRealTimers());
+
+const PATH = ['a', 'b', 'c', 'd'];
+
+describe('walking a committed path', () => {
+  it('starts on the first node alone', () => {
+    const { result } = renderHook(() => usePlayback(PATH, 100));
+    expect(result.current.shown).toEqual(['a']);
+    expect(result.current.done).toBe(false);
+  });
+
+  it('takes one node per step', () => {
+    const { result } = renderHook(() => usePlayback(PATH, 100));
+    act(() => { vi.advanceTimersByTime(100); });
+    expect(result.current.shown).toEqual(['a', 'b']);
+    act(() => { vi.advanceTimersByTime(200); });
+    expect(result.current.shown).toEqual(PATH);
+  });
+
+  it('is done once it reaches the end, and stops there', () => {
+    const { result } = renderHook(() => usePlayback(PATH, 100));
+    act(() => { vi.advanceTimersByTime(1000); });
+    expect(result.current.shown).toEqual(PATH);
+    expect(result.current.done).toBe(true);
+  });
+
+  it('finishes early when told to skip', () => {
+    const { result } = renderHook(() => usePlayback(PATH, 100));
+    act(() => { result.current.skip(); });
+    expect(result.current.shown).toEqual(PATH);
+    expect(result.current.done).toBe(true);
+  });
+
+  it('has nothing to walk without a path', () => {
+    const { result } = renderHook(() => usePlayback(null, 100));
+    expect(result.current.shown).toEqual([]);
+    expect(result.current.done).toBe(true);
+  });
+
+  it('starts over when a new path arrives', () => {
+    const { result, rerender } = renderHook(({ p }) => usePlayback(p, 100), {
+      initialProps: { p: PATH as string[] | null }
+    });
+    act(() => { vi.advanceTimersByTime(1000); });
+    rerender({ p: ['x', 'y'] });
+    expect(result.current.shown).toEqual(['x']);
+  });
+});

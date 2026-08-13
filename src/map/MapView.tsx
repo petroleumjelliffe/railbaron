@@ -9,6 +9,7 @@ import { SEATS, type SeatId } from '../state/events';
 import type { GameState } from '../state/game';
 import { layout, RAILROADS, type Placed } from './geo';
 import { markers, pawns, type Marker } from './lit';
+import { usePlayback } from './usePlayback';
 import { useRoute } from './useRoute';
 
 const WIDTH = 1400;
@@ -192,8 +193,32 @@ export function MapView({
   const board = useMemo(() => layout(WIDTH, HEIGHT), []);
   const lamps = useMemo(() => markers(state), [state]);
   const route = useRoute(state, onMove);
-  const standing = useMemo(() => pawns(state), [state]);
   const drafted = route.draft === null ? null : pathOf(route.draft);
+
+  // The path comes from the log, not from the draft: this is what makes the
+  // walk visible in the tab that played it *and* any tab just watching along.
+  const lastMove = state.lastMove;
+  const replaying = usePlayback(lastMove?.path ?? null);
+
+  // While the last committed leg is still walking, the moving baron's pawn
+  // sits at the node playback has reached rather than at rest on `seat.at` —
+  // the two agree once `replaying.done`, since the log already recorded the
+  // leg's true end the moment it committed.
+  const standing = useMemo(() => {
+    const base = pawns(state);
+    if (lastMove === null || replaying.done) return base;
+    const at = replaying.shown[replaying.shown.length - 1];
+    if (at === undefined) return base;
+    const out = new Map<NodeId, SeatId[]>();
+    for (const [node, seats] of base) {
+      const rest = seats.filter(id => id !== lastMove.seat);
+      if (rest.length > 0) out.set(node, rest);
+    }
+    const here = out.get(at);
+    if (here) here.push(lastMove.seat);
+    else out.set(at, [lastMove.seat]);
+    return out;
+  }, [state, lastMove, replaying.shown, replaying.done]);
 
   const playing = SEATS
     .map(id => state.seats[id])
@@ -207,16 +232,23 @@ export function MapView({
       background: '#e8e6e1',
       fontFamily: "'Roboto Condensed', system-ui, sans-serif"
     }}>
-      <div style={{
-        width: WIDTH,
-        height: HEIGHT,
-        maxWidth: '100%',
-        boxSizing: 'border-box',
-        boxShadow: '0 30px 70px rgba(0,0,0,0.35)',
-        overflow: 'hidden',
-        position: 'relative',
-        background: 'linear-gradient(180deg,#4a2c17,#331d0e)'
-      }}>
+      {/* A tap anywhere on the cabinet finishes a playing-back move early —
+          the same rule this board already applies to a flap. Harmless once
+          there is nothing left to skip: `usePlayback` treats a further call
+          as a no-op. */}
+      <div
+        onClick={replaying.skip}
+        style={{
+          width: WIDTH,
+          height: HEIGHT,
+          maxWidth: '100%',
+          boxSizing: 'border-box',
+          boxShadow: '0 30px 70px rgba(0,0,0,0.35)',
+          overflow: 'hidden',
+          position: 'relative',
+          background: 'linear-gradient(180deg,#4a2c17,#331d0e)'
+        }}
+      >
         {/* Grain and a bevelled frame: the board is a lit cabinet, not a screen. */}
         <div style={{
           position: 'absolute',
@@ -248,6 +280,24 @@ export function MapView({
 
           <Track edges={board.edges} nodes={board.byId} />
 
+          {/* The portion of the last committed move walked so far — the same
+              path everyone watching this log sees, drawn in the mover's own
+              colour so it reads as their trail rather than a new draft. */}
+          {lastMove && replaying.shown.length > 1 && (
+            <g data-route="trail">
+              {replaying.shown.slice(1).map((id, i) => {
+                const a = board.byId.get(replaying.shown[i]!);
+                const b = board.byId.get(id);
+                if (!a || !b) return null;
+                return (
+                  <line key={i} x1={a.x} y1={a.y} x2={b.x} y2={b.y}
+                        stroke={SEAT_COLORS[lastMove.seat]} strokeWidth={3.4}
+                        strokeLinecap="round" opacity={0.7} />
+                );
+              })}
+            </g>
+          )}
+
           {/* The route as tapped out so far, drawn over the track so it reads
               as the line the pawn is about to walk. */}
           {drafted && (
@@ -274,7 +324,10 @@ export function MapView({
           <g>
             {board.nodes.filter(n => n.kind === 'dot').map(node => {
               const candidate = route.legal.has(node.id);
-              const onTap = candidate ? () => route.tap(node.id) : undefined;
+              // A lamp is not tappable while the last committed move is still
+              // walking — a player must not start a new route over an
+              // animation of the previous one.
+              const onTap = candidate && replaying.done ? () => route.tap(node.id) : undefined;
               return (
                 <RouteLamp key={node.id} node={node} lit={candidate}
                            candidate={candidate} onTap={onTap} />
@@ -290,7 +343,7 @@ export function MapView({
                 ? undefined
                 : cityById(node.cityId).region;
               const candidate = route.legal.has(node.id);
-              const onTap = candidate ? () => route.tap(node.id) : undefined;
+              const onTap = candidate && replaying.done ? () => route.tap(node.id) : undefined;
               return (
                 <CityLamp
                   key={node.id}
