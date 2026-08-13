@@ -1,12 +1,13 @@
 import { useMemo } from 'react';
 import {
-  cityById, path as pathOf,
+  cityById, nodeForCity, path as pathOf,
   type NodeId, type RegionId, type TurnRoll
 } from '../../engine';
 import { DiceReadout } from '../board/DiceReadout';
 import { SEAT_COLORS } from '../game/tokens';
 import { SEATS, type SeatId } from '../state/events';
 import type { GameState } from '../state/game';
+import { needsDestination } from '../state/turns';
 import { CITY_R, DOT_R, layout, RAILROADS, sizeCandidates, type Placed } from './geo';
 import { markers, pawns, type Marker } from './lit';
 import { usePlayback } from './usePlayback';
@@ -224,6 +225,24 @@ export function MapView({
   const lamps = useMemo(() => markers(state), [state]);
   const route = useRoute(state, onMove);
   const drafted = route.draft === null ? null : pathOf(route.draft);
+
+  /**
+   * The baron up owes a destination roll, so there is nothing to walk here.
+   *
+   * Two states reach it. The ordinary one is between trips. The other is the
+   * bonus leg: a pawn that arrives inside the white dice is paid, rolls a new
+   * destination and spends the bonus die starting that new trip — so the turn
+   * stays open with dice already on the table and still nothing to do until
+   * the destination exists.
+   *
+   * Both used to leave this screen saying "0 left" with COMMIT and UNDO
+   * greyed out and no way to learn what it was waiting for. The map says so
+   * and points at the board, where the roll is: the announce gate for a
+   * destination is the region panel and the own-region ballot, and neither
+   * belongs here.
+   */
+  const upNext = state.turn === null ? null : state.seats[state.turn];
+  const owesDestination = upNext !== null && needsDestination(upNext, nodeForCity);
 
   // The path comes from the log, not from the draft: this is what makes the
   // walk visible in the tab that played it *and* any tab just watching along.
@@ -446,7 +465,23 @@ export function MapView({
         {/* The turn's controls. The draft they act on lives in screen state
             and never in the log, which is why UNDO costs nothing and COMMIT
             is the only thing here that writes anything down. */}
-        {state.turn !== null && (
+        {state.turn !== null && owesDestination && (
+          <div style={{
+            position: 'absolute', top: 26, right: 34, zIndex: 4,
+            display: 'flex', alignItems: 'center', gap: 10
+          }}>
+            <span style={{ ...HUD_BUTTON, background: 'rgba(43,23,10,0.35)' }}>
+              {state.rolled === null
+                ? 'ROLL A NEW DESTINATION'
+                : 'ARRIVED — ROLL A NEW DESTINATION'}
+            </span>
+            <button onClick={onBack} style={{ ...HUD_BUTTON, cursor: 'pointer' }}>
+              TO THE BOARD
+            </button>
+          </div>
+        )}
+
+        {state.turn !== null && !owesDestination && (
           <div style={{
             position: 'absolute', top: 26, right: 34, zIndex: 4,
             display: 'flex', alignItems: 'center', gap: 10

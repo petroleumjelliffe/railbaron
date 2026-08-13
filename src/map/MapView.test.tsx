@@ -233,6 +233,72 @@ describe('playing a turn on the map', () => {
   });
 
   /**
+   * The bonus leg used to strand the player here. A pawn that arrives inside
+   * the white dice is paid and owes a new destination before the bonus die can
+   * be spent — so the map had nothing tappable, dice that were not live, UNDO
+   * and COMMIT greyed out, and a "0 left" readout that named none of it.
+   *
+   * The destination is rolled on the board, behind the region panel and the
+   * own-region ballot, so the honest fix is to say so and point at it.
+   */
+  describe('when the baron up owes a destination roll', () => {
+    /** Arrived inside the white dice, bonus die still owed, no new destination. */
+    const bonusLegOwed: GameEvent[] = [
+      { type: 'joined', seat: 'red', name: 'ADA' },
+      { type: 'started' },
+      { type: 'arrived', seat: 'red', city: MINNEAPOLIS, region: 'PL', payout: null },
+      { type: 'orderRolled', seat: 'red', first: 'red' },
+      { type: 'arrived', seat: 'red', city: ST_PAUL, region: 'PL', payout: 0 },
+      { type: 'turnRolled', seat: 'red', white: [6, 6], bonus: 4 },
+      { type: 'moved', seat: 'red',
+        path: [nodeForCity(MINNEAPOLIS), nodeForCity(ST_PAUL)], arrived: true }
+    ];
+
+    const shown = (events: GameEvent[], onBack = vi.fn()) => {
+      render(
+        <MapView
+          state={replay(events)}
+          onBack={onBack}
+          onMove={vi.fn()}
+          dice={{ roll: null, live: false }}
+          onRollDice={() => {}}
+          onDiceLanded={() => {}}
+        />
+      );
+      return onBack;
+    };
+
+    it('says what the game is waiting for, and offers the way to it', async () => {
+      const user = userEvent.setup();
+      const onBack = shown(bonusLegOwed);
+      expect(screen.getByText(/roll a new destination/i)).toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: /to the board/i }));
+      expect(onBack).toHaveBeenCalledOnce();
+    });
+
+    it('offers no lamp and no move controls while it waits', () => {
+      shown(bonusLegOwed);
+      // The route controls would be a lie: there is no destination to route to.
+      expect(screen.queryByRole('button', { name: 'COMMIT' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'UNDO' })).not.toBeInTheDocument();
+      expect(screen.queryByText(/\d+ left/)).not.toBeInTheDocument();
+      // Nothing is offered, and not because the screen suppresses it: the
+      // draft runs from where the pawn stands to where it stands, and the
+      // engine refuses every step out of it with `already-arrived`.
+      expect(screen.queryByRole('button', { name: /Minneapolis/ })).not.toBeInTheDocument();
+      expect(screen.queryAllByRole('button', { name: /^Dot / })).toEqual([]);
+    });
+
+    it('says none of it mid-leg, when there is a route to walk', () => {
+      shown(midTurn);
+      expect(screen.queryByText(/roll a new destination/i)).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /to the board/i })).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'COMMIT' })).toBeInTheDocument();
+      expect(screen.getByText(/2 left/)).toBeInTheDocument();
+    });
+  });
+
+  /**
    * Reported from live play: touch targets felt too small, and a city's
    * glow was visibly sitting over neighbouring dots. jsdom cannot do real
    * geometric hit-testing (no layout, no paint), so this pins the fix
