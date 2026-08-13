@@ -26,7 +26,13 @@ turns and movement only.
 
 ## What it deliberately leaves out
 
-- **Cash, purchases and the auction.** The next spec.
+- **Cash, purchases and the auction.** The next spec. One thing found while checking the
+  rulebook belongs there rather than here, and is recorded now so it isn't re-derived: the
+  book has no "can't afford it, so don't" rule. *"You **must** pay all your penalties. If
+  you do not have enough money, you **must sell a rail line**… and keep selling until you
+  have enough money."* Still short after that, and *"you are out of the game!"* The forced
+  sale is one of the game's real pressures, so the money spec should model it rather than
+  guard against reaching it.
 - **User fees.** Also the next spec — but fees are settled at end of turn and depend on
   *which companies a turn used*, so this spec records exactly that and charges nothing.
   The seam is deliberate: movement produces the fact, money prices it.
