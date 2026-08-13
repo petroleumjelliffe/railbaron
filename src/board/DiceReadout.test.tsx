@@ -90,6 +90,21 @@ describe('the dice readout', () => {
     expect(onLanded).toHaveBeenCalledTimes(1);
   });
 
+  it('reports it once and no more, however often the caller re-renders', () => {
+    // "Fires once, when every drum has stopped" is the whole contract: the
+    // App commits the roll to the log on it, and the caller rebuilds `roll`
+    // as a fresh object on every render of the turn that follows.
+    const onLanded = vi.fn();
+    const roll = { white: [3, 4] as [number, number], bonus: null };
+    const { rerender } = render(<DiceReadout roll={roll} live={false} onLanded={onLanded} />);
+    settle();
+    expect(onLanded).toHaveBeenCalledTimes(1);
+
+    rerender(<DiceReadout roll={{ ...roll }} live onLanded={onLanded} />);
+    settle();
+    expect(onLanded).toHaveBeenCalledTimes(1);
+  });
+
   it('holds the bonus drum on the blank until the whites have landed and its own beat has passed', () => {
     render(<DiceReadout roll={{ white: [6, 6], bonus: 5 }} live={false} />);
     // Tick 12 is exactly when both white drums have landed and their

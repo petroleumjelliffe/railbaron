@@ -62,11 +62,21 @@ export function DiceReadout({ roll, live, onRoll, onLanded }: DiceReadoutProps) 
   // and any re-render that lands with dice mid-turn), leaving the drums
   // silently parked at rest instead of turning to the awaited face.
   const started = useRef<string | undefined>(undefined);
-  const [begun, setBegun] = useState(key);
+  /**
+   * The roll the drums are currently turning for. State rather than a ref,
+   * because two things read it during render: `turning` below, and the
+   * landing effect. It starts on the same sentinel `started` does — at mount
+   * with a roll already in hand the drums are still at rest, which is not the
+   * same as having landed on it.
+   */
+  const [begun, setBegun] = useState('');
+  /** The last roll whose landing has been reported. Fires once per roll. */
+  const reported = useRef<string | undefined>(undefined);
 
   useEffect(() => {
     if (started.current === key) return;
     started.current = key;
+    reported.current = undefined;
     setBegun(key);
     if (timer.current !== null) { clearInterval(timer.current); timer.current = null; }
     if (roll === null) {
@@ -108,25 +118,41 @@ export function DiceReadout({ roll, live, onRoll, onLanded }: DiceReadoutProps) 
       ];
     });
 
+    // Nothing but the drums turning. The updater is pure and hands back the
+    // state it was given when no drum moved, so a tick past the end costs no
+    // render.
     timer.current = setInterval(() => {
       setDrums(current => {
         const next: [Drum, Drum, Drum] = [tick(current[0]), tick(current[1]), tick(current[2])];
-        // Gated on the same null-check as the clear, not fired unconditionally
-        // whenever `stopped` is true: under fake timers a whole
-        // `advanceTimersByTime` sweep can fire every tick before React ever
-        // processes the batched updates, chaining dozens of these updater
-        // calls together. Once landed, every later call in that chain still
-        // sees `stopped` — an unguarded call would report the landing once
-        // per remaining tick instead of once.
-        if (next.every(stopped) && timer.current !== null) {
-          clearInterval(timer.current);
-          timer.current = null;
-          landed.current?.();
-        }
-        return next;
+        return next.every((drum, i) => drum === current[i]) ? current : next;
       });
     }, DICE_MS);
   }, [key, roll]);
+
+  /**
+   * The landing, reported from an effect rather than from inside the updater
+   * above.
+   *
+   * Telling the caller is a consequence of the drums having stopped, not part
+   * of working out where they stopped — and React invokes an updater twice
+   * under StrictMode precisely because it expects one to be pure. It was
+   * correct in there only because clearing `timer.current` made the second
+   * invocation a no-op, which is the same hazard `src/state/useGame.ts`
+   * documents at length. Here the guard says what it means: once per roll.
+   *
+   * `begun !== key` is what keeps a roll already in hand at mount from
+   * reporting a landing before a single drum has moved. The drums are at rest
+   * and every one of them counts as stopped, but they have not been set
+   * turning for this roll yet — and reporting there would also clear the
+   * interval that was about to turn them.
+   */
+  useEffect(() => {
+    if (roll === null || begun !== key || reported.current === key) return;
+    if (!drums.every(stopped)) return;
+    if (timer.current !== null) { clearInterval(timer.current); timer.current = null; }
+    reported.current = key;
+    landed.current?.();
+  }, [drums, begun, key, roll]);
 
   useEffect(() => () => { if (timer.current !== null) clearInterval(timer.current); }, []);
 
