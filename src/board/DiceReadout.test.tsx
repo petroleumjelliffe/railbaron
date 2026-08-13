@@ -132,6 +132,27 @@ describe('the dice readout', () => {
     expect(bottom).toHaveStyle({ background: COLORS.bonusBlank });
   });
 
+  it('puts the dice away between turns, rather than leaving a face on the table', () => {
+    // The other half of the same report, and the gap the tick-by-tick record
+    // below cannot see: between one baron's turn and the next there is no
+    // roll at all, and nothing ticks until somebody taps. A readout that only
+    // clears the stale face when the *next* roll starts leaves the previous
+    // player's bonus number showing for the whole of the wait.
+    const { rerender } = render(<DiceReadout roll={{ white: [6, 6], bonus: 5 }} live={false} />);
+    settle();
+    expect(screen.getByRole('img', { name: 'Bonus die, 5' })).toBeInTheDocument();
+
+    rerender(<DiceReadout roll={null} live />);
+
+    expect(screen.getByRole('img', { name: 'Bonus die, not earned' })).toBeInTheDocument();
+    const bonusDie = screen.getByRole('img', { name: /Bonus die/i });
+    const [top, bottom] = bonusDie.querySelectorAll('[aria-hidden]');
+    expect(top).toHaveStyle({ background: COLORS.bonusBlank });
+    expect(bottom).toHaveStyle({ background: COLORS.bonusBlank });
+    // And the whites are back on the table too, not showing the six they rolled.
+    expect(screen.getAllByRole('img', { name: 'White die, 1' })).toHaveLength(2);
+  });
+
   it('documents what the bonus drum shows, tick by tick, across a stale-face transition', () => {
     // Investigative record for the same report: confirms (a) the drum
     // never holds the stale face once the fix is in place, and (b) it

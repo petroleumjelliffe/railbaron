@@ -69,7 +69,14 @@ export function DiceReadout({ roll, live, onRoll, onLanded }: DiceReadoutProps) 
     started.current = key;
     setBegun(key);
     if (timer.current !== null) { clearInterval(timer.current); timer.current = null; }
-    if (roll === null) return;
+    if (roll === null) {
+      // The dice come off the table between turns. Returning here without
+      // touching the drums left the last player's bonus number sitting on the
+      // red die for the whole of the next baron's turn, up to the moment they
+      // tapped — a number they had not rolled, on a die they might not earn.
+      setDrums([rest(WHITE_FACES), rest(WHITE_FACES), rest(BONUS_FACES)]);
+      return;
+    }
 
     setDrums(current => {
       const whiteLeft0 = dieTurn(current[0].cur, roll.white[0] - 1, WHITE_FACES, true);
