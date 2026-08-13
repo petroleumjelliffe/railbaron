@@ -1,4 +1,4 @@
-import { useMemo, type ReactNode } from 'react';
+import { useMemo } from 'react';
 import {
   cityById, path as pathOf,
   type NodeId, type RegionId, type TurnRoll
@@ -81,76 +81,99 @@ function Track({ nodes, edges }: Pick<ReturnType<typeof layout>, 'edges'> & { no
 }
 
 /**
- * A lamp is announced as a button only while it may actually be tapped. A
- * lamp nobody may tap is scenery, and scenery that claims to be a control is
- * worse than scenery.
+ * Both lamps below are scenery only now — every circle they draw carries
+ * `pointerEvents: 'none'`. Painted SVG shapes capture taps regardless of
+ * opacity (`pointer-events: visiblePainted` excludes only *unpainted*
+ * geometry, not translucent), and a city's glow is drawn well past its
+ * bulb — wide enough, at this scale, to sit on top of a neighbouring dot's
+ * tap target and steal taps meant for it. The actual tappable surface is
+ * `InteractionLayer` below, bubbled above everything so nothing can ever
+ * cover it.
  */
-function Tappable({ label, onTap, children }: {
-  label: string; onTap?: () => void; children: ReactNode;
-}) {
-  if (!onTap) return <g>{children}</g>;
-  return (
-    <g role="button" aria-label={label} onClick={onTap} style={{ cursor: 'pointer' }}>
-      {children}
-    </g>
-  );
-}
 
 /** A bulb in its socket: the housing is always drawn, the filament is not. */
-function CityLamp({ node, color, lit, marker, candidate, onTap }: {
+function CityLamp({ node, color, lit, marker, candidate }: {
   node: Placed; color: string; lit: boolean; marker: Marker | undefined;
-  candidate: boolean; onTap?: () => void;
+  candidate: boolean;
 }) {
   const r = CITY_R;
   const { x, y } = node;
   return (
-    <Tappable label={node.name ?? node.id} onTap={onTap}>
-      <g>
-        <circle cx={x} cy={y + r * 0.07} r={r * 1.06} fill="#000" opacity={0.5} />
-        <circle cx={x - r * 0.07} cy={y - r * 0.09} r={r * 0.98} fill="#f2f0eb" />
-        <circle cx={x + r * 0.1} cy={y + r * 0.13} r={r * 0.88} fill="#9b9a96" />
-        <circle cx={x} cy={y} r={r * 0.72} fill="#100c08" />
-      </g>
+    <g>
+      <circle cx={x} cy={y + r * 0.07} r={r * 1.06} fill="#000" opacity={0.5} pointerEvents="none" />
+      <circle cx={x - r * 0.07} cy={y - r * 0.09} r={r * 0.98} fill="#f2f0eb" pointerEvents="none" />
+      <circle cx={x + r * 0.1} cy={y + r * 0.13} r={r * 0.88} fill="#9b9a96" pointerEvents="none" />
+      <circle cx={x} cy={y} r={r * 0.72} fill="#100c08" pointerEvents="none" />
       <g style={{ opacity: lit ? 1 : DIM, transition: 'opacity 90ms cubic-bezier(.2,.8,.3,1)' }}>
-        <circle cx={x} cy={y} r={r * 2.6} fill={color} opacity={0.12} />
-        <circle cx={x} cy={y} r={r * 1.5} fill={color} opacity={0.24} />
-        <circle cx={x} cy={y} r={r * 0.64} fill={color} />
-        <circle cx={x - r * 0.2} cy={y - r * 0.24} r={r * 0.2} fill="#fff" opacity={0.6} />
+        <circle cx={x} cy={y} r={r * 2.6} fill={color} opacity={0.12} pointerEvents="none" />
+        <circle cx={x} cy={y} r={r * 1.5} fill={color} opacity={0.24} pointerEvents="none" />
+        <circle cx={x} cy={y} r={r * 0.64} fill={color} pointerEvents="none" />
+        <circle cx={x - r * 0.2} cy={y - r * 0.24} r={r * 0.2} fill="#fff" opacity={0.6} pointerEvents="none" />
       </g>
       {candidate && (
         <circle cx={x} cy={y} r={r * 1.75} fill="none"
-                stroke="#fff6e2" strokeWidth={1.4} opacity={0.8} />
+                stroke="#fff6e2" strokeWidth={1.4} opacity={0.8} pointerEvents="none" />
       )}
       <title>
         {node.name}
         {marker ? ` — ${marker.name}'s ${marker.role}` : ''}
       </title>
-    </Tappable>
+    </g>
   );
 }
 
-function RouteLamp({ node, lit, candidate, onTap }: {
-  node: Placed; lit: boolean; candidate: boolean; onTap?: () => void;
+function RouteLamp({ node, lit, candidate }: {
+  node: Placed; lit: boolean; candidate: boolean;
 }) {
   const r = DOT_R;
   const { x, y } = node;
   return (
-    <Tappable label={`Dot ${node.id}`} onTap={onTap}>
-      {/* A dot is two and a half pixels across. Tapping one needs a target the
-          size of a fingertip, drawn only where there is something to tap and
-          sized by the room this lamp has — see `sizeTargets` in geo.ts. */}
-      {onTap && <circle cx={x} cy={y} r={node.hit} fill="transparent" />}
-      <circle cx={x} cy={y} r={r * 1.5} fill="#2a1c0d" />
+    <g>
+      <circle cx={x} cy={y} r={r * 1.5} fill="#2a1c0d" pointerEvents="none" />
       <g style={{ opacity: lit ? 1 : DIM, transition: 'opacity 110ms cubic-bezier(.2,.8,.3,1)' }}>
-        <circle cx={x} cy={y} r={r * 4.2} fill="#fff6e2" opacity={0.1} />
-        <circle cx={x} cy={y} r={r * 2.2} fill="#fff6e2" opacity={0.2} />
-        <circle cx={x} cy={y} r={r} fill="#fffaf0" />
+        <circle cx={x} cy={y} r={r * 4.2} fill="#fff6e2" opacity={0.1} pointerEvents="none" />
+        <circle cx={x} cy={y} r={r * 2.2} fill="#fff6e2" opacity={0.2} pointerEvents="none" />
+        <circle cx={x} cy={y} r={r} fill="#fffaf0" pointerEvents="none" />
       </g>
       {candidate && (
         <circle cx={x} cy={y} r={r * 3.2} fill="none"
-                stroke="#fff6e2" strokeWidth={1} opacity={0.75} />
+                stroke="#fff6e2" strokeWidth={1} opacity={0.75} pointerEvents="none" />
       )}
-    </Tappable>
+    </g>
+  );
+}
+
+/**
+ * The tappable surface, all of it, bubbled above every lamp and pawn: one
+ * transparent circle per candidate node, sized to the room `sizeTargets` in
+ * geo.ts already worked out for it (`node.hit`). Rendered last in the SVG
+ * so nothing drawn earlier — a city's glow, a pawn, a route line — can ever
+ * sit on top of a hit target and steal the tap meant for it. A node that
+ * currently may not be tapped (not a legal candidate, or a previous move is
+ * still playing back) contributes no circle at all, exactly as the old
+ * per-lamp `Tappable` rendered no button for it.
+ */
+function InteractionLayer({ nodes, legal, enabled, onTap }: {
+  nodes: readonly Placed[]; legal: ReadonlySet<NodeId>; enabled: boolean;
+  onTap: (id: NodeId) => void;
+}) {
+  return (
+    <g>
+      {nodes.map(node => {
+        if (!legal.has(node.id) || !enabled) return null;
+        const label = node.kind === 'city' ? (node.name ?? node.id) : `Dot ${node.id}`;
+        return (
+          <circle
+            key={node.id}
+            cx={node.x} cy={node.y} r={node.hit}
+            fill="transparent"
+            role="button" aria-label={label}
+            onClick={() => onTap(node.id)}
+            style={{ cursor: 'pointer' }}
+          />
+        );
+      })}
+    </g>
   );
 }
 
@@ -324,14 +347,7 @@ export function MapView({
           <g>
             {board.nodes.filter(n => n.kind === 'dot').map(node => {
               const candidate = route.legal.has(node.id);
-              // A lamp is not tappable while the last committed move is still
-              // walking — a player must not start a new route over an
-              // animation of the previous one.
-              const onTap = candidate && replaying.done ? () => route.tap(node.id) : undefined;
-              return (
-                <RouteLamp key={node.id} node={node} lit={candidate}
-                           candidate={candidate} onTap={onTap} />
-              );
+              return <RouteLamp key={node.id} node={node} lit={candidate} candidate={candidate} />;
             })}
           </g>
           <g>
@@ -343,7 +359,6 @@ export function MapView({
                 ? undefined
                 : cityById(node.cityId).region;
               const candidate = route.legal.has(node.id);
-              const onTap = candidate && replaying.done ? () => route.tap(node.id) : undefined;
               return (
                 <CityLamp
                   key={node.id}
@@ -351,7 +366,6 @@ export function MapView({
                   lit={marker !== undefined || candidate}
                   marker={marker}
                   candidate={candidate}
-                  onTap={onTap}
                   color={marker
                     ? SEAT_COLORS[marker.seat]
                     : (region ? REGION_COLOR[region] : '#e8a13c')}
@@ -368,12 +382,25 @@ export function MapView({
               return seats.map((seatId, i) => (
                 <g key={`${id}-${seatId}`} role="img" aria-label={state.seats[seatId].name ?? seatId}>
                   <circle cx={node.x + i * 5} cy={node.y - 11} r={5}
-                          fill={SEAT_COLORS[seatId]} stroke="#100c08" strokeWidth={1.4} />
+                          fill={SEAT_COLORS[seatId]} stroke="#100c08" strokeWidth={1.4}
+                          pointerEvents="none" />
                   <title>{state.seats[seatId].name}</title>
                 </g>
               ));
             })}
           </g>
+
+          {/* The tappable surface, last of all: see InteractionLayer above
+              for why it must render after every painted lamp and pawn.
+              A lamp is not tappable while the last committed move is still
+              walking — a player must not start a new route over an
+              animation of the previous one. */}
+          <InteractionLayer
+            nodes={board.nodes}
+            legal={route.legal}
+            enabled={replaying.done}
+            onTap={route.tap}
+          />
         </svg>
 
         <div style={{

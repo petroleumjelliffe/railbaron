@@ -231,4 +231,54 @@ describe('playing a turn on the map', () => {
     );
     expect(screen.queryByRole('button', { name: /Minneapolis/ })).not.toBeInTheDocument();
   });
+
+  /**
+   * Reported from live play: touch targets felt too small, and a city's
+   * glow was visibly sitting over neighbouring dots. jsdom cannot do real
+   * geometric hit-testing (no layout, no paint), so this pins the fix
+   * structurally instead of pixel-by-pixel: every tappable circle lives in
+   * one topmost layer that paints after everything else, and every other
+   * circle in the SVG is explicitly marked untappable. If either of those
+   * stops being true, a lamp drawn later in the document can once again
+   * sit on top of a hit target and steal its taps — the exact bug
+   * reported, even though jsdom itself can't see it happen.
+   */
+  it('puts every hit target in one top-level layer, after all painted geometry', () => {
+    const { container } = render(
+      <MapView
+        state={replay(midTurn)}
+        onBack={() => {}}
+        onMove={vi.fn()}
+        dice={{ roll: null, live: false }}
+        onRollDice={() => {}}
+        onDiceLanded={() => {}}
+      />
+    );
+    const svg = container.querySelector('svg');
+    expect(svg).not.toBeNull();
+    const rootChildren = [...svg!.children];
+
+    // (a) Every role="button" element lives inside the same root child, and
+    // that child is the SVG's last: nothing painted afterward can cover it.
+    const holdsAButton = (el: Element) =>
+      el.getAttribute('role') === 'button' || el.querySelector('[role="button"]') !== null;
+    const holderIndices = rootChildren
+      .map((el, i) => (holdsAButton(el) ? i : -1))
+      .filter(i => i >= 0);
+    expect(holderIndices.length).toBeGreaterThan(0);
+    expect(new Set(holderIndices)).toEqual(new Set([rootChildren.length - 1]));
+    const interactionLayer = rootChildren[rootChildren.length - 1]!;
+    expect(interactionLayer.querySelectorAll('[role="button"]').length).toBeGreaterThan(0);
+
+    // (b) Every circle outside that layer is explicitly inert: it carries
+    // pointer-events="none", or sits under aria-hidden decoration.
+    const outsideCircles = [...container.querySelectorAll('circle')]
+      .filter(c => !interactionLayer.contains(c));
+    expect(outsideCircles.length).toBeGreaterThan(0);
+    for (const circle of outsideCircles) {
+      const inert = circle.getAttribute('pointer-events') === 'none'
+        || circle.closest('[aria-hidden="true"]') !== null;
+      expect(inert).toBe(true);
+    }
+  });
 });
