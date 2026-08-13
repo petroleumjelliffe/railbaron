@@ -25,6 +25,17 @@ import type { GoldenGame } from './types';
  *
  * Every fixture starts on a city, so `src/state/replay.golden.test.ts` can
  * build a real log for each one and hold the runner and `replay` together.
+ *
+ * A Freight game that only needs two dice still scripts a third, unused
+ * face. `earnsBonus`'s Freight case fires only on double six, so a correct
+ * engine never draws it — but a broken one (forced to grant a Bonus Roll on
+ * every Freight turn) would draw a third face `rollTurn` has nowhere else to
+ * get, and `runner.ts`'s `scripted()` throws on an empty queue rather than
+ * returning a rejection. That throw would fail the game before its own
+ * assertion ever ran, pinning nothing. The spare face gives the broken
+ * engine somewhere to draw from, so the game runs to its real assertion and
+ * fails there instead. `bonus-die-freight`'s double-six roll and `bonus-leg`
+ * already script three faces for a genuine reason and need no spare.
  */
 export const GAMES: readonly GoldenGame[] = [
   {
@@ -39,7 +50,7 @@ export const GAMES: readonly GoldenGame[] = [
      */
     setup: { at: 'c13', destination: 'c17' },
     steps: [
-      { name: 'roll six', intent: { kind: 'roll', faces: [3, 3] },
+      { name: 'roll six', intent: { kind: 'roll', faces: [3, 3, 2] },
         then: { spent: 0, remaining: 6, bonus: null } },
       { name: 'out to d417, on one of its two lines',
         intent: { kind: 'step', to: 'd417' }, then: { spent: 1, remaining: 5 } },
@@ -65,14 +76,14 @@ export const GAMES: readonly GoldenGame[] = [
      */
     setup: { at: 'c13', destination: 'c4' },
     steps: [
-      { name: 'roll two', intent: { kind: 'roll', faces: [1, 1] },
+      { name: 'roll two', intent: { kind: 'roll', faces: [1, 1, 2] },
         then: { remaining: 2, bonus: null } },
       { name: 'spend both dots', intent: { kind: 'step', to: 'd417' } },
       { name: 'and stop short of Fargo', intent: { kind: 'step', to: 'd372' },
         then: { spent: 2, remaining: 0, arrived: false, complete: true } },
       { name: 'end the turn part-way along the trip', intent: { kind: 'commit' },
         then: { at: 'd372', usedCount: 2, legOwed: false } },
-      { name: 'roll again next turn', intent: { kind: 'roll', faces: [1, 2] },
+      { name: 'roll again next turn', intent: { kind: 'roll', faces: [1, 2, 2] },
         then: { remaining: 3, usedCount: 2 } },
       { name: 'the last dot into Fargo', intent: { kind: 'step', to: 'c4' },
         then: { spent: 1, arrived: true, complete: true } },
@@ -94,7 +105,7 @@ export const GAMES: readonly GoldenGame[] = [
      */
     setup: { at: 'c12', destination: 'c4' },
     steps: [
-      { name: 'roll three', intent: { kind: 'roll', faces: [1, 2] },
+      { name: 'roll three', intent: { kind: 'roll', faces: [1, 2, 2] },
         then: { remaining: 3 } },
       { name: 'north out of Billings', intent: { kind: 'step', to: 'd397' },
         then: { spent: 1 } },
@@ -122,7 +133,7 @@ export const GAMES: readonly GoldenGame[] = [
      */
     setup: { at: 'c13', destination: 'c95' },
     steps: [
-      { name: 'roll seven', intent: { kind: 'roll', faces: [3, 4] },
+      { name: 'roll seven', intent: { kind: 'roll', faces: [3, 4, 2] },
         then: { remaining: 7 } },
       { name: 'across the pair, for nothing', intent: { kind: 'step', to: 'c95' },
         then: { spent: 0, remaining: 7, arrived: true, complete: true } },
@@ -138,7 +149,7 @@ export const GAMES: readonly GoldenGame[] = [
     /** The same rule, for the board's other pair. Both, not one. */
     setup: { at: 'c41', destination: 'c40' },
     steps: [
-      { name: 'roll seven', intent: { kind: 'roll', faces: [2, 5] },
+      { name: 'roll seven', intent: { kind: 'roll', faces: [2, 5, 2] },
         then: { remaining: 7 } },
       { name: 'across the bay, for nothing', intent: { kind: 'step', to: 'c40' },
         then: { spent: 0, remaining: 7, arrived: true, complete: true } },
@@ -164,7 +175,7 @@ export const GAMES: readonly GoldenGame[] = [
      */
     setup: { at: 'c65', destination: 'c76' },
     steps: [
-      { name: 'roll seven', intent: { kind: 'roll', faces: [4, 3] },
+      { name: 'roll seven', intent: { kind: 'roll', faces: [4, 3, 2] },
         then: { remaining: 7 } },
       { name: 'down the San Diego spur, which has no way back',
         intent: { kind: 'step', to: 'd452' }, expectError: 'would-strand' },
@@ -184,7 +195,7 @@ export const GAMES: readonly GoldenGame[] = [
      */
     setup: { at: 'c13', destination: 'c4' },
     steps: [
-      { name: 'roll eight for a three-dot journey', intent: { kind: 'roll', faces: [4, 4] },
+      { name: 'roll eight for a three-dot journey', intent: { kind: 'roll', faces: [4, 4, 2] },
         then: { remaining: 8 } },
       { name: 'out of Minneapolis', intent: { kind: 'step', to: 'd417' } },
       { name: 'along the GN', intent: { kind: 'step', to: 'd372' } },
@@ -207,7 +218,7 @@ export const GAMES: readonly GoldenGame[] = [
      */
     setup: { at: 'c13', destination: 'c8', train: 'freight' },
     steps: [
-      { name: 'a pair of ones is still a pair', intent: { kind: 'roll', faces: [1, 1] },
+      { name: 'a pair of ones is still a pair', intent: { kind: 'roll', faces: [1, 1, 2] },
         then: { bonus: null, remaining: 2 } },
       { name: 'walk it off', intent: { kind: 'step', to: 'd417' } },
       { name: 'and again', intent: { kind: 'step', to: 'd372' },
