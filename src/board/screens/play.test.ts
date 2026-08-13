@@ -125,6 +125,28 @@ describe('strict turn order', () => {
     expect(rows.some(row => row.action?.kind === 'undo')).toBe(false);
   });
 
+  it('pins undo immediately above the map, not immediately after the barons', () => {
+    // Two barons: three blank rows would separate undo from the map row if
+    // undo were pushed before padding rather than written into a fixed slot.
+    const rows = play(replay(playing)).rows;
+    expect(rows[BOARD_ROWS - 2]!.action).toEqual({ kind: 'undo' });
+    expect(rows[BOARD_ROWS - 1]!.action).toEqual({ kind: 'navigate', to: 'map' });
+  });
+
+  it('pins undo immediately above the map with five barons too', () => {
+    // Five barons leave exactly one spare slot — the one case the old,
+    // push-before-padding code happened to get right anyway.
+    const five: GameEvent[] = [
+      ...(['red', 'green', 'blue', 'yellow', 'black'] as const)
+        .map(seat => ({ type: 'joined', seat, name: seat.toUpperCase() }) as GameEvent),
+      { type: 'started' },
+      { type: 'orderRolled', seat: 'red', first: 'red' }
+    ];
+    const rows = play(replay(five)).rows;
+    expect(rows[BOARD_ROWS - 2]!.action).toEqual({ kind: 'undo' });
+    expect(rows[BOARD_ROWS - 1]!.action).toEqual({ kind: 'navigate', to: 'map' });
+  });
+
   it('leaves undo off a full board rather than growing past seven rows', () => {
     const full: GameEvent[] = [
       ...(['red', 'green', 'blue', 'yellow', 'black', 'white'] as const)

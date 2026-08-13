@@ -50,19 +50,25 @@ export function play(
       };
     });
 
-  // Its own row: a row carries one action, so undo cannot ride on the map
-  // row. The board is seven rows, always — with six barons seated there is
-  // no spare and this is left off rather than the board growing.
-  if (state.phase === 'playing' && rows.length < BOARD_ROWS - 1) {
-    rows.push({ ...blankRow(), label: 'Undo', text: 'Take back a turn',
-                tone: 'dim', action: { kind: 'undo' } });
-  }
-
   // Seven rows, six barons: the last is always free, and the map takes it.
   // Padding to the row above first pins it to the bottom of the board, so it
   // does not slide up the screen as barons join — a row that moves under the
   // finger between turns is one that gets tapped by mistake.
   const withMap = padRows(rows).slice(0, BOARD_ROWS - 1);
+
+  // Its own row, immediately above the map: a row carries one action, so
+  // undo cannot ride on the map row. Written into the padded array at a
+  // fixed index rather than pushed before padding, so it sits pinned to the
+  // bottom of the board for the same reason the map row is — a control that
+  // drifts between a run of blanks and the barons as they join is one that
+  // gets tapped by mistake. The board is seven rows, always — with six
+  // barons seated there is no spare slot and this is left off rather than
+  // the board growing.
+  if (state.phase === 'playing' && rows.length < BOARD_ROWS - 1) {
+    withMap[BOARD_ROWS - 2] = { ...blankRow(), label: 'Undo', text: 'Take back a turn',
+                                tone: 'dim', action: { kind: 'undo' } };
+  }
+
   withMap.push({
     ...blankRow(),
     label: 'Map',
