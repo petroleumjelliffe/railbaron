@@ -15,3 +15,8 @@ export {
   canReach, isRejection, legalSteps, pathCost, sectionsLeft, stepCost, stepTo, useSection
 } from './movement';
 export type { Rejection, Step, Trip } from './movement';
+export {
+  arrived, back, companies, complete, extend, here, options, path,
+  remaining, rideNow, spent, startDraft, tripOf, usedAfter
+} from './route';
+export type { Draft } from './route';
