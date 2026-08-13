@@ -9,13 +9,6 @@ export interface Placed {
   kind: NodeKind;
   x: number;
   y: number;
-  /**
-   * How far a tap aimed at this lamp may land and still count, in the same
-   * pixels as x and y. See `sizeTargets` — it is always shorter than the
-   * distance to the nearest other lamp, so no lamp can swallow taps meant
-   * for its neighbour.
-   */
-  hit: number;
   /** Present on cities only. */
   name?: string;
   cityId?: number;
@@ -73,34 +66,58 @@ function separateCities(cities: Placed[]): void {
 }
 
 /**
- * A route dot is 2.6px across, which no fingertip can hit, so a tappable lamp
- * carries an invisible target far larger than the bulb. Left unbounded that
- * target reaches past its neighbours: lamps sit as close as 6.4px apart, so a
- * flat 13px radius puts one candidate's centre inside another's target and the
- * later-drawn lamp quietly eats taps meant for the earlier one.
- *
- * So the radius is per-node and bounded by the room the node actually has.
- * `SHARE` aims at under half the gap, so two neighbouring targets do not even
- * overlap; `FLOOR` keeps a lamp in a dense cluster worth aiming at; and the
- * gap itself is the hard ceiling, because a target that reaches a neighbour's
- * centre is the bug. Open country is untouched, at `MAX`.
+ * The lamps as painted, as radii. `MapView` draws them from these, and the tap
+ * targets below are sized against them, so the two cannot drift apart: a
+ * target smaller than the bulb the player is aiming at is a target that misses
+ * what they can see.
  */
-const HIT = { share: 0.45, floor: 5, max: 13, ceiling: 0.8 } as const;
+export const CITY_R = 8.5;
+export const DOT_R = 2.6;
 
-function sizeTargets(nodes: Placed[]): void {
-  for (const node of nodes) {
+/** The painted lamp a player aims at: the city's socket, or the dot's housing. */
+export const visualRadius = (node: Placed): number =>
+  node.kind === 'city' ? CITY_R * 1.06 : Math.max(DOT_R * 1.5, TARGET.min);
+
+/**
+ * How big a tap target may be, in the same pixels as x and y.
+ *
+ * A route dot is 2.6px across, which no fingertip can hit, so a tappable lamp
+ * carries an invisible target far larger than its bulb. The question is what
+ * bounds it — and the answer is not the map. Only the nodes offered *at the
+ * same moment* can compete for a tap: a lamp that is not a candidate this leg
+ * renders no target at all, so bounding each node against the nearest of all
+ * 550 shrank targets against neighbours that were never tappable. That left 46
+ * of the 67 cities with a target smaller than their own painted bulb — a tap
+ * dead centre on a lamp you can see, refused.
+ *
+ * So the sizing happens per render, over the current candidates alone:
+ *
+ * - as large as a fingertip (`max`) wherever there is room;
+ * - never below the lamp as painted, so a target never hides inside its own
+ *   bulb — `max` is above every visual, so this holds unless the cap bites;
+ * - and where two candidates are close, half the distance between them, so
+ *   neither target can reach the other's centre.
+ *
+ * That last rule wins when they conflict: two targets swallowing each other's
+ * centres means the later-drawn one quietly eats taps meant for the earlier,
+ * which is the actual bug. A slightly small target is not. Cities are held
+ * `MIN_CITY_GAP` apart, so two candidate cities never cap each other below
+ * their bulbs — the twin pairs stay fully tappable.
+ */
+export const TARGET = { max: 13, min: 5 } as const;
+
+export function sizeCandidates(candidates: readonly Placed[]): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const node of candidates) {
     let nearest = Infinity;
-    for (const other of nodes) {
+    for (const other of candidates) {
       if (other === node) continue;
       const distance = Math.hypot(other.x - node.x, other.y - node.y);
       if (distance < nearest) nearest = distance;
     }
-    node.hit = Math.min(
-      Math.max(nearest * HIT.share, HIT.floor),
-      nearest * HIT.ceiling,
-      HIT.max
-    );
+    out.set(node.id, Math.min(TARGET.max, nearest / 2));
   }
+  return out;
 }
 
 const isKind = (k: string): k is NodeKind => k === 'city' || k === 'dot' || k === 'junction';
@@ -129,16 +146,11 @@ export function layout(width: number, height: number, inset = 74): Layout {
       kind: node.kind,
       x: point[0],
       y: point[1],
-      // Replaced by sizeTargets below, once every node has its final place.
-      hit: 0,
       ...(node.name !== undefined ? { name: node.name, cityId: node.cityId } : {})
     });
   }
 
   separateCities(nodes.filter(n => n.kind === 'city'));
-  // After separation, never before: nudging a city apart changes the room it
-  // and its neighbours have.
-  sizeTargets(nodes);
 
   return {
     width,

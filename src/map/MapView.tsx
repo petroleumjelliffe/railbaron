@@ -7,7 +7,7 @@ import { DiceReadout } from '../board/DiceReadout';
 import { SEAT_COLORS } from '../game/tokens';
 import { SEATS, type SeatId } from '../state/events';
 import type { GameState } from '../state/game';
-import { layout, RAILROADS, type Placed } from './geo';
+import { CITY_R, DOT_R, layout, RAILROADS, sizeCandidates, type Placed } from './geo';
 import { markers, pawns, type Marker } from './lit';
 import { usePlayback } from './usePlayback';
 import { useRoute } from './useRoute';
@@ -28,8 +28,6 @@ const REGION_COLOR: Record<RegionId, string> = {
 
 /** Unlit lamps still catch a little light, exactly as on a real board. */
 const DIM = 0.3;
-const CITY_R = 8.5;
-const DOT_R = 2.6;
 
 /** At most three lines are drawn per segment; shared trackage runs deeper. */
 const MAX_LINES_PER_EDGE = 3;
@@ -145,27 +143,36 @@ function RouteLamp({ node, lit, candidate }: {
 
 /**
  * The tappable surface, all of it, bubbled above every lamp and pawn: one
- * transparent circle per candidate node, sized to the room `sizeTargets` in
- * geo.ts already worked out for it (`node.hit`). Rendered last in the SVG
- * so nothing drawn earlier — a city's glow, a pawn, a route line — can ever
- * sit on top of a hit target and steal the tap meant for it. A node that
- * currently may not be tapped (not a legal candidate, or a previous move is
- * still playing back) contributes no circle at all, exactly as the old
- * per-lamp `Tappable` rendered no button for it.
+ * transparent circle per candidate node. Rendered last in the SVG so nothing
+ * drawn earlier — a city's glow, a pawn, a route line — can ever sit on top of
+ * a hit target and steal the tap meant for it. A node that currently may not
+ * be tapped (not a legal candidate, or a previous move is still playing back)
+ * contributes no circle at all, exactly as the old per-lamp `Tappable`
+ * rendered no button for it.
+ *
+ * Which is also why the targets are sized *here*, per render, rather than once
+ * for the whole map in geo.ts: the only lamps that can compete for a tap are
+ * the ones offered at this moment, and they are the ones in this layer. See
+ * `sizeCandidates`.
  */
 function InteractionLayer({ nodes, legal, enabled, onTap }: {
   nodes: readonly Placed[]; legal: ReadonlySet<NodeId>; enabled: boolean;
   onTap: (id: NodeId) => void;
 }) {
+  const targets = useMemo(() => {
+    const candidates = nodes.filter(node => legal.has(node.id));
+    const radii = sizeCandidates(candidates);
+    return candidates.map(node => ({ node, hit: radii.get(node.id)! }));
+  }, [nodes, legal]);
+
   return (
     <g>
-      {nodes.map(node => {
-        if (!legal.has(node.id) || !enabled) return null;
+      {enabled && targets.map(({ node, hit }) => {
         const label = node.kind === 'city' ? (node.name ?? node.id) : `Dot ${node.id}`;
         return (
           <circle
             key={node.id}
-            cx={node.x} cy={node.y} r={node.hit}
+            cx={node.x} cy={node.y} r={hit}
             fill="transparent"
             role="button" aria-label={label}
             onClick={() => onTap(node.id)}
