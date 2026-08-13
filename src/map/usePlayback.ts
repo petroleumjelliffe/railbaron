@@ -13,12 +13,20 @@ export const PLAYBACK_MS = 100;
  */
 export function usePlayback(
   path: readonly NodeId[] | null,
-  stepMs: number = PLAYBACK_MS
+  stepMs: number = PLAYBACK_MS,
+  /**
+   * Who walked it, or anything else that tells one committed leg from the
+   * next. The dots alone do not: two barons may walk the same sequence
+   * back-to-back — the second following the first onto the same line is
+   * ordinary play — and keyed on the path alone the second walk never
+   * animated at all. The caller knows which leg this is; the hook cannot.
+   */
+  walker: string | null = null
 ): { shown: readonly NodeId[]; done: boolean; skip: () => void } {
   const [at, setAt] = useState(0);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
   // Identity changes every render for a derived array, so key on the content.
-  const key = path === null ? '' : path.join('|');
+  const key = path === null ? '' : `${walker ?? ''}|${path.join('|')}`;
 
   useEffect(() => {
     setAt(0);

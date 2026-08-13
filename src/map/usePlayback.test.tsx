@@ -42,6 +42,21 @@ describe('walking a committed path', () => {
     expect(result.current.done).toBe(true);
   });
 
+  it('starts over when another baron walks the very same dots', () => {
+    // Two barons following one another down the same line commit identical
+    // paths back-to-back. Keyed on the dots alone the second leg never
+    // animates: the walk sits finished, showing the first baron's.
+    const { result, rerender } = renderHook(({ seat }) => usePlayback(PATH, 100, seat), {
+      initialProps: { seat: 'red' }
+    });
+    act(() => { vi.advanceTimersByTime(1000); });
+    expect(result.current.shown).toEqual(PATH);
+
+    rerender({ seat: 'blue' });
+    expect(result.current.shown).toEqual(['a']);
+    expect(result.current.done).toBe(false);
+  });
+
   it('starts over when a new path arrives', () => {
     const { result, rerender } = renderHook(({ p }) => usePlayback(p, 100), {
       initialProps: { p: PATH as string[] | null }

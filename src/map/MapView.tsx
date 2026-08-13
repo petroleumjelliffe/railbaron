@@ -10,7 +10,7 @@ import type { GameState } from '../state/game';
 import { needsDestination } from '../state/turns';
 import { CITY_R, DOT_R, layout, RAILROADS, sizeCandidates, type Placed } from './geo';
 import { markers, pawns, type Marker } from './lit';
-import { usePlayback } from './usePlayback';
+import { PLAYBACK_MS, usePlayback } from './usePlayback';
 import { useRoute } from './useRoute';
 
 const WIDTH = 1400;
@@ -247,7 +247,10 @@ export function MapView({
   // The path comes from the log, not from the draft: this is what makes the
   // walk visible in the tab that played it *and* any tab just watching along.
   const lastMove = state.lastMove;
-  const replaying = usePlayback(lastMove?.path ?? null);
+  // The mover is part of the key: two barons can commit the same dots one
+  // after the other, and the path alone would make the second walk look like
+  // the first still showing.
+  const replaying = usePlayback(lastMove?.path ?? null, PLAYBACK_MS, lastMove?.seat ?? null);
 
   // While the last committed leg is still walking, the moving baron's pawn
   // sits at the node playback has reached rather than at rest on `seat.at` —
