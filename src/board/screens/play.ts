@@ -6,6 +6,24 @@ import { SEAT_COLORS } from '../../game/tokens';
 import { blankRow, BOARD_ROWS, padRows, type Row, type ScreenDef } from '../types';
 
 /**
+ * The dice as both surfaces show them. The board's header and the map's HUD
+ * render the same readout through the same gate, so the state it reads is
+ * derived once here rather than twice, differently.
+ */
+export function diceFor(state: GameState, pendingDice: TurnRoll | null = null): {
+  roll: TurnRoll | null; live: boolean;
+} {
+  return {
+    roll: pendingDice ?? state.rolled,
+    // Live only when the baron up has a destination and no dice yet.
+    live: state.turn !== null
+      && state.rolled === null
+      && pendingDice === null
+      && !needsDestination(state.seats[state.turn], nodeForCity)
+  };
+}
+
+/**
  * `pending` is a roll whose region has been named but which has not yet
  * reached the log. Its row shows that region and nothing else new — the
  * destination and payout still show where the baron was, because where they
@@ -89,13 +107,6 @@ export function play(
     // so a panel built from the rows would have the answer and a blank to
     // turn between.
     panel: REGIONS.map(region => region.name),
-    dice: {
-      roll: pendingDice ?? state.rolled,
-      // Live only when the baron up has a destination and no dice yet.
-      live: state.turn !== null
-        && state.rolled === null
-        && pendingDice === null
-        && !needsDestination(state.seats[state.turn], nodeForCity)
-    }
+    dice: diceFor(state, pendingDice)
   };
 }

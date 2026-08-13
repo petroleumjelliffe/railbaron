@@ -6,7 +6,7 @@ import { home } from './board/screens/home';
 import { passAndPlay } from './board/screens/passAndPlay';
 import { saved } from './board/screens/saved';
 import { confirm } from './board/screens/confirm';
-import { play } from './board/screens/play';
+import { diceFor, play } from './board/screens/play';
 import { regionBallot } from './board/screens/regionBallot';
 import { homes } from './board/screens/homes';
 import type { Row, ScreenDef } from './board/types';
@@ -56,7 +56,7 @@ export default function App({ rng }: AppProps = {}) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const { state, savedAt, roll, commitRoll, chooseRegion, rename, start,
-          rollOrder, undoLast, reset, rollDice, commitDice } = useGame(rng);
+          rollOrder, undoLast, reset, rollDice, commitDice, commitMove } = useGame(rng);
   const [editing, setEditing] = useState<{ seat: SeatId; placeholder: string } | null>(null);
   const [confirming, setConfirming] = useState(false);
   /**
@@ -77,6 +77,21 @@ export default function App({ rng }: AppProps = {}) {
   if (!isKnown(pathname)) return <Navigate to="/" replace />;
 
   const resuming = state.phase !== 'setup';
+
+  // Named rather than inlined, because the board's header and the map's HUD
+  // are two call sites for one roll: two copies would be two places for the
+  // gate to drift apart.
+  const onRollDice = () => {
+    if (state.turn === null || rollingDice !== null) return;
+    const rolled = rollDice(state.turn);
+    if (rolled === null) return;
+    setRollingDice({ seat: state.turn, roll: rolled });
+  };
+  const onDiceLanded = () => {
+    if (rollingDice === null) return;
+    commitDice(rollingDice.seat, rollingDice.roll);
+    setRollingDice(null);
+  };
 
   // A stale bookmark or a typed URL can ask for the game board when there
   // is no game. Rendering it anyway gives a board of seven blank rows with
@@ -102,7 +117,14 @@ export default function App({ rng }: AppProps = {}) {
             Warming the lamps
           </div>
         }>
-          <MapView state={state} onBack={() => navigate('/pass-and-play/game')} />
+          <MapView
+            state={state}
+            onBack={() => navigate('/pass-and-play/game')}
+            onMove={commitMove}
+            dice={diceFor(state, rollingDice?.roll ?? null)}
+            onRollDice={onRollDice}
+            onDiceLanded={onDiceLanded}
+          />
         </Suspense>
       </main>
     );
@@ -196,15 +218,8 @@ export default function App({ rng }: AppProps = {}) {
           row: SEATS.filter(id => state.seats[id].name !== null).indexOf(rolling.seat),
           onLanded: () => { commitRoll(rolling.seat, rolling.outcome); setRolling(null); }
         }}
-        onRollDice={() => {
-          if (state.turn === null || rollingDice !== null) return;
-          const rolled = rollDice(state.turn);
-          if (rolled === null) return;
-          setRollingDice({ seat: state.turn, roll: rolled });
-        }}
-        awaitDice={rollingDice && {
-          onLanded: () => { commitDice(rollingDice.seat, rollingDice.roll); setRollingDice(null); }
-        }}
+        onRollDice={onRollDice}
+        awaitDice={rollingDice && { onLanded: onDiceLanded }}
         editing={editing}
         onCommit={value => {
           if (editing) rename(editing.seat, value || null);

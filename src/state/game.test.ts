@@ -284,6 +284,16 @@ describe('turn order', () => {
       { type: 'moved', seat: 'green', path: [MINNEAPOLIS, ST_PAUL], arrived: true }];
     expect(replay(log).turn).toBe('red');
   });
+
+  it('counts the leg so the bonus leg knows what it has to spend', () => {
+    const base: GameEvent[] = [...twoBarons,
+      { type: 'arrived', seat: 'green', city: MINNEAPOLIS_CITY, region: 'PL', payout: 0 },
+      { type: 'turnRolled', seat: 'green', white: [6, 6], bonus: 4 }];
+    expect(replay(base).leg).toBe(0);
+    const after: GameEvent[] = [...base,
+      { type: 'moved', seat: 'green', path: [ST_PAUL, MINNEAPOLIS], arrived: true }];
+    expect(replay(after).leg).toBe(1);
+  });
 });
 
 describe('who may be given a destination', () => {

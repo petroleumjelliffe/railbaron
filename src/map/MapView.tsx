@@ -1,10 +1,15 @@
-import { useMemo } from 'react';
-import { cityById, type RegionId } from '../../engine';
+import { useMemo, type ReactNode } from 'react';
+import {
+  cityById, path as pathOf,
+  type NodeId, type RegionId, type TurnRoll
+} from '../../engine';
+import { DiceReadout } from '../board/DiceReadout';
 import { SEAT_COLORS } from '../game/tokens';
-import { SEATS } from '../state/events';
+import { SEATS, type SeatId } from '../state/events';
 import type { GameState } from '../state/game';
 import { layout, RAILROADS, type Placed } from './geo';
-import { markers, type Marker } from './lit';
+import { markers, pawns, type Marker } from './lit';
+import { useRoute } from './useRoute';
 
 const WIDTH = 1400;
 const HEIGHT = 788;
@@ -74,14 +79,31 @@ function Track({ nodes, edges }: Pick<ReturnType<typeof layout>, 'edges'> & { no
   );
 }
 
+/**
+ * A lamp is announced as a button only while it may actually be tapped. A
+ * lamp nobody may tap is scenery, and scenery that claims to be a control is
+ * worse than scenery.
+ */
+function Tappable({ label, onTap, children }: {
+  label: string; onTap?: () => void; children: ReactNode;
+}) {
+  if (!onTap) return <g>{children}</g>;
+  return (
+    <g role="button" aria-label={label} onClick={onTap} style={{ cursor: 'pointer' }}>
+      {children}
+    </g>
+  );
+}
+
 /** A bulb in its socket: the housing is always drawn, the filament is not. */
-function CityLamp({ node, color, lit, marker }: {
+function CityLamp({ node, color, lit, marker, candidate, onTap }: {
   node: Placed; color: string; lit: boolean; marker: Marker | undefined;
+  candidate: boolean; onTap?: () => void;
 }) {
   const r = CITY_R;
   const { x, y } = node;
   return (
-    <g>
+    <Tappable label={node.name ?? node.id} onTap={onTap}>
       <g>
         <circle cx={x} cy={y + r * 0.07} r={r * 1.06} fill="#000" opacity={0.5} />
         <circle cx={x - r * 0.07} cy={y - r * 0.09} r={r * 0.98} fill="#f2f0eb" />
@@ -94,39 +116,83 @@ function CityLamp({ node, color, lit, marker }: {
         <circle cx={x} cy={y} r={r * 0.64} fill={color} />
         <circle cx={x - r * 0.2} cy={y - r * 0.24} r={r * 0.2} fill="#fff" opacity={0.6} />
       </g>
+      {candidate && (
+        <circle cx={x} cy={y} r={r * 1.75} fill="none"
+                stroke="#fff6e2" strokeWidth={1.4} opacity={0.8} />
+      )}
       <title>
         {node.name}
         {marker ? ` — ${marker.name}'s ${marker.role}` : ''}
       </title>
-    </g>
+    </Tappable>
   );
 }
 
-function RouteLamp({ node, lit }: { node: Placed; lit: boolean }) {
+function RouteLamp({ node, lit, candidate, onTap }: {
+  node: Placed; lit: boolean; candidate: boolean; onTap?: () => void;
+}) {
   const r = DOT_R;
   const { x, y } = node;
   return (
-    <g>
+    <Tappable label={`Dot ${node.id}`} onTap={onTap}>
+      {/* A dot is two and a half pixels across. Tapping one needs a target
+          the size of a fingertip, drawn only where there is something to tap. */}
+      {onTap && <circle cx={x} cy={y} r={r * 5} fill="transparent" />}
       <circle cx={x} cy={y} r={r * 1.5} fill="#2a1c0d" />
       <g style={{ opacity: lit ? 1 : DIM, transition: 'opacity 110ms cubic-bezier(.2,.8,.3,1)' }}>
         <circle cx={x} cy={y} r={r * 4.2} fill="#fff6e2" opacity={0.1} />
         <circle cx={x} cy={y} r={r * 2.2} fill="#fff6e2" opacity={0.2} />
         <circle cx={x} cy={y} r={r} fill="#fffaf0" />
       </g>
-    </g>
+      {candidate && (
+        <circle cx={x} cy={y} r={r * 3.2} fill="none"
+                stroke="#fff6e2" strokeWidth={1} opacity={0.75} />
+      )}
+    </Tappable>
   );
 }
+
+/** The HUD sits on the cabinet, so it borrows the cabinet's brass. */
+const HUD_BUTTON = {
+  fontFamily: "'DM Mono', ui-monospace, monospace",
+  fontSize: 12,
+  letterSpacing: '0.18em',
+  textTransform: 'uppercase',
+  color: '#f0cd94',
+  background: 'rgba(43,23,10,0.55)',
+  border: '1px solid #5c3a1e',
+  borderRadius: 3,
+  padding: '6px 12px'
+} as const;
 
 export interface MapViewProps {
   state: GameState;
   onBack: () => void;
+  onMove: (seat: SeatId, path: readonly NodeId[], arrived: boolean) => void;
+  /** The dice, threaded through so the map can roll them too — see below. */
+  dice: { roll: TurnRoll | null; live: boolean };
+  onRollDice: () => void;
+  onDiceLanded: () => void;
 }
 
-export function MapView({ state, onBack }: MapViewProps) {
+/**
+ * Why the dice appear on both surfaces. The readout lives on the board and is
+ * shared; on one tablet that would mean tapping the dice there and then
+ * navigating here to move — an extra trip every turn, on the view that is
+ * *not* where the turn happens. The same component renders here, through the
+ * same `onRollDice`/`onDiceLanded` gate, so there is one implementation and
+ * one gate on two surfaces.
+ */
+export function MapView({
+  state, onBack, onMove, dice, onRollDice, onDiceLanded
+}: MapViewProps) {
   // The projection is expensive and depends on nothing that changes — the
   // network is a build artefact and the cabinet is a fixed size.
   const board = useMemo(() => layout(WIDTH, HEIGHT), []);
   const lamps = useMemo(() => markers(state), [state]);
+  const route = useRoute(state, onMove);
+  const standing = useMemo(() => pawns(state), [state]);
+  const drafted = route.draft === null ? null : pathOf(route.draft);
 
   const playing = SEATS
     .map(id => state.seats[id])
@@ -169,7 +235,9 @@ export function MapView({ state, onBack }: MapViewProps) {
         <svg
           width={WIDTH} height={HEIGHT} viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
           style={{ position: 'absolute', inset: 0 }}
-          role="img"
+          // Not role="img": the lamps a baron may move to are real buttons
+          // inside it, and a picture has no controls.
+          role="group"
           aria-label="The Rail Baron network. Each baron's destination and the city they set out from are lit in their colour."
         >
           <path d={board.landPath} fill="rgba(0,0,0,0.20)" stroke="#8b6a42" strokeWidth={3}
@@ -179,10 +247,32 @@ export function MapView({ state, onBack }: MapViewProps) {
 
           <Track edges={board.edges} nodes={board.byId} />
 
+          {/* The route as tapped out so far, drawn over the track so it reads
+              as the line the pawn is about to walk. */}
+          {drafted && (
+            <g>
+              {drafted.slice(1).map((id, i) => {
+                const a = board.byId.get(drafted[i]!);
+                const b = board.byId.get(id);
+                if (!a || !b) return null;
+                return (
+                  <line key={id} x1={a.x} y1={a.y} x2={b.x} y2={b.y}
+                        stroke="#fff6e2" strokeWidth={3.4} strokeLinecap="round"
+                        opacity={0.9} />
+                );
+              })}
+            </g>
+          )}
+
           <g>
-            {board.nodes.filter(n => n.kind === 'dot').map(node => (
-              <RouteLamp key={node.id} node={node} lit={false} />
-            ))}
+            {board.nodes.filter(n => n.kind === 'dot').map(node => {
+              const candidate = route.legal.has(node.id);
+              const onTap = candidate ? () => route.tap(node.id) : undefined;
+              return (
+                <RouteLamp key={node.id} node={node} lit={candidate}
+                           candidate={candidate} onTap={onTap} />
+              );
+            })}
           </g>
           <g>
             {board.nodes.filter(n => n.kind === 'city').map(node => {
@@ -192,12 +282,16 @@ export function MapView({ state, onBack }: MapViewProps) {
               const region = node.cityId === undefined
                 ? undefined
                 : cityById(node.cityId).region;
+              const candidate = route.legal.has(node.id);
+              const onTap = candidate ? () => route.tap(node.id) : undefined;
               return (
                 <CityLamp
                   key={node.id}
                   node={node}
-                  lit={marker !== undefined}
+                  lit={marker !== undefined || candidate}
                   marker={marker}
+                  candidate={candidate}
+                  onTap={onTap}
                   color={marker
                     ? SEAT_COLORS[marker.seat]
                     : (region ? REGION_COLOR[region] : '#e8a13c')}
@@ -205,7 +299,34 @@ export function MapView({ state, onBack }: MapViewProps) {
               );
             })}
           </g>
+
+          {/* One pawn per baron, stacked where several share a node. */}
+          <g>
+            {[...standing].map(([id, seats]) => {
+              const node = board.byId.get(id);
+              if (!node) return null;
+              return seats.map((seatId, i) => (
+                <g key={`${id}-${seatId}`} role="img" aria-label={state.seats[seatId].name ?? seatId}>
+                  <circle cx={node.x + i * 5} cy={node.y - 11} r={5}
+                          fill={SEAT_COLORS[seatId]} stroke="#100c08" strokeWidth={1.4} />
+                  <title>{state.seats[seatId].name}</title>
+                </g>
+              ));
+            })}
+          </g>
         </svg>
+
+        <div style={{
+          position: 'absolute', top: 68, left: '50%', transform: 'translateX(-50%)',
+          width: 184, height: 56, zIndex: 4
+        }}>
+          <DiceReadout
+            roll={dice.roll}
+            live={dice.live}
+            onRoll={onRollDice}
+            onLanded={onDiceLanded}
+          />
+        </div>
 
         <div style={{
           position: 'absolute', top: 24, left: 0, right: 0, textAlign: 'center',
@@ -227,6 +348,42 @@ export function MapView({ state, onBack }: MapViewProps) {
         >
           Back
         </button>
+
+        {/* The turn's controls. The draft they act on lives in screen state
+            and never in the log, which is why UNDO costs nothing and COMMIT
+            is the only thing here that writes anything down. */}
+        {state.turn !== null && (
+          <div style={{
+            position: 'absolute', top: 26, right: 34, zIndex: 4,
+            display: 'flex', alignItems: 'center', gap: 10
+          }}>
+            <span style={{ ...HUD_BUTTON, background: 'rgba(43,23,10,0.35)' }}>
+              {route.remaining} left
+            </span>
+            <button
+              onClick={route.undo}
+              disabled={!route.draft?.steps.length}
+              style={{
+                ...HUD_BUTTON,
+                cursor: route.draft?.steps.length ? 'pointer' : 'default',
+                opacity: route.draft?.steps.length ? 1 : 0.45
+              }}
+            >
+              UNDO
+            </button>
+            <button
+              onClick={route.commit}
+              disabled={!route.canCommit}
+              style={{
+                ...HUD_BUTTON,
+                cursor: route.canCommit ? 'pointer' : 'default',
+                opacity: route.canCommit ? 1 : 0.45
+              }}
+            >
+              COMMIT
+            </button>
+          </div>
+        )}
 
         {playing.length > 0 && (
           <div style={{

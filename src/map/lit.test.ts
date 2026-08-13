@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { markers } from './lit';
+import { nodeForCity } from '../../engine';
+import { markers, pawns } from './lit';
 import { replay } from '../state/game';
 import type { GameEvent } from '../state/events';
 
@@ -78,5 +79,34 @@ describe('which lamps carry a colour', () => {
     const map = lit([{ type: 'started' },
       { type: 'arrived', seat: 'green', city: CHICAGO, region: 'NC', payout: 4500 }]);
     expect(map.size).toBe(0);
+  });
+});
+
+describe('where the pawns are', () => {
+  it('is empty before anyone has a home city', () => {
+    expect(pawns(replay([{ type: 'joined', seat: 'red', name: 'ADA' }])).size).toBe(0);
+  });
+
+  it('puts a baron on their home city node', () => {
+    const state = replay([
+      { type: 'joined', seat: 'red', name: 'ADA' },
+      { type: 'started' },
+      { type: 'arrived', seat: 'red', city: 43, region: 'PL', payout: null }
+    ]);
+    expect(pawns(state).get(nodeForCity(43))).toEqual(['red']);
+  });
+
+  it('stacks two barons standing on the same node', () => {
+    const state = replay([
+      { type: 'joined', seat: 'red', name: 'ADA' },
+      { type: 'joined', seat: 'green', name: 'GRACE' },
+      { type: 'started' },
+      { type: 'arrived', seat: 'red', city: 43, region: 'PL', payout: null },
+      { type: 'arrived', seat: 'green', city: 47, region: 'PL', payout: null },
+      { type: 'orderRolled', seat: 'red', first: 'red' },
+      { type: 'turnRolled', seat: 'red', white: [1, 1], bonus: null },
+      { type: 'moved', seat: 'red', path: [nodeForCity(43), nodeForCity(47)], arrived: false }
+    ]);
+    expect(pawns(state).get(nodeForCity(47))).toEqual(['red', 'green']);
   });
 });

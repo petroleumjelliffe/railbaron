@@ -44,6 +44,12 @@ export interface GameState {
   turn: SeatId | null;
   /** The dice of the turn under way, or null when the current baron owes a roll. */
   rolled: TurnRoll | null;
+  /**
+   * Legs of the current turn already walked: 0 normally, 1 while a Bonus Roll
+   * leg is owed. It decides how much movement the leg has — the whole roll,
+   * or just the bonus die.
+   */
+  leg: number;
 }
 
 function emptyState(): GameState {
@@ -53,7 +59,7 @@ function emptyState(): GameState {
       id, name: null, stops: [], awaiting: null, earned: 0, at: null, used: new Map()
     };
   }
-  return { seats, phase: 'setup', order: [], turn: null, rolled: null };
+  return { seats, phase: 'setup', order: [], turn: null, rolled: null, leg: 0 };
 }
 
 export function replay(events: readonly GameEvent[]): GameState {
@@ -125,6 +131,7 @@ export function replay(events: readonly GameEvent[]): GameState {
     ? null
     : state.order[taken % state.order.length]!;
   state.rolled = open?.roll ?? null;
+  state.leg = open?.legs ?? 0;
   return state;
 }
 

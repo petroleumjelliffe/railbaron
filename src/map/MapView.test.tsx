@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { nodeForCity } from '../../engine';
 import { MapView } from './MapView';
 import { replay } from '../state/game';
 import type { GameEvent } from '../state/events';
@@ -15,8 +16,16 @@ const join: GameEvent[] = [
   { type: 'started' }
 ];
 
+/** Everything the map needs that these tests are not about. */
+const inert = {
+  onMove: () => {},
+  dice: { roll: null, live: false },
+  onRollDice: () => {},
+  onDiceLanded: () => {}
+};
+
 const show = (events: GameEvent[], onBack = () => {}) =>
-  render(<MapView state={replay(events)} onBack={onBack} />);
+  render(<MapView state={replay(events)} onBack={onBack} {...inert} />);
 
 /**
  * Each lamp's <title> is its tooltip and what a screen reader announces.
@@ -81,5 +90,65 @@ describe('the map', () => {
     show(join, onBack);
     await userEvent.click(screen.getByRole('button', { name: /back/i }));
     expect(onBack).toHaveBeenCalledOnce();
+  });
+});
+
+describe('playing a turn on the map', () => {
+  /** Red is up, standing in Minneapolis and bound for St. Paul next door. */
+  const midTurn: GameEvent[] = [
+    { type: 'joined', seat: 'red', name: 'ADA' },
+    { type: 'started' },
+    { type: 'arrived', seat: 'red', city: MINNEAPOLIS, region: 'PL', payout: null },
+    { type: 'orderRolled', seat: 'red', first: 'red' },
+    { type: 'arrived', seat: 'red', city: ST_PAUL, region: 'PL', payout: 0 },
+    { type: 'turnRolled', seat: 'red', white: [1, 1], bonus: null }
+  ];
+
+  const play = (onMove = vi.fn()) => {
+    render(
+      <MapView
+        state={replay(midTurn)}
+        onBack={() => {}}
+        onMove={onMove}
+        dice={{ roll: null, live: false }}
+        onRollDice={() => {}}
+        onDiceLanded={() => {}}
+      />
+    );
+    return onMove;
+  };
+
+  it('will not commit before a route has been tapped out', () => {
+    play();
+    expect(screen.getByRole('button', { name: 'COMMIT' })).toBeDisabled();
+  });
+
+  it('commits the tapped route as one leg', async () => {
+    const user = userEvent.setup();
+    const onMove = play();
+    await user.click(screen.getByRole('button', { name: /St\. Paul/ }));
+    await user.click(screen.getByRole('button', { name: 'COMMIT' }));
+    expect(onMove).toHaveBeenCalledWith(
+      'red', [nodeForCity(MINNEAPOLIS), nodeForCity(ST_PAUL)], true);
+  });
+
+  it('takes the last step back on undo', async () => {
+    const user = userEvent.setup();
+    play();
+    await user.click(screen.getByRole('button', { name: /St\. Paul/ }));
+    expect(screen.getByRole('button', { name: 'COMMIT' })).toBeEnabled();
+    await user.click(screen.getByRole('button', { name: 'UNDO' }));
+    expect(screen.getByRole('button', { name: 'COMMIT' })).toBeDisabled();
+  });
+
+  it('announces only the lamps that may be tapped', () => {
+    play();
+    // Chicago is nowhere near this leg and must not claim to be a control.
+    expect(screen.queryByRole('button', { name: 'Chicago' })).not.toBeInTheDocument();
+  });
+
+  it('shows a pawn where the baron stands', () => {
+    play();
+    expect(screen.getAllByLabelText('ADA').length).toBeGreaterThan(0);
   });
 });

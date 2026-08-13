@@ -1,4 +1,4 @@
-import type { CityId } from '../../engine';
+import type { CityId, NodeId } from '../../engine';
 import { SEATS, type SeatId } from '../state/events';
 import type { GameState } from '../state/game';
 
@@ -51,6 +51,23 @@ export function markers(state: GameState): Map<CityId, Marker[]> {
 
   for (const list of out.values()) {
     list.sort((a, b) => Number(b.role === 'destination') - Number(a.role === 'destination'));
+  }
+  return out;
+}
+
+/**
+ * Which node each baron's pawn stands on. Several may share one — barons pass
+ * through the same dots, and the order is seat order so the stack is stable
+ * between renders rather than reshuffling as the game goes on.
+ */
+export function pawns(state: GameState): Map<NodeId, SeatId[]> {
+  const out = new Map<NodeId, SeatId[]>();
+  for (const id of SEATS) {
+    const seat = state.seats[id];
+    if (seat.name === null || seat.at === null) continue;
+    const here = out.get(seat.at);
+    if (here) here.push(id);
+    else out.set(seat.at, [id]);
   }
   return out;
 }
