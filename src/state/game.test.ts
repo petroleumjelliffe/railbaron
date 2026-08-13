@@ -79,8 +79,14 @@ describe('the begin gate', () => {
     expect(replay([join('red', 'ADA')]).phase).toBe('setup');
   });
 
-  it('is playing once the log says it started', () => {
-    expect(replay([join('red', 'ADA'), { type: 'started' }]).phase).toBe('playing');
+  it('leaves setup once the log says it started, landing in homes rather than playing', () => {
+    // `started` alone is not enough to reach `playing` under the new model —
+    // that also needs `orderRolled`, covered by `the phases` below. This
+    // pins the other half: the gate does open, moving the game somewhere,
+    // not nowhere.
+    const state = replay([join('red', 'ADA'), { type: 'started' }]);
+    expect(state.phase).not.toBe('setup');
+    expect(state.phase).toBe('homes');
   });
 });
 
