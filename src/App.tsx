@@ -1,6 +1,6 @@
 import { lazy, Suspense, useState } from 'react';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { REGIONS, type RegionId, type Rng, type RollOutcome } from '../engine';
+import { REGIONS, type RegionId, type Rng, type RollOutcome, type TurnRoll } from '../engine';
 import { Board } from './board/Board';
 import { home } from './board/screens/home';
 import { passAndPlay } from './board/screens/passAndPlay';
@@ -56,7 +56,7 @@ export default function App({ rng }: AppProps = {}) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const { state, savedAt, roll, commitRoll, chooseRegion, rename, start,
-          rollOrder, undoLast, reset } = useGame(rng);
+          rollOrder, undoLast, reset, rollDice, commitDice } = useGame(rng);
   const [editing, setEditing] = useState<{ seat: SeatId; placeholder: string } | null>(null);
   const [confirming, setConfirming] = useState(false);
   /**
@@ -65,6 +65,8 @@ export default function App({ rng }: AppProps = {}) {
    * useGame for why that is the gate rather than a rule to remember.
    */
   const [rolling, setRolling] = useState<{ seat: SeatId; outcome: RollOutcome } | null>(null);
+  /** Dice rolled but not yet told. Same gate as `rolling`, same reason. */
+  const [rollingDice, setRollingDice] = useState<{ seat: SeatId; roll: TurnRoll } | null>(null);
   /**
    * How many rolls each seat has had told. Kept across the commit, so the
    * board sees one announcement per roll rather than a second one when the
@@ -126,7 +128,9 @@ export default function App({ rng }: AppProps = {}) {
       ? homes(state, rolling && { seat: rolling.seat, region: regionOf(rolling.outcome) })
       : awaiting
         ? regionBallot(awaiting)
-        : play(state, turns, rolling && { seat: rolling.seat, region: regionOf(rolling.outcome) })
+        : play(state, turns,
+               rolling && { seat: rolling.seat, region: regionOf(rolling.outcome) },
+               rollingDice?.roll ?? null)
   };
 
   const onRowAct = (row: Row, index: number) => {
@@ -191,6 +195,15 @@ export default function App({ rng }: AppProps = {}) {
         awaitRegion={rolling && {
           row: SEATS.filter(id => state.seats[id].name !== null).indexOf(rolling.seat),
           onLanded: () => { commitRoll(rolling.seat, rolling.outcome); setRolling(null); }
+        }}
+        onRollDice={() => {
+          if (state.turn === null || rollingDice !== null) return;
+          const rolled = rollDice(state.turn);
+          if (rolled === null) return;
+          setRollingDice({ seat: state.turn, roll: rolled });
+        }}
+        awaitDice={rollingDice && {
+          onLanded: () => { commitDice(rollingDice.seat, rollingDice.roll); setRollingDice(null); }
         }}
         editing={editing}
         onCommit={value => {

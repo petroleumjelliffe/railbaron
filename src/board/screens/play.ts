@@ -1,4 +1,4 @@
-import { cityById, nodeForCity, regionById, REGIONS, type RegionId } from '../../../engine';
+import { cityById, nodeForCity, regionById, REGIONS, type RegionId, type TurnRoll } from '../../../engine';
 import { SEATS, type SeatId } from '../../state/events';
 import type { GameState } from '../../state/game';
 import { needsDestination } from '../../state/turns';
@@ -14,7 +14,8 @@ import { blankRow, BOARD_ROWS, padRows, type Row, type ScreenDef } from '../type
 export function play(
   state: GameState,
   turns: Partial<Record<SeatId, number>> = {},
-  pending: { seat: SeatId; region: RegionId } | null = null
+  pending: { seat: SeatId; region: RegionId } | null = null,
+  pendingDice: TurnRoll | null = null
 ): ScreenDef {
   const rows: Row[] = SEATS
     .map(id => state.seats[id])
@@ -87,6 +88,14 @@ export function play(
     // first roll of a game is the case that needs it: nothing is showing yet,
     // so a panel built from the rows would have the answer and a blank to
     // turn between.
-    panel: REGIONS.map(region => region.name)
+    panel: REGIONS.map(region => region.name),
+    dice: {
+      roll: pendingDice ?? state.rolled,
+      // Live only when the baron up has a destination and no dice yet.
+      live: state.turn !== null
+        && state.rolled === null
+        && pendingDice === null
+        && !needsDestination(state.seats[state.turn], nodeForCity)
+    }
   };
 }

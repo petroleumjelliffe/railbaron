@@ -1,3 +1,4 @@
+import type { TurnRoll } from '../../engine';
 import type { SeatId } from '../state/events';
 
 /**
@@ -71,6 +72,11 @@ export interface ScreenDef {
    * declare — the values on its rows are the whole of it.
    */
   panel?: readonly string[];
+  /**
+   * The dice this screen shows. There is one pair on the table and everyone
+   * uses it, so this belongs to the screen rather than to a row.
+   */
+  dice?: { roll: TurnRoll | null; live: boolean } | null;
 }
 
 /** The board is this many rows on every screen, without exception. */
