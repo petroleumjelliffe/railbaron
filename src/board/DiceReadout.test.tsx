@@ -50,7 +50,9 @@ describe('the dice readout', () => {
   it('does not name the faces while the drums are still turning', () => {
     render(<DiceReadout roll={{ white: [3, 4], bonus: null }} live={false} />);
     act(() => { vi.advanceTimersByTime(78); });
-    expect(screen.queryByRole('img', { name: 'White die, 3' })).not.toBeInTheDocument();
+    expect(screen.getAllByRole('img', { name: /turning/i })).toHaveLength(3);
+    expect(screen.queryByRole('img', { name: /White die, \d/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('img', { name: /Bonus die, \d/ })).not.toBeInTheDocument();
   });
 
   it('reports the landing once, when every drum has stopped', () => {
