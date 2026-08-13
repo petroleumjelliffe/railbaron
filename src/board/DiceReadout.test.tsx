@@ -23,6 +23,17 @@ afterEach(() => vi.useRealTimers());
 /** Runs the drums to a standstill. */
 const settle = () => act(() => { vi.advanceTimersByTime(4000); });
 
+/**
+ * jsdom normalises a `style.background` hex string to `rgb(r, g, b)` on
+ * read, so a raw string comparison against `COLORS`'s hex constants never
+ * matches either way — silently vacuous, not a real check. Converts the
+ * hex constant to the same form the DOM will report.
+ */
+const asRgb = (hex: string): string => {
+  const n = Number.parseInt(hex.slice(1), 16);
+  return `rgb(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255})`;
+};
+
 describe('the dice readout', () => {
   it('shows three dice, always', () => {
     render(<DiceReadout roll={null} live={false} />);
@@ -93,6 +104,65 @@ describe('the dice readout', () => {
     const bonusDie = screen.getByRole('img', { name: /Bonus die/i });
     const topLeaf = bonusDie.querySelector('[aria-hidden]');
     expect(topLeaf).toHaveStyle({ background: COLORS.bonusBlank });
+  });
+
+  it('clears a stale bonus face at the start of the next roll, not the end', () => {
+    // Reported from live play: a player rolled 4+5 (not a double) and
+    // believed the bonus roll had triggered. It cannot have — the engine
+    // only grants a bonus on a double, pinned elsewhere — so the readout
+    // itself must have shown something misleading. This pins the fix: once
+    // a previous roll left the bonus drum showing a number, a following
+    // roll that earns no bonus must fall the drum to blank as the whites
+    // *begin* turning, not hold the stale face and drop it only once the
+    // whites land.
+    const { rerender } = render(<DiceReadout roll={{ white: [6, 6], bonus: 5 }} live={false} />);
+    settle();
+    expect(screen.getByRole('img', { name: 'Bonus die, 5' })).toBeInTheDocument();
+
+    rerender(<DiceReadout roll={{ white: [4, 5], bonus: null }} live={false} />);
+    // Three ticks in — the whites (11+ ticks to land) are still well into
+    // their spin. The bonus drum only needed two ticks to fall from 5 to
+    // the blank, so by now both its leaves must already show the blank,
+    // not the stale red "5".
+    act(() => { vi.advanceTimersByTime(3 * DICE_MS); });
+
+    const bonusDie = screen.getByRole('img', { name: /Bonus die/i });
+    const [top, bottom] = bonusDie.querySelectorAll('[aria-hidden]');
+    expect(top).toHaveStyle({ background: COLORS.bonusBlank });
+    expect(bottom).toHaveStyle({ background: COLORS.bonusBlank });
+  });
+
+  it('documents what the bonus drum shows, tick by tick, across a stale-face transition', () => {
+    // Investigative record for the same report: confirms (a) the drum
+    // never holds the stale face once the fix is in place, and (b) it
+    // never *settles* — fully stopped, name readable — on a nonzero face
+    // for a roll that earned no bonus. (b) would be a hard engine-adjacent
+    // bug; only (a) being true (pre-fix) meant the report was perceptual.
+    const { rerender } = render(<DiceReadout roll={{ white: [6, 6], bonus: 5 }} live={false} />);
+    settle();
+
+    rerender(<DiceReadout roll={{ white: [4, 5], bonus: null }} live={false} />);
+
+    const record: { name: string; top: string; bottom: string }[] = [];
+    for (let t = 1; t <= 16; t++) {
+      act(() => { vi.advanceTimersByTime(DICE_MS); });
+      const bonusDie = screen.getByRole('img', { name: /Bonus die/i });
+      const [top, bottom] = bonusDie.querySelectorAll('[aria-hidden]');
+      record.push({
+        name: bonusDie.getAttribute('aria-label') ?? '',
+        top: (top as HTMLElement).style.background,
+        bottom: (bottom as HTMLElement).style.background
+      });
+    }
+
+    // Never held on the stale face past the drum's own two-tick fall.
+    expect(record.slice(2).some(r => r.top === asRgb(COLORS.bonusLeaf))).toBe(false);
+    // Never settles readable on a number: once every drum (including the
+    // bonus one) has genuinely stopped, it must be the blank.
+    const settled = record[record.length - 1]!;
+    expect(settled.name).toBe('Bonus die, not earned');
+    expect(settled.top).toBe(asRgb(COLORS.bonusBlank));
+    expect(settled.bottom).toBe(asRgb(COLORS.bonusBlank));
   });
 
   it('rolls when tapped, but only when it is live', async () => {

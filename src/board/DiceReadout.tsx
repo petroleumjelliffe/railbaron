@@ -81,7 +81,14 @@ export function DiceReadout({ roll, live, onRoll, onLanded }: DiceReadoutProps) 
       // the bonus drum does not wait its turn on the whites, but it does
       // wait a beat past them before it moves at all.
       const whiteTicks = Math.max(whiteLeft0, whiteLeft1);
-      const beat = roll.bonus !== null ? BONUS_BEAT_TICKS : 0;
+      // A bonus is *announced* after the whites land and a beat passes —
+      // that staging is transcribed from the design and does not change.
+      // A stale face left over from a previous roll is *cleared*
+      // immediately instead: holding it unchanged through the whites'
+      // spin (the old behaviour) reads to a player as if this roll itself
+      // earned a bonus, so when none was earned here the drum's wait is
+      // zero and its fall to blank starts the instant the whites begin.
+      const wait = roll.bonus !== null ? whiteTicks + 1 + BONUS_BEAT_TICKS : 0;
       return [
         { ...current[0], left: whiteLeft0, wait: 0 },
         { ...current[1], left: whiteLeft1, wait: 0 },
@@ -90,7 +97,7 @@ export function DiceReadout({ roll, live, onRoll, onLanded }: DiceReadoutProps) 
         // thrown.
         { ...current[2],
           left: dieTurn(current[2].cur, roll.bonus ?? 0, BONUS_FACES, roll.bonus !== null),
-          wait: whiteTicks + 1 + beat }
+          wait }
       ];
     });
 
