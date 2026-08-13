@@ -145,11 +145,38 @@ export function replay(events: readonly GameEvent[]): GameState {
  * taken row is tapped to rename, which corrects it directly. So two
  * guards — refuse before the game has started, and refuse to rewind back
  * across the moment it did.
+ *
+ * One tap takes back one thing the player did, which is no longer one event.
+ * A turn is a roll and the leg it paid for — four events when a bonus leg
+ * follows, because arriving inside the white dice buys a new destination and
+ * a second leg. Popping the last event alone left the board mid-turn, with
+ * dice on the table for a leg that had just been unwalked, and made the row's
+ * own label ("Take back a turn") a lie.
+ *
+ * So a tap pops one player action:
+ *
+ * - a destination announcement (`arrived`, or the `regionRequested` that
+ *   hands a baron their own region back) is its own action, and goes alone;
+ * - a roll or a leg goes back with the whole turn it belongs to — through
+ *   and including the `turnRolled` that opened it, which carries that turn's
+ *   moves and any destination announced part-way through;
+ * - anything else — seating, a rename, the roll for first player — goes one
+ *   at a time, as it always did.
  */
 export function undo(events: readonly GameEvent[]): GameEvent[] {
   const startedAt = events.findIndex(event => event.type === 'started');
   if (startedAt < 0) return [...events];
   if (events.length <= startedAt + 1) return [...events];
+
+  const last = events[events.length - 1]!;
+  if (last.type === 'moved' || last.type === 'turnRolled') {
+    // Never past `started`, which is the second guard again: a turn that
+    // somehow has no roll behind it falls through to popping one event
+    // rather than swallowing the game.
+    for (let at = events.length - 1; at > startedAt; at--) {
+      if (events[at]!.type === 'turnRolled') return events.slice(0, at);
+    }
+  }
   return events.slice(0, -1);
 }
 

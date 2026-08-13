@@ -296,6 +296,70 @@ describe('turn order', () => {
   });
 });
 
+/**
+ * A turn is no longer one event, so neither is taking one back. The row that
+ * offers this says "Take back a turn"; these are what make that true.
+ */
+describe('undo takes back a whole turn', () => {
+  /** GREEN is up, standing in St. Paul and bound for Minneapolis. */
+  const upNext: GameEvent[] = [...twoBarons,
+    { type: 'arrived', seat: 'green', city: MINNEAPOLIS_CITY, region: 'PL', payout: 0 }];
+
+  const shorterBy = (log: GameEvent[]) => log.length - undo(log).length;
+
+  it('pops the roll and the leg together, and hands the turn back', () => {
+    const log: GameEvent[] = [...upNext,
+      { type: 'turnRolled', seat: 'green', white: [3, 4], bonus: null },
+      { type: 'moved', seat: 'green', path: [ST_PAUL, MINNEAPOLIS], arrived: true }];
+    expect(replay(log).turn, 'the turn had passed on').toBe('red');
+
+    expect(shorterBy(log)).toBe(2);
+    const state = replay(undo(log));
+    expect(state.turn).toBe('green');
+    expect(state.rolled).toBeNull();
+    expect(state.seats.green.at).toBe(ST_PAUL);
+  });
+
+  it('pops all four events of a turn with a bonus leg', () => {
+    // Arrived inside the white dice: paid, given a new destination, and the
+    // bonus die spent starting that trip. One tap took back the last leg
+    // alone and left the board mid-turn with dice still on the table.
+    const log: GameEvent[] = [...upNext,
+      { type: 'turnRolled', seat: 'green', white: [6, 6], bonus: 4 },
+      { type: 'moved', seat: 'green', path: [ST_PAUL, MINNEAPOLIS], arrived: true },
+      { type: 'arrived', seat: 'green', city: ST_PAUL_CITY, region: 'PL', payout: 0 },
+      { type: 'moved', seat: 'green', path: [MINNEAPOLIS, ST_PAUL], arrived: true }];
+
+    expect(shorterBy(log)).toBe(4);
+    expect(undo(log)).toEqual(upNext);
+    const state = replay(undo(log));
+    expect(state.turn).toBe('green');
+    expect(state.rolled).toBeNull();
+    expect(state.leg).toBe(0);
+    expect(state.seats.green.stops).toHaveLength(2);
+  });
+
+  it('pops a roll that has not been walked yet, and nothing else', () => {
+    const log: GameEvent[] = [...upNext,
+      { type: 'turnRolled', seat: 'green', white: [3, 4], bonus: null }];
+    expect(shorterBy(log)).toBe(1);
+    expect(replay(undo(log)).rolled).toBeNull();
+    expect(replay(undo(log)).turn).toBe('green');
+  });
+
+  it('pops a destination on its own — it is its own action, not a turn', () => {
+    expect(shorterBy(upNext)).toBe(1);
+    expect(undo(upNext)).toEqual(twoBarons);
+  });
+
+  it('pops a region ballot on its own too', () => {
+    const log: GameEvent[] = [...twoBarons,
+      { type: 'regionRequested', seat: 'green', rolled: 'PL' }];
+    expect(shorterBy(log)).toBe(1);
+    expect(replay(undo(log)).seats.green.awaiting).toBeNull();
+  });
+});
+
 describe('who may be given a destination', () => {
   const nodeOf = nodeForCity;
 
