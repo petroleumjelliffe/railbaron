@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import {
-  cityById, nodeForCity, path as pathOf,
+  cityById, nodeForCity, path as pathOf, sectionKey, usedAfter,
   type NodeId, type RegionId, type TurnRoll
 } from '../../engine';
 import { DiceReadout } from '../board/DiceReadout';
@@ -47,7 +47,27 @@ const DIM = 0.3;
 const MAX_LINES_PER_EDGE = 3;
 const LINE_SPREAD = 1.7;
 
-function Track({ nodes, edges }: Pick<ReturnType<typeof layout>, 'edges'> & { nodes: Map<string, Placed> }) {
+/**
+ * How much of a section this trip has left, as the track is drawn.
+ *
+ * `null` is untouched; `'part'` means crossed, with a company still free to
+ * cross it again — the book's "he may move between the same two dots again, as
+ * long as it uses a different rail line"; `'true'` means every crossing is
+ * spent and the engine will refuse it with `section-used` until the pawn
+ * arrives and the whole trip is released.
+ */
+type Spent = 'true' | 'part' | null;
+
+const spentState = (crossings: number, lines: number): Spent =>
+  crossings <= 0 ? null : crossings >= lines ? 'true' : 'part';
+
+function Track({ nodes, edges, spent }: Pick<ReturnType<typeof layout>, 'edges'> & {
+  nodes: Map<string, Placed>;
+  /** Crossings this trip, by section — the very map the engine refuses steps with. */
+  spent: ReadonlyMap<string, number>;
+}) {
+  // Geometry depends on the projection alone, so tapping out a route — which
+  // changes `spent` on every step — does not recompute any of it.
   const segments = useMemo(() => edges.flatMap(edge => {
     const a = nodes.get(edge.a);
     const b = nodes.get(edge.b);
@@ -61,7 +81,10 @@ function Track({ nodes, edges }: Pick<ReturnType<typeof layout>, 'edges'> & { no
     const ny = dx / length;
     const lines = edge.railroads.slice(0, MAX_LINES_PER_EDGE);
     const offset = (lines.length - 1) / 2;
-    return [{ key: `${edge.a}-${edge.b}`, a, b, nx, ny, lines, offset }];
+    return [{
+      key: `${edge.a}-${edge.b}`, section: sectionKey(edge.a, edge.b),
+      a, b, nx, ny, lines, offset, capacity: edge.railroads.length
+    }];
   }), [edges, nodes]);
 
   return (
@@ -75,18 +98,30 @@ function Track({ nodes, edges }: Pick<ReturnType<typeof layout>, 'edges'> & { no
         ))}
       </g>
       <g>
-        {segments.map(s => s.lines.map((id, i) => {
-          const k = (i - s.offset) * LINE_SPREAD;
+        {segments.map(s => {
+          const state = spentState(spent.get(s.section) ?? 0, s.capacity);
           return (
-            <line
-              key={`${s.key}-${id}`}
-              x1={s.a.x + s.nx * k} y1={s.a.y + s.ny * k}
-              x2={s.b.x + s.nx * k} y2={s.b.y + s.ny * k}
-              stroke={RAILROADS.get(id)?.color ?? '#8b6a42'}
-              strokeWidth={1.5} strokeLinecap="round" opacity={0.85}
-            />
+            <g key={s.key} data-edge={s.section} {...(state ? { 'data-spent': state } : {})}>
+              {s.lines.map((id, i) => {
+                const k = (i - s.offset) * LINE_SPREAD;
+                return (
+                  <line
+                    key={`${s.key}-${id}`}
+                    x1={s.a.x + s.nx * k} y1={s.a.y + s.ny * k}
+                    x2={s.b.x + s.nx * k} y2={s.b.y + s.ny * k}
+                    stroke={RAILROADS.get(id)?.color ?? '#8b6a42'}
+                    strokeWidth={1.5} strokeLinecap="round"
+                    // Spent track burns out: the colour drops away and the
+                    // dark bed beneath shows through. Part-spent track is
+                    // dashed — still there, and only on another line.
+                    opacity={state === 'true' ? 0.12 : 0.85}
+                    {...(state === 'part' ? { strokeDasharray: '3 3' } : {})}
+                  />
+                );
+              })}
+            </g>
           );
-        }))}
+        })}
       </g>
     </>
   );
@@ -314,25 +349,49 @@ export function MapView({
   // the first still showing.
   const replaying = usePlayback(lastMove?.path ?? null, PLAYBACK_MS, lastMove?.seat ?? null);
 
-  // While the last committed leg is still walking, the moving baron's pawn
-  // sits at the node playback has reached rather than at rest on `seat.at` —
-  // the two agree once `replaying.done`, since the log already recorded the
-  // leg's true end the moment it committed.
+  /**
+   * Where the baron up has walked to so far this leg.
+   *
+   * The draft is the only record of it — the log hears about a leg once, when
+   * it commits — so until then `seat.at` still holds where the leg began. That
+   * is right for the log and wrong for the board: a route tapped out across
+   * three states used to leave the pawn standing in the first one, and FIND,
+   * which goes to the baron up, went to where they set out from rather than
+   * where they now stand.
+   */
+  const walkedTo = drafted === null || drafted.length < 2
+    ? null
+    : drafted[drafted.length - 1]!;
+
+  /**
+   * The pawns as drawn, which is not quite the pawns as logged.
+   *
+   * Two things move one: the last committed leg still playing back, where the
+   * mover sits at the node playback has reached rather than at rest on
+   * `seat.at` (the two agree once `replaying.done`, the log having recorded
+   * the leg's true end when it committed); and the draft above. They cannot
+   * both apply — no lamp is tappable until playback finishes — so playback
+   * comes first and the draft answers for every other moment.
+   */
   const standing = useMemo(() => {
     const base = pawns(state);
-    if (lastMove === null || replaying.done) return base;
-    const at = replaying.shown[replaying.shown.length - 1];
-    if (at === undefined) return base;
+    const playing = lastMove !== null && !replaying.done
+      ? { seat: lastMove.seat, at: replaying.shown[replaying.shown.length - 1] }
+      : state.turn !== null && walkedTo !== null
+        ? { seat: state.turn, at: walkedTo }
+        : null;
+    if (playing === null || playing.at === undefined) return base;
+
     const out = new Map<NodeId, SeatId[]>();
     for (const [node, seats] of base) {
-      const rest = seats.filter(id => id !== lastMove.seat);
+      const rest = seats.filter(id => id !== playing.seat);
       if (rest.length > 0) out.set(node, rest);
     }
-    const here = out.get(at);
-    if (here) here.push(lastMove.seat);
-    else out.set(at, [lastMove.seat]);
+    const here = out.get(playing.at);
+    if (here) here.push(playing.seat);
+    else out.set(playing.at, [playing.seat]);
     return out;
-  }, [state, lastMove, replaying.shown, replaying.done]);
+  }, [state, lastMove, replaying.shown, replaying.done, walkedTo]);
 
   const playing = SEATS
     .map(id => state.seats[id])
@@ -357,8 +416,28 @@ export function MapView({
     ? pointedAt
     : null;
 
-  /** Where the baron up is standing — what FIND goes to, when there is one. */
-  const standingAt = state.turn === null ? null : state.seats[state.turn].at;
+  /**
+   * The sections this trip has spent, for the baron up alone.
+   *
+   * `usedAfter` counts the draft's own steps on top of what earlier turns of
+   * the trip spent, so the track closes behind the pawn as the route is tapped
+   * rather than only once it commits. It is the same map `tripOf` hands the
+   * engine, which is what keeps the drawing and the rule from disagreeing:
+   * what is drawn spent is exactly what `section-used` will refuse.
+   *
+   * Only the baron up. Another seat's spent track is their business, and
+   * drawing all of them at once would say nothing about the turn in hand.
+   */
+  const spentTrack = useMemo(() => {
+    if (route.draft !== null) return usedAfter(route.draft);
+    const seat = state.turn === null ? null : state.seats[state.turn];
+    return seat?.used ?? new Map<string, number>();
+  }, [route.draft, state]);
+
+  /** Where the baron up is standing — mid-route that is the draft, not the log. */
+  const standingAt = state.turn === null
+    ? null
+    : walkedTo ?? state.seats[state.turn].at;
   const baron = standingAt === null ? undefined : board.byId.get(standingAt);
 
   return (
@@ -421,7 +500,7 @@ export function MapView({
           <path d={board.landPath} fill="rgba(255,240,214,0.045)" stroke="#d6ab6d" strokeWidth={1.5}
                 strokeLinejoin="round" />
 
-          <Track edges={board.edges} nodes={board.byId} />
+          <Track edges={board.edges} nodes={board.byId} spent={spentTrack} />
 
           {/* The portion of the last committed move walked so far — the same
               path everyone watching this log sees, drawn in the mover's own
@@ -502,7 +581,8 @@ export function MapView({
               const node = board.byId.get(id);
               if (!node) return null;
               return seats.map((seatId, i) => (
-                <g key={`${id}-${seatId}`} role="img" aria-label={state.seats[seatId].name ?? seatId}>
+                <g key={`${id}-${seatId}`} role="img" data-node={id}
+                   aria-label={state.seats[seatId].name ?? seatId}>
                   <circle cx={node.x + i * 5} cy={node.y - 11} r={5}
                           fill={SEAT_COLORS[seatId]} stroke="#100c08" strokeWidth={1.4}
                           pointerEvents="none" />

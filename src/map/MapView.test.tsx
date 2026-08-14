@@ -447,6 +447,134 @@ describe('playing a turn on the map', () => {
   });
 
   /**
+   * "Each section of rail can be used only once per trip" — and a trip is not
+   * a turn, so what a leg spends stays spent until the pawn arrives. Deep into
+   * a long trip that leaves a corridor one lamp wide, which is indistinguishable
+   * from a broken board unless the spent track is drawn as spent.
+   *
+   * Reported from live play, on a trip that had crossed 38 sections: the map
+   * lit one lamp at every dot for five dots running and said nothing about why.
+   */
+  describe('drawing the track this trip has spent', () => {
+    /** A committed leg that stopped short of Chicago, so nothing is released. */
+    const midTrip: GameEvent[] = [
+      { type: 'joined', seat: 'red', name: 'ADA' },
+      { type: 'started' },
+      { type: 'arrived', seat: 'red', city: MINNEAPOLIS, region: 'PL', payout: null },
+      { type: 'orderRolled', seat: 'red', first: 'red' },
+      { type: 'arrived', seat: 'red', city: CHICAGO, region: 'NC', payout: 4500 },
+      { type: 'turnRolled', seat: 'red', white: [1, 1], bonus: null },
+      { type: 'moved', seat: 'red', path: ['c13', 'd352', 'd266'], arrived: false },
+      { type: 'turnRolled', seat: 'red', white: [2, 2], bonus: null }
+    ];
+
+    const drawn = (events: GameEvent[]) => {
+      const { container } = render(
+        <MapView
+          state={replay(events)}
+          onBack={() => {}}
+          onMove={vi.fn()}
+          dice={{ roll: null, live: false }}
+          onRollDice={() => {}}
+          onDiceLanded={() => {}}
+        />
+      );
+      return (section: string) =>
+        container.querySelector(`[data-edge="${section}"]`)?.getAttribute('data-spent') ?? null;
+    };
+
+    it('draws a section spent when the trip has no crossings of it left', () => {
+      const spent = drawn(midTrip);
+      // c13|d352 carries the Milwaukee Road alone, and last turn crossed it.
+      expect(spent('c13|d352')).toBe('true');
+      expect(spent('d266|d352')).toBe('true');
+    });
+
+    it('leaves untouched track alone', () => {
+      const spent = drawn(midTrip);
+      // Out of the same city, never crossed.
+      expect(spent('c13|d417')).toBeNull();
+      expect(spent('c13|d66')).toBeNull();
+    });
+
+    it('draws a shared section part spent while a line across it is still free', () => {
+      // Minneapolis–St. Paul carries four companies, so one crossing spends
+      // one of four: the pawn may cross again on another line, and the board
+      // must not claim otherwise.
+      const spent = drawn([...midTrip.slice(0, 6),
+        { type: 'moved', seat: 'red', path: ['c13', 'c95'], arrived: false },
+        { type: 'turnRolled', seat: 'red', white: [2, 2], bonus: null }]);
+      expect(spent('c13|c95')).toBe('part');
+    });
+
+    it('spends the section as the step is tapped, not when it is committed', async () => {
+      // The corridor has to close as the player walks it — a draft that only
+      // showed after COMMIT would answer the question too late to be any use.
+      const user = userEvent.setup();
+      const spent = drawn(midTurn);
+      expect(spent('c13|c95')).toBeNull();
+      await user.click(screen.getByRole('button', { name: /St\. Paul/ }));
+      expect(spent('c13|c95')).toBe('part');
+    });
+  });
+
+  /**
+   * The pawn used to sit where the leg began until the move was committed, so
+   * a route tapped out across three states left it behind in the first — and
+   * FIND, which goes to the baron up, went to where they had set out from
+   * rather than where they now stood.
+   */
+  describe('walking the pawn as the route is tapped out', () => {
+    const drawnMidTurn = () => {
+      const { container } = render(
+        <MapView
+          state={replay(midTurn)}
+          onBack={() => {}}
+          onMove={vi.fn()}
+          dice={{ roll: null, live: false }}
+          onRollDice={() => {}}
+          onDiceLanded={() => {}}
+        />
+      );
+      const pawn = () => container.querySelector('[aria-label="ADA"]')!.getAttribute('data-node');
+      const svg = container.querySelector('svg')!;
+      const box = () => svg.getAttribute('viewBox')!.split(' ').map(Number);
+      return { pawn, box, container };
+    };
+
+    it('stands the pawn where the tapping has reached', async () => {
+      const user = userEvent.setup();
+      const { pawn } = drawnMidTurn();
+      expect(pawn()).toBe(nodeForCity(MINNEAPOLIS));
+
+      await user.click(screen.getByRole('button', { name: /St\. Paul/ }));
+
+      expect(pawn()).toBe(nodeForCity(ST_PAUL));
+    });
+
+    it('puts it back on undo', async () => {
+      const user = userEvent.setup();
+      const { pawn } = drawnMidTurn();
+      await user.click(screen.getByRole('button', { name: /St\. Paul/ }));
+      await user.click(screen.getByRole('button', { name: 'UNDO' }));
+      expect(pawn()).toBe(nodeForCity(MINNEAPOLIS));
+    });
+
+    it('sends FIND to where the pawn stands now, not where the leg began', async () => {
+      const user = userEvent.setup();
+      const { box } = drawnMidTurn();
+      const walkedTo = layout(1400, 788).byId.get(nodeForCity(ST_PAUL))!;
+
+      await user.click(screen.getByRole('button', { name: /St\. Paul/ }));
+      await user.click(screen.getByRole('button', { name: /find the baron/i }));
+
+      const [x, y, width, height] = box();
+      expect(x! + width! / 2).toBeCloseTo(walkedTo.x, 0);
+      expect(y! + height! / 2).toBeCloseTo(walkedTo.y, 0);
+    });
+  });
+
+  /**
    * Several lamps are lit at once — every one the leg may reach — and lit is
    * all they were, so the player could not tell which of them their cursor was
    * about to take. Only the lamp under the pointer carries `data-hover`.
