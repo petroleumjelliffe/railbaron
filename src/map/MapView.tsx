@@ -243,6 +243,19 @@ export function MapView({
    */
   const upNext = state.turn === null ? null : state.seats[state.turn];
   const owesDestination = upNext !== null && needsDestination(upNext, nodeForCity);
+  /**
+   * The sibling state, and the other way this screen used to read as stranded.
+   *
+   * A turn whose white pair earned a Bonus Roll stays open once the white
+   * movement is walked — "if entitled, he must take it" — but the die has not
+   * been thrown, so the leg has no movement and nothing is tappable. Unlike
+   * the destination above, the roll that clears it is *here*: the same readout
+   * this screen already renders. So this says what is owed and leaves the
+   * dice, three inches away, to take it.
+   *
+   * A destination owed as well comes first, in the book's own order.
+   */
+  const owesBonus = state.turn !== null && !owesDestination && state.bonusOwed;
 
   // The path comes from the log, not from the draft: this is what makes the
   // walk visible in the tab that played it *and* any tab just watching along.
@@ -484,7 +497,18 @@ export function MapView({
           </div>
         )}
 
-        {state.turn !== null && !owesDestination && (
+        {owesBonus && (
+          <div style={{
+            position: 'absolute', top: 26, right: 34, zIndex: 4,
+            display: 'flex', alignItems: 'center', gap: 10
+          }}>
+            <span style={{ ...HUD_BUTTON, background: 'rgba(43,23,10,0.35)' }}>
+              BONUS ROLL — TAKE THE RED DIE
+            </span>
+          </div>
+        )}
+
+        {state.turn !== null && !owesDestination && !owesBonus && (
           <div style={{
             position: 'absolute', top: 26, right: 34, zIndex: 4,
             display: 'flex', alignItems: 'center', gap: 10

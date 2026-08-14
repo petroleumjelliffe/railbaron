@@ -44,9 +44,11 @@ export function useRoute(
   const roll = state.rolled;
 
   /**
-   * How much this leg may spend. The first leg has the whole roll; a Bonus
-   * Roll leg has only the bonus die, because the movement the white dice
-   * bought was lost the moment the pawn arrived.
+   * How much this leg may spend. The first leg has the white dice — the bonus
+   * die is not in hand while it is walked, so `movement` sums a roll whose
+   * bonus is null and gives exactly the white pair. The second leg has only
+   * the bonus face, and has nothing at all until it is thrown, which is the
+   * state `GameState.bonusOwed` names and the map's HUD explains.
    */
   const legMovement = roll === null
     ? 0

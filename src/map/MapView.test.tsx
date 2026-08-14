@@ -299,6 +299,85 @@ describe('playing a turn on the map', () => {
   });
 
   /**
+   * The sibling state, and the other way this screen used to read as stranded.
+   *
+   * A white leg that stops in open country on an entitled turn leaves the turn
+   * open — "if entitled, he must take it" — with no movement to spend until
+   * the die is thrown. Unlike the destination above, the roll that clears it
+   * is on this screen already: the dice readout the map renders. So the HUD
+   * names what is owed and leaves the dice to take it.
+   */
+  describe('when the baron up owes the Bonus Roll', () => {
+    /** Double six walked without arriving: entitled, and the die still in the cup. */
+    const bonusOwed: GameEvent[] = [
+      { type: 'joined', seat: 'red', name: 'ADA' },
+      { type: 'started' },
+      { type: 'arrived', seat: 'red', city: MINNEAPOLIS, region: 'PL', payout: null },
+      { type: 'orderRolled', seat: 'red', first: 'red' },
+      { type: 'arrived', seat: 'red', city: ST_PAUL, region: 'PL', payout: 0 },
+      { type: 'turnRolled', seat: 'red', white: [6, 6], bonus: null },
+      { type: 'moved', seat: 'red', path: [nodeForCity(MINNEAPOLIS), 'd66'], arrived: false }
+    ];
+
+    const shown = (events: GameEvent[], live = true) =>
+      render(
+        <MapView
+          state={replay(events)}
+          onBack={vi.fn()}
+          onMove={vi.fn()}
+          dice={{ roll: { white: [6, 6], bonus: null }, live }}
+          onRollDice={() => {}}
+          onDiceLanded={() => {}}
+        />
+      );
+
+    it('says the Bonus Roll is what it is waiting for', () => {
+      shown(bonusOwed);
+      expect(screen.getByText(/bonus roll/i)).toBeInTheDocument();
+      // Not the move controls: the leg has no movement until the die lands,
+      // and "0 left" over a greyed COMMIT is the stranding this replaced.
+      expect(screen.queryByRole('button', { name: 'COMMIT' })).not.toBeInTheDocument();
+      expect(screen.queryByText(/0 left/)).not.toBeInTheDocument();
+      // And not the destination cluster either — nothing was arrived at.
+      expect(screen.queryByText(/roll a new destination/i)).not.toBeInTheDocument();
+    });
+
+    it('leaves the dice on this screen to take it', async () => {
+      const onRollDice = vi.fn();
+      const user = userEvent.setup();
+      render(
+        <MapView
+          state={replay(bonusOwed)}
+          onBack={vi.fn()}
+          onMove={vi.fn()}
+          dice={{ roll: { white: [6, 6], bonus: null }, live: true }}
+          onRollDice={onRollDice}
+          onDiceLanded={() => {}}
+        />
+      );
+      await user.click(screen.getByRole('button', { name: /roll the dice/i }));
+      expect(onRollDice).toHaveBeenCalledOnce();
+    });
+
+    it('puts the destination first when the white leg arrived', () => {
+      // Both owed at once. The book's order is destination, then the die, so
+      // the destination cluster is what shows — one HUD, not two stacked.
+      const arrivedFirst: GameEvent[] = [...bonusOwed.slice(0, -1),
+        { type: 'moved', seat: 'red',
+          path: [nodeForCity(MINNEAPOLIS), nodeForCity(ST_PAUL)], arrived: true }];
+      shown(arrivedFirst, false);
+      expect(screen.getByText(/roll a new destination/i)).toBeInTheDocument();
+      expect(screen.queryByText(/bonus roll/i)).not.toBeInTheDocument();
+    });
+
+    it('says none of it once the die has been thrown', () => {
+      shown([...bonusOwed, { type: 'bonusRolled', seat: 'red', face: 3 }], false);
+      expect(screen.queryByText(/bonus roll/i)).not.toBeInTheDocument();
+      expect(screen.getByText(/3 left/)).toBeInTheDocument();
+    });
+  });
+
+  /**
    * Reported from live play: touch targets felt too small, and a city's
    * glow was visibly sitting over neighbouring dots. jsdom cannot do real
    * geometric hit-testing (no layout, no paint), so this pins the fix

@@ -78,12 +78,51 @@ describe('the draft route on the map', () => {
   });
 
   it('gives a bonus leg only the bonus die to spend', () => {
+    // A log from before the Bonus Roll moved to after the white movement:
+    // the face is already in `turnRolled`. Kept because such logs still load.
     const bonus: GameEvent[] = [...midTurn.slice(0, 7),
       { type: 'turnRolled', seat: 'red', white: [6, 6], bonus: 3 },
       { type: 'moved', seat: 'red', path: [MINNEAPOLIS, ST_PAUL], arrived: true },
       { type: 'arrived', seat: 'red', city: 43, region: 'PL', payout: 0 }];
     const { result } = renderHook(() => useRoute(replay(bonus), vi.fn()));
     expect(result.current.remaining).toBe(3);
+  });
+
+  /**
+   * The same leg, staged as it is now played. The white leg is walked on the
+   * white pair alone — twelve, not eighteen — and the bonus leg has nothing
+   * at all to spend until the die is thrown and `bonusRolled` lands.
+   */
+  describe('a Bonus Roll taken after the white leg', () => {
+    const walked: GameEvent[] = [...midTurn.slice(0, 7),
+      { type: 'turnRolled', seat: 'red', white: [6, 6], bonus: null }];
+
+    it('spends the white pair on the first leg, and not a dot more', () => {
+      const { result } = renderHook(() => useRoute(replay(walked), vi.fn()));
+      expect(result.current.remaining).toBe(12);
+    });
+
+    /**
+     * The white leg stops in open country — no arrival, so no new
+     * destination, and the bonus leg carries straight on from d66.
+     */
+    const owed: GameEvent[] = [...walked,
+      { type: 'moved', seat: 'red', path: [MINNEAPOLIS, 'd66'], arrived: false }];
+
+    it('has nothing to spend while the die is still in the cup', () => {
+      const { result } = renderHook(() => useRoute(replay(owed), vi.fn()));
+      expect(result.current.remaining).toBe(0);
+      expect(result.current.legal.size, 'and so nothing to tap').toBe(0);
+    });
+
+    it('gets the face, and only the face, once the Bonus Roll lands', () => {
+      const thrown: GameEvent[] = [...owed,
+        { type: 'bonusRolled', seat: 'red', face: 3 }];
+      const { result } = renderHook(() => useRoute(replay(thrown), vi.fn()));
+      expect(result.current.remaining).toBe(3);
+      expect(result.current.at, 'carrying on from where the white leg stopped').toBe('d66');
+      expect(result.current.legal.size).toBeGreaterThan(0);
+    });
   });
 
   /**
