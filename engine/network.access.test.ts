@@ -7,8 +7,8 @@ import {
 
 describe('the network access layer', () => {
   it('carries every node and edge from the built graph', () => {
-    expect(NODES).toHaveLength(550);
-    expect(EDGES).toHaveLength(710);
+    expect(NODES).toHaveLength(551);
+    expect(EDGES).toHaveLength(712);
     expect(RAILROADS.size).toBe(28);
   });
 

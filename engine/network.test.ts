@@ -16,10 +16,10 @@ const cityNodes = nodes.filter(n => n.kind === 'city');
 
 describe('the built network', () => {
   it('carries one node per city, dot and junction in the traced graph', () => {
-    expect(nodes).toHaveLength(550);
+    expect(nodes).toHaveLength(551);
     expect(cityNodes).toHaveLength(67);
     expect(nodes.filter(n => n.kind === 'dot')).toHaveLength(471);
-    expect(nodes.filter(n => n.kind === 'junction')).toHaveLength(12);
+    expect(nodes.filter(n => n.kind === 'junction')).toHaveLength(13);
     expect(new Set(nodes.map(n => n.id)).size).toBe(nodes.length);
   });
 
