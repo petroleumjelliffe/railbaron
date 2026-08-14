@@ -76,6 +76,15 @@ survives the upgrade rather than being silently dropped.
 
 ## Phase 3 — online multiplayer
 
+> **Built, with notes.** Tasks 1–10 of
+> `docs/superpowers/plans/2026-08-14-online-mode.md` are done: the authoritative server,
+> the client hooks, the lobby boards and the routes, all tested. **Not yet deployed and not
+> yet played by hand** — those need the owner's Render workspace and two real browsers, and
+> the 1d/1f copy still needs reconciling against the design project. What building it found
+> is in `docs/superpowers/specs/2026-08-14-online-by-hand-notes.md`; the design it was built
+> to is `2026-08-14-online-mode-design.md`. The decisions listed below were made there,
+> except hosting — a second Render service — which is still the owner's to confirm.
+
 Reuse the lobby from [`acquire-startups-m1`](../acquire-startups-m1) rather than building
 one. That repo extracted its lobby — rooms, seats, join/rejoin tokens, presence, rename,
 leave, and the screens around them — into a game-agnostic piece specifically so the next
