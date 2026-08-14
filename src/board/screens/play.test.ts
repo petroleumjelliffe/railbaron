@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { REGIONS } from '../../../engine';
-import { play } from './play';
+import { REGIONS, nodeForCity } from '../../../engine';
+import { diceFor, play } from './play';
 import { replay } from '../../state/game';
 import { SEATS, type GameEvent } from '../../state/events';
 import { BOARD_ROWS } from '../types';
@@ -157,5 +157,72 @@ describe('strict turn order', () => {
     const screen = play(replay(full));
     expect(screen.rows).toHaveLength(7);
     expect(screen.rows.some(row => row.action?.kind === 'undo')).toBe(false);
+  });
+});
+
+/**
+ * The readout both surfaces share. Two live states now, because a turn holds
+ * two rolls: the white pair at the start, and the Bonus Roll once the white
+ * movement has been walked. The `pending*` arguments are the roll that has
+ * been made but not yet told by the drums — the gate that keeps a face out of
+ * the log until the table has seen it.
+ */
+describe('the dice the board and the map both show', () => {
+  const MINNEAPOLIS = nodeForCity(43);
+  const ST_PAUL = nodeForCity(47);
+  /** ADA is up, standing in Minneapolis and bound for St. Paul. */
+  const upNext: GameEvent[] = [
+    { type: 'joined', seat: 'red', name: 'ADA' },
+    { type: 'joined', seat: 'blue', name: 'MARGO' },
+    { type: 'started' },
+    { type: 'arrived', seat: 'red', city: 43, region: 'PL', payout: null },
+    { type: 'arrived', seat: 'blue', city: 20, region: 'NC', payout: null },
+    { type: 'orderRolled', seat: 'red', first: 'red' },
+    { type: 'arrived', seat: 'red', city: 47, region: 'PL', payout: 0 }
+  ];
+  const doubleSix: GameEvent[] = [...upNext,
+    { type: 'turnRolled', seat: 'red', white: [6, 6], bonus: null }];
+
+  const dice = (events: GameEvent[], pendingDice = null, pendingBonus: number | null = null) =>
+    diceFor(replay(events), pendingDice, pendingBonus);
+
+  it('is live for the white pair when the baron up has somewhere to go and no dice', () => {
+    expect(dice(upNext)).toEqual({ roll: null, live: true });
+  });
+
+  it('goes dead while a rolled pair is waiting on the drums', () => {
+    const pending = { white: [6, 6] as [number, number], bonus: null };
+    expect(diceFor(replay(upNext), pending)).toEqual({ roll: pending, live: false });
+  });
+
+  it('goes dead once the whites are in the log and the leg is being walked', () => {
+    expect(dice(doubleSix).live).toBe(false);
+  });
+
+  it('comes live again for a Bonus Roll owed after the white leg', () => {
+    const owed: GameEvent[] = [...doubleSix,
+      { type: 'moved', seat: 'red', path: [MINNEAPOLIS, 'd66'], arrived: false }];
+    const shown = dice(owed);
+    expect(shown.live).toBe(true);
+    expect(shown.roll, 'the whites are still lying on the table')
+      .toEqual({ white: [6, 6], bonus: null });
+  });
+
+  it('stays dead when the white leg arrived and a destination is owed first', () => {
+    const arrived: GameEvent[] = [...doubleSix,
+      { type: 'moved', seat: 'red', path: [MINNEAPOLIS, ST_PAUL], arrived: true }];
+    expect(dice(arrived).live).toBe(false);
+  });
+
+  it('shows a bonus face still on the drums riding on the whites already logged', () => {
+    // One roll of one turn, not a second pair of dice: the white faces come
+    // from the log, the bonus from the hand that has not told it yet.
+    const owed: GameEvent[] = [...doubleSix,
+      { type: 'moved', seat: 'red', path: [MINNEAPOLIS, 'd66'], arrived: false }];
+    expect(dice(owed, null, 4)).toEqual({ roll: { white: [6, 6], bonus: 4 }, live: false });
+  });
+
+  it('goes dead for everyone once no baron is up', () => {
+    expect(dice(log).live).toBe(false);
   });
 });

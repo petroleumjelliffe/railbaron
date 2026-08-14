@@ -56,7 +56,8 @@ export default function App({ rng }: AppProps = {}) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const { state, savedAt, roll, commitRoll, chooseRegion, rename, start,
-          rollOrder, undoLast, reset, rollDice, commitDice, commitMove } = useGame(rng);
+          rollOrder, undoLast, reset, rollDice, commitDice,
+          rollBonus, commitBonus, commitMove } = useGame(rng);
   const [editing, setEditing] = useState<{ seat: SeatId; placeholder: string } | null>(null);
   const [confirming, setConfirming] = useState(false);
   /**
@@ -67,6 +68,13 @@ export default function App({ rng }: AppProps = {}) {
   const [rolling, setRolling] = useState<{ seat: SeatId; outcome: RollOutcome } | null>(null);
   /** Dice rolled but not yet told. Same gate as `rolling`, same reason. */
   const [rollingDice, setRollingDice] = useState<{ seat: SeatId; roll: TurnRoll } | null>(null);
+  /**
+   * A Bonus Roll thrown but not yet told. Its own hold rather than a field on
+   * `rollingDice`: the two are separate rolls made at different moments of the
+   * turn, and the white pair it belongs to is already in the log by the time
+   * this one is thrown.
+   */
+  const [rollingBonus, setRollingBonus] = useState<{ seat: SeatId; face: number } | null>(null);
   /**
    * How many rolls each seat has had told. Kept across the commit, so the
    * board sees one announcement per roll rather than a second one when the
@@ -81,13 +89,30 @@ export default function App({ rng }: AppProps = {}) {
   // Named rather than inlined, because the board's header and the map's HUD
   // are two call sites for one roll: two copies would be two places for the
   // gate to drift apart.
+  //
+  // One tap, two rolls: which one the readout is offering depends on where the
+  // turn stands. Before the whites it is the white pair; once they have been
+  // walked and a Bonus Roll is owed, the same drums throw the red die alone.
+  // The gate is the same in both directions — roll here, append only when the
+  // drums report they have finished telling it.
   const onRollDice = () => {
-    if (state.turn === null || rollingDice !== null) return;
+    if (state.turn === null || rollingDice !== null || rollingBonus !== null) return;
+    if (state.bonusOwed) {
+      const face = rollBonus(state.turn);
+      if (face === null) return;
+      setRollingBonus({ seat: state.turn, face });
+      return;
+    }
     const rolled = rollDice(state.turn);
     if (rolled === null) return;
     setRollingDice({ seat: state.turn, roll: rolled });
   };
   const onDiceLanded = () => {
+    if (rollingBonus !== null) {
+      commitBonus(rollingBonus.seat, rollingBonus.face);
+      setRollingBonus(null);
+      return;
+    }
     if (rollingDice === null) return;
     commitDice(rollingDice.seat, rollingDice.roll);
     setRollingDice(null);
@@ -121,7 +146,7 @@ export default function App({ rng }: AppProps = {}) {
             state={state}
             onBack={() => navigate('/pass-and-play/game')}
             onMove={commitMove}
-            dice={diceFor(state, rollingDice?.roll ?? null)}
+            dice={diceFor(state, rollingDice?.roll ?? null, rollingBonus?.face ?? null)}
             onRollDice={onRollDice}
             onDiceLanded={onDiceLanded}
           />
@@ -152,7 +177,8 @@ export default function App({ rng }: AppProps = {}) {
         ? regionBallot(awaiting)
         : play(state, turns,
                rolling && { seat: rolling.seat, region: regionOf(rolling.outcome) },
-               rollingDice?.roll ?? null)
+               rollingDice?.roll ?? null,
+               rollingBonus?.face ?? null)
   };
 
   const onRowAct = (row: Row, index: number) => {
@@ -219,7 +245,7 @@ export default function App({ rng }: AppProps = {}) {
           onLanded: () => { commitRoll(rolling.seat, rolling.outcome); setRolling(null); }
         }}
         onRollDice={onRollDice}
-        awaitDice={rollingDice && { onLanded: onDiceLanded }}
+        awaitDice={(rollingDice || rollingBonus) && { onLanded: onDiceLanded }}
         editing={editing}
         onCommit={value => {
           if (editing) rename(editing.seat, value || null);

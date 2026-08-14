@@ -1,26 +1,27 @@
 import { useEffect, useRef, useState } from 'react';
 import type { TurnRoll } from '../../engine';
-import { BONUS_BEAT_TICKS, BONUS_FACES, COLORS, DICE_MS, DIE, WHITE_FACES, dieTurn, pipCells } from './dice';
+import { BONUS_FACES, COLORS, DICE_MS, DIE, WHITE_FACES, dieTurn, pipCells } from './dice';
 
 /**
- * One drum: the face showing, the face still falling away, ticks left to
- * spin, and ticks left to wait before it may spin at all. `wait` is how the
- * bonus drum holds still while the whites are still turning, and then for
- * its own beat afterward — a drum with `wait > 0` renders unchanged and does
- * not count as stopped, whatever `left` says.
+ * One drum: the face showing, the face still falling away, and ticks left to
+ * spin. A drum with nothing left to spin and nothing left falling has stopped.
+ *
+ * There used to be a fourth field, `wait`, which held the bonus drum still
+ * while the whites turned and then for a beat past them. The beat existed to
+ * separate the bonus from the whites *within one roll*; the Bonus Roll is now
+ * taken after the white movement has been walked, so the two are separated in
+ * time by the turn itself and there is nothing left for a pause to say.
  */
-interface Drum { cur: number; prev: number; left: number; wait: number; faces: number; }
+interface Drum { cur: number; prev: number; left: number; faces: number; }
 
-const rest = (faces: number): Drum => ({ cur: 0, prev: 0, left: 0, wait: 0, faces });
+const rest = (faces: number): Drum => ({ cur: 0, prev: 0, left: 0, faces });
 
 const tick = (drum: Drum): Drum => {
-  if (drum.wait > 0) return { ...drum, wait: drum.wait - 1 };
   if (drum.left <= 0) return drum.prev === drum.cur ? drum : { ...drum, prev: drum.cur };
   return { ...drum, cur: (drum.cur + 1) % drum.faces, prev: drum.cur, left: drum.left - 1 };
 };
 
-const stopped = (drum: Drum): boolean =>
-  drum.wait <= 0 && drum.left <= 0 && drum.prev === drum.cur;
+const stopped = (drum: Drum): boolean => drum.left <= 0 && drum.prev === drum.cur;
 
 export interface DiceReadoutProps {
   /** The dice of the turn under way, or null when none has been rolled. */
@@ -41,6 +42,13 @@ export interface DiceReadoutProps {
  * every turn, and makes the upgrade legible before you buy it rather than
  * after.
  *
+ * **A turn throws this readout twice.** The white pair goes first; the Bonus
+ * Roll, when one was earned, is thrown after the white movement has been
+ * walked. So a roll key whose white faces are unchanged is the second of
+ * those, and the white drums must hold still through it — they are lying on
+ * the table showing what they rolled, and lapping them would read as a
+ * re-throw of dice nobody touched.
+ *
  * Faces are not readable until the drums stop: the accessible name is the
  * value only once settled, which is the same rule the region panel follows.
  * A caller waiting on `onLanded` therefore cannot learn the roll early.
@@ -55,7 +63,13 @@ export function DiceReadout({ roll, live, onRoll, onLanded }: DiceReadoutProps) 
 
   // Keyed on the faces rather than the object: the caller rebuilds `roll`
   // every render, and keying on identity would restart the drums every tick.
-  const key = roll === null ? '' : `${roll.white[0]}-${roll.white[1]}-${roll.bonus ?? 0}`;
+  // The white half is kept separately rather than sliced back out of `key`,
+  // because "did the white dice change" is a question asked every time the
+  // drums are set turning.
+  const whiteKey = roll === null ? '' : `${roll.white[0]}-${roll.white[1]}`;
+  const key = roll === null ? '' : `${whiteKey}-${roll.bonus ?? 0}`;
+  /** The white faces the drums were last set turning for. */
+  const whitesShowing = useRef<string>('');
   // Seeded with a sentinel no real key can equal — not with `key` itself.
   // Seeding it with the mount-time key would make the very first effect run
   // a no-op whenever a roll is already present at mount (every test here,
@@ -76,6 +90,11 @@ export function DiceReadout({ roll, live, onRoll, onLanded }: DiceReadoutProps) 
   useEffect(() => {
     if (started.current === key) return;
     started.current = key;
+    // Whether the white dice are the same ones already on the table, read
+    // before this run claims them. An empty previous key is "no dice were
+    // showing", which is not the same as showing these.
+    const heldWhites = whitesShowing.current !== '' && whitesShowing.current === whiteKey;
+    whitesShowing.current = whiteKey;
     reported.current = undefined;
     setBegun(key);
     if (timer.current !== null) { clearInterval(timer.current); timer.current = null; }
@@ -89,32 +108,25 @@ export function DiceReadout({ roll, live, onRoll, onLanded }: DiceReadoutProps) 
     }
 
     setDrums(current => {
-      const whiteLeft0 = dieTurn(current[0].cur, roll.white[0] - 1, WHITE_FACES, true);
-      const whiteLeft1 = dieTurn(current[1].cur, roll.white[1] - 1, WHITE_FACES, true);
-      // The later of the two whites to land is when both have — they start
-      // together, so the larger `left` decides it. `+ 1` is the extra tick
-      // the trailing leaf takes to fall once a drum's `left` reaches zero,
-      // and `beat` is the design's pause, held only when a bonus was earned:
-      // the bonus drum does not wait its turn on the whites, but it does
-      // wait a beat past them before it moves at all.
-      const whiteTicks = Math.max(whiteLeft0, whiteLeft1);
-      // A bonus is *announced* after the whites land and a beat passes —
-      // that staging is transcribed from the design and does not change.
-      // A stale face left over from a previous roll is *cleared*
-      // immediately instead: holding it unchanged through the whites'
-      // spin (the old behaviour) reads to a player as if this roll itself
-      // earned a bonus, so when none was earned here the drum's wait is
-      // zero and its fall to blank starts the instant the whites begin.
-      const wait = roll.bonus !== null ? whiteTicks + 1 + BONUS_BEAT_TICKS : 0;
+      // Held whites do not turn at all — not even the lap that makes a die
+      // landing on the face it already showed read as thrown, because this is
+      // the case where it genuinely was not thrown. Only the Bonus Roll
+      // reaches this branch, and only the red drum moves for it.
+      const whiteLeft0 = heldWhites
+        ? 0 : dieTurn(current[0].cur, roll.white[0] - 1, WHITE_FACES, true);
+      const whiteLeft1 = heldWhites
+        ? 0 : dieTurn(current[1].cur, roll.white[1] - 1, WHITE_FACES, true);
       return [
-        { ...current[0], left: whiteLeft0, wait: 0 },
-        { ...current[1], left: whiteLeft1, wait: 0 },
+        { ...current[0], left: whiteLeft0 },
+        { ...current[1], left: whiteLeft1 },
         // The bonus drum laps only when it is showing something: falling
         // round to the blank should look like the die being put away, not
-        // thrown.
+        // thrown. A stale face from a previous roll therefore falls away as
+        // the next roll's whites *begin* turning rather than at the end of
+        // them — holding it through the spin reads to a player as if this
+        // roll had earned a bonus.
         { ...current[2],
-          left: dieTurn(current[2].cur, roll.bonus ?? 0, BONUS_FACES, roll.bonus !== null),
-          wait }
+          left: dieTurn(current[2].cur, roll.bonus ?? 0, BONUS_FACES, roll.bonus !== null) }
       ];
     });
 

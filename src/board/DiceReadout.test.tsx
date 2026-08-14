@@ -34,6 +34,19 @@ const asRgb = (hex: string): string => {
   return `rgb(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255})`;
 };
 
+/**
+ * What a white die is actually showing, as "top,bottom" pip counts — the only
+ * way to read a face while the readout still reports itself as turning, since
+ * the accessible name goes to "turning" for every drum until all three stop.
+ * Six pips is a six; a drum mid-lap shows one, two, three, four or five.
+ */
+const pipsOf = (die: HTMLElement): string =>
+  [...die.querySelectorAll('[aria-hidden]')]
+    .map(leaf => [...leaf.querySelectorAll('div')]
+      .filter(cell => cell.children.length === 0
+        && cell.style.background === asRgb(COLORS.whitePip)).length)
+    .join(',');
+
 describe('the dice readout', () => {
   it('shows three dice, always', () => {
     render(<DiceReadout roll={null} live={false} />);
@@ -76,18 +89,26 @@ describe('the dice readout', () => {
     expect(onLanded).toHaveBeenCalledTimes(1);
   });
 
-  it('does not report landing during the bonus drum\'s wait, only once it too has stopped', () => {
+  it('does not report the Bonus Roll landed until the red drum itself has stopped', () => {
+    // The Bonus Roll is its own roll, taken after the white movement has been
+    // walked, and the App commits it on this callback — so reporting early
+    // would put a face in the log before the table had seen it.
+    //
+    // The white pair is already lying on the table here and does not turn, so
+    // the red drum alone decides when the roll has landed: from the blank
+    // (index 0) to a 5 is 5 steps plus a full lap of the seven-slot drum, 12
+    // ticks, and one more for its trailing leaf. Nothing may be reported
+    // through tick 12.
     const onLanded = vi.fn();
-    // Both white drums reach index 5 (face 6) from rest in 11 ticks, plus one
-    // more for the trailing leaf to fall — fully stopped at tick 12. The
-    // bonus drum's wait (whiteTicks + 1 + BONUS_BEAT_TICKS = 11 + 1 + 4 = 16)
-    // holds it past that, so landing must not be reported anywhere through
-    // tick 16 — the whites being done is not the whole roll being done.
-    render(<DiceReadout roll={{ white: [6, 6], bonus: 5 }} live={false} onLanded={onLanded} />);
-    act(() => { vi.advanceTimersByTime(16 * DICE_MS); });
+    const { rerender } = render(<DiceReadout roll={{ white: [6, 6], bonus: null }} live={false} />);
+    settle();
+
+    rerender(<DiceReadout roll={{ white: [6, 6], bonus: 5 }} live={false} onLanded={onLanded} />);
+    act(() => { vi.advanceTimersByTime(12 * DICE_MS); });
     expect(onLanded).not.toHaveBeenCalled();
     settle();
     expect(onLanded).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('img', { name: 'Bonus die, 5' })).toBeInTheDocument();
   });
 
   it('reports it once and no more, however often the caller re-renders', () => {
@@ -105,20 +126,34 @@ describe('the dice readout', () => {
     expect(onLanded).toHaveBeenCalledTimes(1);
   });
 
-  it('holds the bonus drum on the blank until the whites have landed and its own beat has passed', () => {
-    render(<DiceReadout roll={{ white: [6, 6], bonus: 5 }} live={false} />);
-    // Tick 12 is exactly when both white drums have landed and their
-    // trailing leaf has fallen (see the timing note above). The bonus
-    // drum's wait has not elapsed at that point, so it must still be
-    // resting on the blank — not partway into its own spin toward 5. The
-    // accessible name can't tell these apart (the whole readout reports
-    // "turning" as one unit until every drum, bonus included, has genuinely
-    // stopped), so this checks what the drum is actually showing: the top
-    // leaf's colour is the blank's, not the numbered leaf's.
-    act(() => { vi.advanceTimersByTime(12 * DICE_MS); });
-    const bonusDie = screen.getByRole('img', { name: /Bonus die/i });
-    const topLeaf = bonusDie.querySelector('[aria-hidden]');
-    expect(topLeaf).toHaveStyle({ background: COLORS.bonusBlank });
+  it('holds the white drums still when only the bonus face changes', () => {
+    // The staging in one test. A turn throws these drums twice: the white
+    // pair, then — once the pawn has walked it — the Bonus Roll. The second
+    // throw must leave the whites exactly as they fell, and not even give
+    // them the lap that makes a die landing on its own face read as thrown,
+    // because here they genuinely were not thrown.
+    //
+    // The accessible name cannot see this: every drum reports "turning" as
+    // one unit while any of them moves. So this counts pips, tick by tick,
+    // through the whole of the red drum's spin — a lapping white drum passes
+    // through faces of one, two, three, four and five pips on its way back to
+    // six, and any single sample of it would be caught here.
+    const { rerender } = render(<DiceReadout roll={{ white: [6, 6], bonus: null }} live={false} />);
+    settle();
+    expect(screen.getAllByRole('img', { name: 'White die, 6' })).toHaveLength(2);
+
+    rerender(<DiceReadout roll={{ white: [6, 6], bonus: 5 }} live={false} />);
+
+    const seen = new Set<string>();
+    for (let t = 0; t <= 14; t++) {
+      seen.add(screen.getAllByRole('img', { name: /White die/i }).map(pipsOf).join(' '));
+      act(() => { vi.advanceTimersByTime(DICE_MS); });
+    }
+    // Both leaves of both dice, six pips each, at every tick from the moment
+    // the Bonus Roll was handed in to well past the red drum landing on it.
+    expect([...seen]).toEqual(['6,6 6,6']);
+    expect(screen.getAllByRole('img', { name: 'White die, 6' })).toHaveLength(2);
+    expect(screen.getByRole('img', { name: 'Bonus die, 5' })).toBeInTheDocument();
   });
 
   it('clears a stale bonus face at the start of the next roll, not the end', () => {

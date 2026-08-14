@@ -9,16 +9,33 @@ import { blankRow, BOARD_ROWS, padRows, type Row, type ScreenDef } from '../type
  * The dice as both surfaces show them. The board's header and the map's HUD
  * render the same readout through the same gate, so the state it reads is
  * derived once here rather than twice, differently.
+ *
+ * There are two live states now, because a turn holds two rolls: the white
+ * pair at the start, and the Bonus Roll once the white movement has been
+ * walked. Both are announced by the same drums before either reaches the log,
+ * and `pendingDice`/`pendingBonus` are the rolls that have been made but not
+ * yet told — the readout shows them, nothing else can.
  */
-export function diceFor(state: GameState, pendingDice: TurnRoll | null = null): {
-  roll: TurnRoll | null; live: boolean;
-} {
+export function diceFor(
+  state: GameState,
+  pendingDice: TurnRoll | null = null,
+  pendingBonus: number | null = null
+): { roll: TurnRoll | null; live: boolean } {
+  const waiting = pendingDice !== null || pendingBonus !== null;
+  // A pending bonus face rides on the white pair already in the log: it is one
+  // roll of one turn, not a new pair of dice.
+  const roll = pendingDice
+    ?? (pendingBonus !== null && state.rolled !== null
+      ? { white: state.rolled.white, bonus: pendingBonus }
+      : state.rolled);
   return {
-    roll: pendingDice ?? state.rolled,
-    // Live only when the baron up has a destination and no dice yet.
+    roll,
+    // Live when the baron up has a destination and either owes the white dice
+    // or owes the Bonus Roll. After an arrival the new destination comes
+    // first, which `needsDestination` covers for both.
     live: state.turn !== null
-      && state.rolled === null
-      && pendingDice === null
+      && !waiting
+      && (state.rolled === null || state.bonusOwed)
       && !needsDestination(state.seats[state.turn], nodeForCity)
   };
 }
@@ -33,7 +50,8 @@ export function play(
   state: GameState,
   turns: Partial<Record<SeatId, number>> = {},
   pending: { seat: SeatId; region: RegionId } | null = null,
-  pendingDice: TurnRoll | null = null
+  pendingDice: TurnRoll | null = null,
+  pendingBonus: number | null = null
 ): ScreenDef {
   const rows: Row[] = SEATS
     .map(id => state.seats[id])
@@ -107,6 +125,6 @@ export function play(
     // so a panel built from the rows would have the answer and a blank to
     // turn between.
     panel: REGIONS.map(region => region.name),
-    dice: diceFor(state, pendingDice)
+    dice: diceFor(state, pendingDice, pendingBonus)
   };
 }
