@@ -1,7 +1,7 @@
 import { copyFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { Plugin } from 'vite';
-import { defineConfig } from 'vitest/config';
+import { configDefaults, defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 // Extensionless, matching Acquire. Vite 8's native config loader warns and
 // wants './basePath.ts', but tsc rejects that without
@@ -30,15 +30,46 @@ function pagesFallback(): Plugin {
   };
 }
 
+/**
+ * The state tests that are pure — no DOM, no storage — and therefore belong in
+ * the `node` project alongside the code the server actually runs.
+ *
+ * `storage.test.ts` is the single exception, and the extglob names it rather
+ * than a hand-kept list going stale: localStorage is the subject of that file,
+ * so jsdom (and `src/test/setup.ts`'s bridge) is not incidental to it. One
+ * constant, used by both projects, so the two halves cannot drift into
+ * running a file twice or not at all.
+ */
+const PURE_STATE_TESTS = 'src/state/!(storage).test.ts';
+
 export default defineConfig({
   base: BASE_PATH,
   plugins: [react(), pagesFallback()],
   test: {
     globals: true,
+    // No setupFiles here, deliberately: vitest 4 merges a root-level setup
+    // into *every* project, which would load jsdom's storage bridge into the
+    // node project and silently disarm the boundary that session/
+    // nodeEnvironment.test.ts exists to guard.
     projects: [
       {
         extends: true,
-        test: { name: 'engine', environment: 'node', include: ['engine/**/*.test.ts'] }
+        test: {
+          // Everything that runs inside the server process in production:
+          // the engine, the wire, the server itself, and the pure state that
+          // replay is made of. A stray `window.` in any of it is a production
+          // crash, and running them under node is what catches it.
+          name: 'node',
+          environment: 'node',
+          include: [
+            'engine/**/*.test.ts',
+            'session/**/*.test.ts',
+            'server/**/*.test.ts',
+            PURE_STATE_TESTS,
+            'vendor/lobby/protocol/**/*.test.ts',
+            'vendor/lobby/server/**/*.test.ts'
+          ]
+        }
       },
       {
         extends: true,
@@ -49,6 +80,9 @@ export default defineConfig({
           // does not run the shared tests will not notice when a submodule
           // bump breaks it.
           include: ['src/**/*.test.{ts,tsx}', 'vendor/lobby/client/**/*.test.{ts,tsx}'],
+          // Spread the defaults back: supplying `exclude` replaces them, and
+          // dropping them would set vitest scanning node_modules.
+          exclude: [...configDefaults.exclude, PURE_STATE_TESTS],
           setupFiles: ['src/test/setup.ts']
         }
       }
