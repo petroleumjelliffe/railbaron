@@ -1,5 +1,6 @@
 import { useEffect, useMemo } from 'react';
 import { BoardRow, BOARD_COLUMN_WIDTHS, BOARD_TILE } from './BoardRow';
+import { DiceReadout } from './DiceReadout';
 import { RowInput } from './RowInput';
 import { useFlap } from './useFlap';
 import { padRows, type Row, type ScreenDef } from './types';
@@ -16,6 +17,9 @@ export interface BoardProps {
    * log until it has — see `roll` in useGame.
    */
   awaitRegion?: { row: number; onLanded: () => void } | null;
+  /** Fires once the dice have finished turning — the gate, as `awaitRegion` is. */
+  awaitDice?: { onLanded: () => void } | null;
+  onRollDice?: () => void;
   /** The seat currently being typed into, if any. */
   editing?: { seat: SeatId; placeholder: string } | null;
   onCommit?: (value: string) => void;
@@ -23,7 +27,8 @@ export interface BoardProps {
 }
 
 export function Board({
-  screen, onRowAct, onBack, awaitRegion = null, editing = null, onCommit, onCancel
+  screen, onRowAct, onBack, awaitRegion = null, awaitDice = null, onRollDice,
+  editing = null, onCommit, onCancel
 }: BoardProps) {
   const rows = useMemo(() => padRows(screen.rows), [screen.rows]);
   const texts = useMemo(
@@ -61,7 +66,7 @@ export function Board({
       <header
         style={{
           flex: '0 0 78px', display: 'flex', alignItems: 'center',
-          justifyContent: 'space-between', padding: '0 34px',
+          justifyContent: 'space-between', padding: '0 34px', position: 'relative',
           background: TOKENS.header, borderBottom: '1px solid #2a2a2a'
         }}
       >
@@ -104,6 +109,14 @@ export function Board({
             </button>
           )}
         </span>
+        {screen.dice && (
+          <DiceReadout
+            roll={screen.dice.roll}
+            live={screen.dice.live}
+            onRoll={onRollDice}
+            onLanded={awaitDice?.onLanded}
+          />
+        )}
       </header>
 
       <div

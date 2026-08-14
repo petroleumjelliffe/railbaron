@@ -1,13 +1,14 @@
 import { lazy, Suspense, useState } from 'react';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { REGIONS, type RegionId, type Rng, type RollOutcome } from '../engine';
+import { REGIONS, type RegionId, type Rng, type RollOutcome, type TurnRoll } from '../engine';
 import { Board } from './board/Board';
 import { home } from './board/screens/home';
 import { passAndPlay } from './board/screens/passAndPlay';
 import { saved } from './board/screens/saved';
 import { confirm } from './board/screens/confirm';
-import { play } from './board/screens/play';
+import { diceFor, play } from './board/screens/play';
 import { regionBallot } from './board/screens/regionBallot';
+import { homes } from './board/screens/homes';
 import type { Row, ScreenDef } from './board/types';
 
 /**
@@ -54,7 +55,9 @@ const regionOf = (outcome: RollOutcome): RegionId =>
 export default function App({ rng }: AppProps = {}) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  const { state, savedAt, roll, commitRoll, chooseRegion, rename, start, reset } = useGame(rng);
+  const { state, savedAt, roll, commitRoll, chooseRegion, rename, start,
+          rollOrder, undoLast, reset, rollDice, commitDice,
+          rollBonus, commitBonus, commitMove } = useGame(rng);
   const [editing, setEditing] = useState<{ seat: SeatId; placeholder: string } | null>(null);
   const [confirming, setConfirming] = useState(false);
   /**
@@ -63,6 +66,15 @@ export default function App({ rng }: AppProps = {}) {
    * useGame for why that is the gate rather than a rule to remember.
    */
   const [rolling, setRolling] = useState<{ seat: SeatId; outcome: RollOutcome } | null>(null);
+  /** Dice rolled but not yet told. Same gate as `rolling`, same reason. */
+  const [rollingDice, setRollingDice] = useState<{ seat: SeatId; roll: TurnRoll } | null>(null);
+  /**
+   * A Bonus Roll thrown but not yet told. Its own hold rather than a field on
+   * `rollingDice`: the two are separate rolls made at different moments of the
+   * turn, and the white pair it belongs to is already in the log by the time
+   * this one is thrown.
+   */
+  const [rollingBonus, setRollingBonus] = useState<{ seat: SeatId; face: number } | null>(null);
   /**
    * How many rolls each seat has had told. Kept across the commit, so the
    * board sees one announcement per roll rather than a second one when the
@@ -72,7 +84,39 @@ export default function App({ rng }: AppProps = {}) {
 
   if (!isKnown(pathname)) return <Navigate to="/" replace />;
 
-  const resuming = state.phase === 'playing';
+  const resuming = state.phase !== 'setup';
+
+  // Named rather than inlined, because the board's header and the map's HUD
+  // are two call sites for one roll: two copies would be two places for the
+  // gate to drift apart.
+  //
+  // One tap, two rolls: which one the readout is offering depends on where the
+  // turn stands. Before the whites it is the white pair; once they have been
+  // walked and a Bonus Roll is owed, the same drums throw the red die alone.
+  // The gate is the same in both directions — roll here, append only when the
+  // drums report they have finished telling it.
+  const onRollDice = () => {
+    if (state.turn === null || rollingDice !== null || rollingBonus !== null) return;
+    if (state.bonusOwed) {
+      const face = rollBonus(state.turn);
+      if (face === null) return;
+      setRollingBonus({ seat: state.turn, face });
+      return;
+    }
+    const rolled = rollDice(state.turn);
+    if (rolled === null) return;
+    setRollingDice({ seat: state.turn, roll: rolled });
+  };
+  const onDiceLanded = () => {
+    if (rollingBonus !== null) {
+      commitBonus(rollingBonus.seat, rollingBonus.face);
+      setRollingBonus(null);
+      return;
+    }
+    if (rollingDice === null) return;
+    commitDice(rollingDice.seat, rollingDice.roll);
+    setRollingDice(null);
+  };
 
   // A stale bookmark or a typed URL can ask for the game board when there
   // is no game. Rendering it anyway gives a board of seven blank rows with
@@ -98,7 +142,14 @@ export default function App({ rng }: AppProps = {}) {
             Warming the lamps
           </div>
         }>
-          <MapView state={state} onBack={() => navigate('/pass-and-play/game')} />
+          <MapView
+            state={state}
+            onBack={() => navigate('/pass-and-play/game')}
+            onMove={commitMove}
+            dice={diceFor(state, rollingDice?.roll ?? null, rollingBonus?.face ?? null)}
+            onRollDice={onRollDice}
+            onDiceLanded={onDiceLanded}
+          />
         </Suspense>
       </main>
     );
@@ -120,9 +171,14 @@ export default function App({ rng }: AppProps = {}) {
     '/pass-and-play': passAndPlayScreen(),
     // The ballot cannot appear early: `awaiting` comes from the log, and a
     // roll only reaches the log once its region has landed.
-    '/pass-and-play/game': awaiting
-      ? regionBallot(awaiting)
-      : play(state, turns, rolling && { seat: rolling.seat, region: regionOf(rolling.outcome) })
+    '/pass-and-play/game': state.phase === 'homes'
+      ? homes(state, rolling && { seat: rolling.seat, region: regionOf(rolling.outcome) })
+      : awaiting
+        ? regionBallot(awaiting)
+        : play(state, turns,
+               rolling && { seat: rolling.seat, region: regionOf(rolling.outcome) },
+               rollingDice?.roll ?? null,
+               rollingBonus?.face ?? null)
   };
 
   const onRowAct = (row: Row, index: number) => {
@@ -151,6 +207,10 @@ export default function App({ rng }: AppProps = {}) {
       });
       return;
     }
+
+    if (row.action.kind === 'order') { rollOrder(); return; }
+
+    if (row.action.kind === 'undo') { undoLast(); return; }
 
     if (row.action.kind !== 'navigate') return;
     switch (row.action.to) {
@@ -184,6 +244,8 @@ export default function App({ rng }: AppProps = {}) {
           row: SEATS.filter(id => state.seats[id].name !== null).indexOf(rolling.seat),
           onLanded: () => { commitRoll(rolling.seat, rolling.outcome); setRolling(null); }
         }}
+        onRollDice={onRollDice}
+        awaitDice={(rollingDice || rollingBonus) && { onLanded: onDiceLanded }}
         editing={editing}
         onCommit={value => {
           if (editing) rename(editing.seat, value || null);

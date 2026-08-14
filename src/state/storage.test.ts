@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { STORAGE_KEY, clearLog, loadLog, saveLog } from './storage';
+import { SAVE_VERSION, STORAGE_KEY, clearLog, loadLog, saveLog } from './storage';
 import type { GameEvent } from './events';
 
 const log: GameEvent[] = [
@@ -139,5 +139,68 @@ describe('persistence', () => {
     ];
     saveLog(full);
     expect(loadLog().events).toEqual(full);
+  });
+});
+
+describe('the new turn events survive a round trip', () => {
+  const good: GameEvent[] = [
+    { type: 'joined', seat: 'red', name: 'ADA' },
+    { type: 'started' },
+    { type: 'orderRolled', seat: 'red', first: 'red' },
+    { type: 'turnRolled', seat: 'red', white: [6, 6], bonus: null },
+    { type: 'moved', seat: 'red', path: ['c13', 'c95'], arrived: true },
+    { type: 'bonusRolled', seat: 'red', face: 3 },
+    { type: 'moved', seat: 'red', path: ['c95', 'c13'], arrived: false }
+  ];
+
+  it('keeps them all', () => {
+    saveLog(good);
+    expect(loadLog().events).toEqual(good);
+  });
+
+  it('keeps a pre-rolled bonus, so a log written before the staging still loads', () => {
+    // `turnRolled` used to carry the face. Games saved that way exist on real
+    // tablets, and `replay` reproduces the semantics they were played under —
+    // which it cannot do if the validator throws the log away on load.
+    const legacy: GameEvent[] = [
+      { type: 'joined', seat: 'red', name: 'ADA' },
+      { type: 'started' },
+      { type: 'orderRolled', seat: 'red', first: 'red' },
+      { type: 'turnRolled', seat: 'red', white: [6, 6], bonus: 4 }
+    ];
+    saveLog(legacy);
+    expect(loadLog().events).toEqual(legacy);
+  });
+
+  it('discards a log whose Bonus Roll was never on a die', () => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      version: SAVE_VERSION, savedAt: Date.now(),
+      events: [{ type: 'bonusRolled', seat: 'red', face: 0 }]
+    }));
+    expect(loadLog().events).toEqual([]);
+  });
+
+  it('discards a log whose die face was never on a die', () => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      version: SAVE_VERSION, savedAt: Date.now(),
+      events: [{ type: 'turnRolled', seat: 'red', white: [3, 7], bonus: null }]
+    }));
+    expect(loadLog().events).toEqual([]);
+  });
+
+  it('discards a log naming a node that was never real', () => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      version: SAVE_VERSION, savedAt: Date.now(),
+      events: [{ type: 'moved', seat: 'red', path: ['c13', 'nowhere'], arrived: false }]
+    }));
+    expect(loadLog().events).toEqual([]);
+  });
+
+  it('discards a leg that never went anywhere', () => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      version: SAVE_VERSION, savedAt: Date.now(),
+      events: [{ type: 'moved', seat: 'red', path: ['c13'], arrived: false }]
+    }));
+    expect(loadLog().events).toEqual([]);
   });
 });

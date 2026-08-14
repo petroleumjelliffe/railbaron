@@ -25,14 +25,14 @@ each attributed to one or more of the 28 railroads.
 
 **Phase 0 is done.** `data/rail-baron-graph.json` (scan pixel space, hand-verified)
 plus `data/city-names.json` (names and regions, keyed by node id) build into
-`src/data/network.json` — 550 nodes in WGS84 degrees, each city carrying the
+`engine/network.json` — 550 nodes in WGS84 degrees, each city carrying the
 `cityId` that indexes [`engine/cities.ts`](engine/cities.ts), so the map and the
 roller agree about what a destination is without matching strings at runtime.
 
 The warp is a thin-plate spline over the 67 cities, fitted scan→Albers so the
 spline corrects only the drawing's distortions rather than also learning the
 projection; lat/lon comes back by inverting Albers. Control points are
-reproduced to 3e-12°. `src/data/network.test.ts` re-checks the build's output
+reproduced to 3e-12°. `engine/network.test.ts` re-checks the build's output
 against the real engine module — the build reads city ids by parsing
 `engine/cities.ts`, which it cannot import, so the test is what makes a drifting
 parse fail rather than ship.
@@ -47,8 +47,9 @@ Replace the 2013 jQuery app. Same game, redesigned board, plus the map.
 - [x] Map as a second view: real US geometry, one lamp per real dot, cities tinted by
       region, track drawn in each railroad's own colour. Reached from the last row of the
       in-play board. Each baron's destination and the city they set out from light in
-      their colour — no path is drawn between them, because which route a baron takes
-      depends on the railroads they can use and this app does not model that
+      their colour. No path was drawn between them at this point, because which route a
+      baron takes depends on the railroads they can use and the roller did not model
+      that — Phase 4 does, and the map draws the committed leg
 - [x] Game logic ported from [`engine/`](engine/) — roll tables, 67 cities, payout matrix —
       with the two mislabelled regions fixed. The source it was transcribed from,
       `js/railbaronv2.js`, lived at the repo root and was deleted once the port had a
@@ -116,9 +117,18 @@ Modelling Rail Baron rather than assisting it: a baron rolls, **moves**, chooses
 route, and pays for the track they used. Then the parts that make it a game rather
 than a journey — buying railroads, the auction, user fees, cash, and winning.
 
-**Nothing here is designed yet.** That is the honest state: the rules are known,
-the interface is not, and the two questions below are the ones that decide what
-this becomes.
+**Turns and movement are built.** Barons take strict turns in rolled order; the
+movement dice are rolled from the board's own readout or the map's, through the same
+gate a destination roll goes through; the route is tapped out dot by dot on the map,
+refused where the rulebook refuses it, and committed as one `moved` event that every
+tab watches play back. The movement rules are stored as data rather than prose in
+[`engine/golden/`](engine/golden/) — one game per rule, run by a fixture runner and
+cross-checked against the event log's own replay. The Bonus Roll, the once-per-trip
+section rule, twin cities and stranding are all in there.
+
+**The money is not.** Buying railroads, the auction, user fees, cash and the win
+condition are still undesigned, and the second of the two questions below is the one
+that decides them. The first is answered: the app keeps turn order.
 
 ### What the map already gives us
 
@@ -134,11 +144,12 @@ mean reading the board again:
 - **Both spaces are available** — real geography for the map view, scan pixels in
   `data/design-network.json` for anything that needs the printed board's own layout.
 
-### The two open questions
+### The two questions
 
-- **Whose turn is it?** The roller has no turn order at all: any row can be tapped at
-  any time, which is right for a companion and wrong for a referee. Introducing turns
-  touches the event log, the board, and the lobby contract Phase 3 depends on.
+- **Whose turn is it?** — *answered.* The roller had no turn order at all: any row
+  could be tapped at any time, which is right for a companion and wrong for a referee.
+  Turns are now rolled for, recorded (`orderRolled`) and enforced by replay, and undo
+  takes back a whole turn rather than an event.
 - **How much does the app decide?** There is a wide gap between showing a baron their
   legal routes and choosing one for them, and a wider one between tracking cash and
   enforcing it. The further it goes, the less the physical board is being played.

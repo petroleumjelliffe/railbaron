@@ -1,9 +1,10 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { StrictMode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from './App';
+import { nodeForCity } from '../engine';
 import { STORAGE_KEY } from './state/storage';
 import type { GameEvent } from './state/events';
 
@@ -116,6 +117,10 @@ describe('asking for the game board when there is no game', () => {
     ]);
     at('/pass-and-play/game');
     expect(screen.getByRole('button', { name: /pete/i })).toBeInTheDocument();
+    // A `started` game with no home cities rolled yet lands in the homes
+    // phase, not straight into play — the sub-header is how the two screens
+    // are told apart, since both show a PETE row.
+    expect(screen.getByText(/home cities/i)).toBeInTheDocument();
   });
 });
 
@@ -142,18 +147,27 @@ describe('the full ballot path', () => {
     seed([
       { type: 'joined', seat: 'red', name: 'PETE' },
       { type: 'joined', seat: 'blue', name: 'ALEX' },
-      { type: 'started' }
+      { type: 'started' },
+      // ALEX's home and the roll for first are seeded directly rather than
+      // played through — this test is about PETE's roll, and giving ALEX a
+      // home this way spends none of the scripted rng draws below, which are
+      // accounted for down to the triple.
+      { type: 'arrived', seat: 'blue', city: 20, region: 'NC', payout: null },
+      { type: 'orderRolled', seat: 'red', first: 'red' }
     ]);
     at('/pass-and-play/game', rng);
 
     // Roll #1: the home town.
-    await userEvent.click(screen.getByRole('button', { name: /pete/i }));
+    const peteRow = screen.getByRole('button', { name: /pete/i });
+    await userEvent.click(peteRow);
     // Even snapped, the roll is told before it is logged, so this waits for
     // the board to finish rather than reading it on the same tick as the tap.
     expect(await screen.findByText('Los Angeles')).toBeInTheDocument();
     // The note lands with the payout, at the end of the reveal, so this waits
-    // rather than reading the board the instant it was tapped.
-    expect(await screen.findByText('Home', { ignore: HIDDEN }, { timeout: 5000 }))
+    // rather than reading the board the instant it was tapped. Scoped to
+    // PETE's own row: ALEX's seeded home carries the same HOME note on
+    // theirs, so an unscoped query would be ambiguous between the two.
+    expect(await within(peteRow).findByText('Home', { ignore: HIDDEN }, { timeout: 5000 }))
       .toBeInTheDocument();
 
     // Roll #2: names the seat's own region, so the ballot takes over the
@@ -250,7 +264,12 @@ describe('holding a roll back until the board has told it', () => {
     seed([
       { type: 'joined', seat: 'red', name: 'PETE' },
       { type: 'joined', seat: 'blue', name: 'ALEX' },
-      { type: 'started' }
+      { type: 'started' },
+      // Seeded directly, same as the ballot walk-through above: this test is
+      // about PETE's roll being held back, not about ALEX or turn order, and
+      // seeding costs none of the scripted rng draws below.
+      { type: 'arrived', seat: 'blue', city: 20, region: 'NC', payout: null },
+      { type: 'orderRolled', seat: 'red', first: 'red' }
     ]);
     at('/pass-and-play/game', scripted());
   };
@@ -282,5 +301,163 @@ describe('holding a roll back until the board has told it', () => {
 
     tick(52 * 300);
     expect(storedTypes()).toEqual([...before, 'regionRequested']);
+  });
+});
+
+/**
+ * The dice's half of the same gate, and the seam it hangs from.
+ *
+ * `DiceReadout` and `useGame` each have their own tests, and both stayed green
+ * with `awaitDice`, `onRollDice` or `play()`'s `dice` deleted from the App —
+ * three separate cuts, each of which leaves a board whose dice cannot be
+ * rolled or cannot be recorded. Only a walk-through from the real board can
+ * see them, so this is the mirror of the region gate above.
+ */
+describe('rolling the turn dice from the board', () => {
+  const tick = (ms: number) => act(() => { vi.advanceTimersByTime(ms); });
+
+  beforeEach(() => { vi.useFakeTimers(); });
+  afterEach(() => { vi.useRealTimers(); });
+
+  /**
+   * PETE is up, standing in Minneapolis and bound for St. Paul — a baron with
+   * somewhere to go and no dice yet, which is the only state the readout is
+   * live in.
+   */
+  const upAndReadyToRoll = () => {
+    seed([
+      { type: 'joined', seat: 'red', name: 'PETE' },
+      { type: 'joined', seat: 'blue', name: 'ALEX' },
+      { type: 'started' },
+      { type: 'arrived', seat: 'red', city: 43, region: 'PL', payout: null },
+      { type: 'arrived', seat: 'blue', city: 20, region: 'NC', payout: null },
+      { type: 'orderRolled', seat: 'red', first: 'red' },
+      { type: 'arrived', seat: 'red', city: 47, region: 'PL', payout: 0 }
+    ]);
+  };
+
+  /**
+   * `rollTurn` takes `d6` twice — `floor(rng() * 6) + 1` each — and a third
+   * time only on a Freight double six, which 3 and 4 is not. So two draws,
+   * and any further draw is a bug rather than a face.
+   */
+  const dice = (a: number, b: number) => {
+    const values = [(a - 1) / 6 + 0.01, (b - 1) / 6 + 0.01];
+    let i = 0;
+    return () => {
+      const value = values[i++];
+      if (value === undefined) throw new Error('rng exhausted: the dice drew more than twice');
+      return value;
+    };
+  };
+
+  const readout = () => screen.getByRole('button', { name: /roll the dice/i });
+
+  it('holds the roll back until the drums have told it, then names the faces', () => {
+    upAndReadyToRoll();
+    at('/pass-and-play/game', dice(3, 4));
+    const before = storedTypes();
+
+    fireEvent.click(readout());
+
+    // Three ticks in: the white drums take eleven or more to land, so the
+    // faces are unreadable — and the log must not have the roll either.
+    // queryAll, not query: a readout that never started turning rests with
+    // both drums on a readable face, and `queryBy` would throw on the two
+    // matches rather than report what it found.
+    tick(3 * 52);
+    expect(screen.queryAllByRole('img', { name: /White die, \d/ })).toEqual([]);
+    expect(storedTypes()).toEqual(before);
+
+    tick(4000);
+    expect(storedTypes()).toEqual([...before, 'turnRolled']);
+    expect(screen.getByRole('img', { name: 'White die, 3' })).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'White die, 4' })).toBeInTheDocument();
+  });
+
+  /**
+   * The Bonus Roll's half of the same seam, and the third gate through the
+   * same drums. The white leg is seeded rather than walked: walking twelve
+   * dots is the map's job and is covered there, and what this has to see is
+   * the App's own wiring — that the readout comes live a *second* time in one
+   * turn, and that `bonusRolled` reaches the log only once the drums have
+   * told it.
+   *
+   * PETE rolls a double six on a Freight and stops in open country, so the
+   * turn stays open owing a Bonus Roll and no new destination is due first.
+   */
+  const owingTheBonusRoll = () => {
+    seed([
+      { type: 'joined', seat: 'red', name: 'PETE' },
+      { type: 'joined', seat: 'blue', name: 'ALEX' },
+      { type: 'started' },
+      { type: 'arrived', seat: 'red', city: 43, region: 'PL', payout: null },
+      { type: 'arrived', seat: 'blue', city: 20, region: 'NC', payout: null },
+      { type: 'orderRolled', seat: 'red', first: 'red' },
+      { type: 'arrived', seat: 'red', city: 47, region: 'PL', payout: 0 },
+      { type: 'turnRolled', seat: 'red', white: [6, 6], bonus: null },
+      { type: 'moved', seat: 'red', path: [nodeForCity(43), 'd66'], arrived: false }
+    ]);
+  };
+
+  /** One face, and one only: the Bonus Roll is a single `d6`. */
+  const oneDie = (face: number) => {
+    const values = [(face - 1) / 6 + 0.01];
+    let i = 0;
+    return () => {
+      const value = values[i++];
+      if (value === undefined) throw new Error('rng exhausted: the Bonus Roll drew more than once');
+      return value;
+    };
+  };
+
+  it('offers the dice again for an owed Bonus Roll, and holds it back until told', () => {
+    owingTheBonusRoll();
+    at('/pass-and-play/game', oneDie(3));
+    // The white pair is already in the log; the drums turn up to it at mount.
+    tick(4000);
+    const before = storedTypes();
+    expect(before[before.length - 1]).toBe('moved');
+    expect(readout()).toHaveAttribute('aria-disabled', 'false');
+
+    fireEvent.click(readout());
+
+    // The red drum takes twelve ticks and a trailing leaf to reach a 3 from
+    // the blank, so nothing is readable or logged three ticks in.
+    tick(3 * 78);
+    expect(screen.queryAllByRole('img', { name: /Bonus die, \d/ })).toEqual([]);
+    expect(storedTypes()).toEqual(before);
+
+    tick(4000);
+    expect(storedTypes()).toEqual([...before, 'bonusRolled']);
+    expect(screen.getByRole('img', { name: 'Bonus die, 3' })).toBeInTheDocument();
+    // And the whites never moved for it: they are lying on the table showing
+    // the pair that was walked, not re-thrown alongside the red die.
+    expect(screen.getAllByRole('img', { name: 'White die, 6' })).toHaveLength(2);
+  });
+
+  it('leaves the dice dead on a turn that earned nothing', () => {
+    // The same seat, one leg walked, but on a pair that earns a Freight no
+    // Bonus Roll — the turn is over and the readout belongs to ALEX now.
+    seed([
+      { type: 'joined', seat: 'red', name: 'PETE' },
+      { type: 'joined', seat: 'blue', name: 'ALEX' },
+      { type: 'started' },
+      { type: 'arrived', seat: 'red', city: 43, region: 'PL', payout: null },
+      { type: 'arrived', seat: 'blue', city: 20, region: 'NC', payout: null },
+      { type: 'orderRolled', seat: 'red', first: 'red' },
+      { type: 'arrived', seat: 'red', city: 47, region: 'PL', payout: 0 },
+      { type: 'turnRolled', seat: 'red', white: [3, 4], bonus: null },
+      { type: 'moved', seat: 'red', path: [nodeForCity(43), 'd66'], arrived: false }
+    ]);
+    at('/pass-and-play/game');
+    tick(4000);
+    const before = storedTypes();
+    // ALEX is up and owes a destination, so nothing is live — and a tap on
+    // the readout must not write a Bonus Roll nobody earned.
+    expect(readout()).toHaveAttribute('aria-disabled', 'true');
+    fireEvent.click(readout());
+    tick(4000);
+    expect(storedTypes()).toEqual(before);
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CITIES, cityById } from '../../engine';
+import { CITIES, cityById } from './index';
 import network from './network.json';
 
 /**

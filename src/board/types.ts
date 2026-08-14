@@ -1,3 +1,4 @@
+import type { TurnRoll } from '../../engine';
 import type { SeatId } from '../state/events';
 
 /**
@@ -8,7 +9,7 @@ import type { SeatId } from '../state/events';
  * destination would cost more than this note does.
  */
 export type ScreenId =
-  | 'home' | 'passAndPlay' | 'saved' | 'confirm' | 'play' | 'regionBallot' | 'map';
+  | 'home' | 'passAndPlay' | 'saved' | 'confirm' | 'play' | 'regionBallot' | 'homes' | 'map';
 
 /** What an editable row is editing. Seat names today. */
 export type FieldId = `seat:${SeatId}`;
@@ -17,6 +18,9 @@ export type RowAction =
   | { kind: 'navigate'; to: ScreenId }
   | { kind: 'edit'; field: FieldId; placeholder: string }
   | { kind: 'act'; seat: SeatId }
+  /** Roll for who goes first. One row, once per game, so it carries no payload. */
+  | { kind: 'order' }
+  | { kind: 'undo' }
   | null;
 
 /**
@@ -68,6 +72,11 @@ export interface ScreenDef {
    * declare — the values on its rows are the whole of it.
    */
   panel?: readonly string[];
+  /**
+   * The dice this screen shows. There is one pair on the table and everyone
+   * uses it, so this belongs to the screen rather than to a row.
+   */
+  dice?: { roll: TurnRoll | null; live: boolean } | null;
 }
 
 /** The board is this many rows on every screen, without exception. */
