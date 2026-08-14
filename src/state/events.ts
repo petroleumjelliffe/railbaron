@@ -31,11 +31,27 @@ export type GameEvent =
    * Its presence is also what moves the game from `homes` into `playing`.
    */
   | { type: 'orderRolled'; seat: SeatId; first: SeatId }
-  /** The dice for one turn: both white dice, and the bonus die when earned. */
+  /**
+   * The white dice for one turn. A roll written today always carries
+   * `bonus: null`: the Bonus Roll is thrown after the white movement has been
+   * walked and arrives as its own `bonusRolled` event.
+   *
+   * The field stays, and the validator still accepts a face in it, because
+   * logs written before that staging exist on real tablets. `replay` treats a
+   * non-null bonus here as the legacy pre-rolled form and reproduces exactly
+   * the behaviour those games were played under.
+   */
   | { type: 'turnRolled'; seat: SeatId; white: [number, number]; bonus: number | null }
+  /**
+   * The Bonus Roll, thrown and announced on its own after the white leg. It is
+   * legal only during an open turn whose white pair earned one — a fact
+   * `replay` derives from the log's order rather than from anything stored
+   * here, exactly as it derives whose turn it is.
+   */
+  | { type: 'bonusRolled'; seat: SeatId; face: number }
   /** One leg of movement: the path as node ids, and whether it ended on the
-   *  destination. Two of these in a turn means a Bonus Roll leg followed an
-   *  arrival — see `bonusLegOwed`. */
+   *  destination. Two of these in a turn means a Bonus Roll leg followed the
+   *  white one. */
   | { type: 'moved'; seat: SeatId; path: NodeId[]; arrived: boolean };
 
 // Derived from the engine rather than copied as literals, so a table change
@@ -97,6 +113,12 @@ export function isGameEvent(value: unknown): value is GameEvent {
         Array.isArray(event.white) && event.white.length === 2 && event.white.every(isDie) &&
         (event.bonus === null || isDie(event.bonus))
       );
+    case 'bonusRolled':
+      // Structural only, like every case here: *when* a Bonus Roll may be
+      // taken is a question about the order of the log, and replay is where
+      // order is read. A validator that tried to answer it would need the
+      // events around this one, which it does not have.
+      return VALID_SEATS.has(event.seat as string) && isDie(event.face);
     case 'moved':
       // Two nodes minimum: a leg with no step is not a leg. Every id is
       // checked against the built network for the same reason cities are —

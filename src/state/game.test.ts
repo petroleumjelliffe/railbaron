@@ -263,7 +263,13 @@ describe('turn order', () => {
     expect(state.rolled).toBeNull();
   });
 
-  it('keeps the turn when a bonus leg is still owed', () => {
+  // The three that follow are logs from before the Bonus Roll moved to after
+  // the white movement: their face is already in `turnRolled`, which is the
+  // one thing replay treats as the legacy pre-rolled form. They are kept
+  // exactly as they were, because a game saved on a tablet then must replay
+  // into the same game now. The staging as it is played today is pinned in
+  // "a turn that earns a Bonus Roll" below.
+  it('keeps the turn when a pre-rolled bonus leg is still owed', () => {
     // Arrived inside the white dice with a bonus die rolled: the book has the
     // player roll a new destination and spend the bonus starting that trip.
     const log: GameEvent[] = [...twoBarons,
@@ -275,7 +281,7 @@ describe('turn order', () => {
     expect(state.rolled).toEqual({ white: [6, 6], bonus: 4 });
   });
 
-  it('ends the turn after the bonus leg', () => {
+  it('ends the turn after a pre-rolled bonus leg', () => {
     const log: GameEvent[] = [...twoBarons,
       { type: 'arrived', seat: 'green', city: MINNEAPOLIS_CITY, region: 'PL', payout: 0 },
       { type: 'turnRolled', seat: 'green', white: [6, 6], bonus: 4 },
@@ -285,7 +291,25 @@ describe('turn order', () => {
     expect(replay(log).turn).toBe('red');
   });
 
-  it('counts the leg so the bonus leg knows what it has to spend', () => {
+  it('ends a pre-rolled turn that did not arrive, as that form always did', () => {
+    // The distinguishing case, and the reason the legacy branch exists at all.
+    // In the pre-rolled form the whole roll was one continuous run — white and
+    // bonus together — so a leg that stopped short of the destination had
+    // spent all of it and the turn was over. Under the staging as played now
+    // the same white pair would leave a Bonus Roll owed. A saved game must
+    // replay into the game that was played, not the game it would be today.
+    const log: GameEvent[] = [...twoBarons,
+      { type: 'arrived', seat: 'green', city: MINNEAPOLIS_CITY, region: 'PL', payout: 0 },
+      { type: 'turnRolled', seat: 'green', white: [6, 6], bonus: 4 },
+      { type: 'moved', seat: 'green', path: [ST_PAUL, MINNEAPOLIS], arrived: false }];
+    const state = replay(log);
+    expect(state.turn).toBe('red');
+    expect(state.rolled).toBeNull();
+    expect(state.bonusOwed, 'a pre-rolled turn never owes one — its face was in hand')
+      .toBe(false);
+  });
+
+  it('counts the leg so a pre-rolled bonus leg knows what it has to spend', () => {
     const base: GameEvent[] = [...twoBarons,
       { type: 'arrived', seat: 'green', city: MINNEAPOLIS_CITY, region: 'PL', payout: 0 },
       { type: 'turnRolled', seat: 'green', white: [6, 6], bonus: 4 }];
@@ -293,6 +317,83 @@ describe('turn order', () => {
     const after: GameEvent[] = [...base,
       { type: 'moved', seat: 'green', path: [ST_PAUL, MINNEAPOLIS], arrived: true }];
     expect(replay(after).leg).toBe(1);
+  });
+});
+
+/**
+ * The Bonus Roll as it is actually played: the white pair is rolled and
+ * announced, entitlement is fixed at that moment by the doubles rules, the
+ * pawn walks the whites, and only then is the die thrown — its own roll, its
+ * own event. Playtest is what settled the order, because a player who knows
+ * the bonus face while walking the whites plans an eighteen-dot route and a
+ * player at the table cannot.
+ *
+ * Every baron is on a Freight, so double six is the entitlement here.
+ */
+describe('a turn that earns a Bonus Roll', () => {
+  const upNext: GameEvent[] = [...twoBarons,
+    { type: 'arrived', seat: 'green', city: MINNEAPOLIS_CITY, region: 'PL', payout: 0 }];
+  const doubleSix: GameEvent[] = [...upNext,
+    { type: 'turnRolled', seat: 'green', white: [6, 6], bonus: null }];
+  const whiteLeg = (arrived: boolean): GameEvent =>
+    ({ type: 'moved', seat: 'green', path: [ST_PAUL, MINNEAPOLIS], arrived });
+
+  it('is not holding the face when the whites land', () => {
+    const state = replay(doubleSix);
+    expect(state.rolled).toEqual({ white: [6, 6], bonus: null });
+    expect(state.bonusOwed, 'nothing is owed until the white leg has been walked')
+      .toBe(false);
+  });
+
+  it('keeps the turn open after a white leg that did not arrive', () => {
+    // "If entitled, he must take it." This is the case the first draft of the
+    // spec had wrong: it ended the turn here, because it thought a bonus leg
+    // was only owed when the pawn arrived inside the white dice. Entitlement
+    // is fixed by the white pair and has nothing to do with arriving — a leg
+    // that stops in open country still owes its Bonus Roll.
+    const state = replay([...doubleSix, whiteLeg(false)]);
+    expect(state.turn, 'the turn cannot advance past an untaken entitlement').toBe('green');
+    expect(state.bonusOwed).toBe(true);
+    expect(state.leg).toBe(1);
+  });
+
+  it('keeps it open after one that did, for the new destination and then the die', () => {
+    const state = replay([...doubleSix, whiteLeg(true)]);
+    expect(state.turn).toBe('green');
+    expect(state.bonusOwed).toBe(true);
+  });
+
+  it('ends the turn after one leg when the white pair earned nothing', () => {
+    const state = replay([...upNext,
+      { type: 'turnRolled', seat: 'green', white: [3, 4], bonus: null },
+      whiteLeg(false)]);
+    expect(state.turn).toBe('red');
+    expect(state.bonusOwed).toBe(false);
+    expect(state.rolled).toBeNull();
+  });
+
+  it('takes the face from the bonusRolled event, and stops owing one', () => {
+    // This is what hands the second leg its movement: `state.rolled.bonus`
+    // going non-null is what `useRoute` spends on the bonus leg.
+    const state = replay([...doubleSix, whiteLeg(false),
+      { type: 'bonusRolled', seat: 'green', face: 3 }]);
+    expect(state.rolled).toEqual({ white: [6, 6], bonus: 3 });
+    expect(state.bonusOwed).toBe(false);
+    expect(state.turn).toBe('green');
+    expect(state.leg).toBe(1);
+  });
+
+  it('ends the turn after the bonus leg, and not before', () => {
+    const state = replay([...doubleSix, whiteLeg(false),
+      { type: 'bonusRolled', seat: 'green', face: 3 },
+      { type: 'moved', seat: 'green', path: [MINNEAPOLIS, ST_PAUL], arrived: true }]);
+    expect(state.turn).toBe('red');
+    expect(state.rolled).toBeNull();
+    expect(state.bonusOwed).toBe(false);
+  });
+
+  it('owes nothing on a turn that has not rolled at all', () => {
+    expect(replay(upNext).bonusOwed).toBe(false);
   });
 });
 

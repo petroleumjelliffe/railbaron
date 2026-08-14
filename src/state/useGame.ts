@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
-  destinationInRegion, nodeForCity, rollDestination, rollTurn,
+  d6, destinationInRegion, nodeForCity, rollDestination, rollTurn,
   type NodeId, type RegionId, type Rng, type RollOutcome, type TrainType, type TurnRoll
 } from '../../engine';
 import { SEATS, type GameEvent, type SeatId } from './events';
@@ -123,9 +123,12 @@ export function useGame(rng: Rng = Math.random) {
   }, [state, rng]);
 
   /**
-   * The movement dice. Deliberately appends nothing, for the same reason
-   * `roll` does not: the board announces the faces before the log carries
-   * them, and `commitDice` is the only way in.
+   * The white movement dice — and only those. Deliberately appends nothing,
+   * for the same reason `roll` does not: the board announces the faces before
+   * the log carries them, and `commitDice` is the only way in.
+   *
+   * The bonus die is not thrown here. It is a roll of its own, taken once the
+   * white movement has been walked — see `rollBonus`.
    */
   const rollDice = useCallback((seat: SeatId): TurnRoll | null => {
     if (state.phase !== 'playing' || state.turn !== seat) return null;
@@ -142,6 +145,30 @@ export function useGame(rng: Rng = Math.random) {
       type: 'turnRolled', seat,
       white: [roll.white[0], roll.white[1]], bonus: roll.bonus
     }]);
+  }, []);
+
+  /**
+   * The Bonus Roll, thrown after the white movement has been walked. The third
+   * gate, and the same split as the other two: this hands back a face and
+   * appends nothing, `commitBonus` is the only way one reaches the log, and
+   * its only caller is the handler that fires when the red drum lands.
+   *
+   * `state.bonusOwed` carries the whole entitlement rule, so there is nothing
+   * to decide here beyond whose turn it is. The extra guard is the book's
+   * order after an arrival: the new destination is rolled first, and
+   * `needsDestination` is exactly "the pawn is standing on the place it was
+   * heading for". A leg that did not arrive fails it and rolls straight on.
+   */
+  const rollBonus = useCallback((seat: SeatId): number | null => {
+    if (state.phase !== 'playing' || state.turn !== seat) return null;
+    if (!state.bonusOwed) return null;
+    if (needsDestination(state.seats[seat], nodeForCity)) return null;
+    return d6(rng);
+  }, [state, rng]);
+
+  /** The only way a Bonus Roll reaches the log. See `rollBonus`. */
+  const commitBonus = useCallback((seat: SeatId, face: number) => {
+    setEvents(log => [...log, { type: 'bonusRolled', seat, face }]);
   }, []);
 
   const commitMove = useCallback((seat: SeatId, path: readonly NodeId[], arrived: boolean) => {
@@ -200,7 +227,7 @@ export function useGame(rng: Rng = Math.random) {
 
   return {
     state, savedAt, roll, commitRoll, chooseRegion,
-    rollDice, commitDice, commitMove, rollOrder,
+    rollDice, commitDice, rollBonus, commitBonus, commitMove, rollOrder,
     rename, start, undoLast, reset
   };
 }

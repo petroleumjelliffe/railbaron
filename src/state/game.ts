@@ -1,6 +1,6 @@
 import {
-  bonusLegOwed, nodeForCity, pathCost,
-  type CityId, type NodeId, type RegionId, type TurnRoll
+  bonusLegOwed, earnsBonus, nodeForCity, pathCost,
+  type CityId, type NodeId, type RegionId, type TrainType, type TurnRoll
 } from '../../engine';
 import { SEATS, type GameEvent, type SeatId } from './events';
 import { addSections, rotate } from './turns';
@@ -46,10 +46,19 @@ export interface GameState {
   rolled: TurnRoll | null;
   /**
    * Legs of the current turn already walked: 0 normally, 1 while a Bonus Roll
-   * leg is owed. It decides how much movement the leg has — the whole roll,
+   * leg is owed. It decides how much movement the leg has — the white roll,
    * or just the bonus die.
    */
   leg: number;
+  /**
+   * The turn is waiting on its Bonus Roll: the white pair earned one, the
+   * white leg has been walked, and the die has not been thrown yet.
+   *
+   * "If entitled, he **must** take it" — so this is not an offer. The turn
+   * cannot advance past it, and both surfaces read this to make the dice live
+   * again rather than leaving the map looking stranded.
+   */
+  bonusOwed: boolean;
   /** The leg most recently committed, for the map to walk. */
   lastMove: { seat: SeatId; path: readonly NodeId[]; arrived: boolean } | null;
 }
@@ -62,17 +71,33 @@ function emptyState(): GameState {
     };
   }
   return {
-    seats, phase: 'setup', order: [], turn: null, rolled: null, leg: 0, lastMove: null
+    seats, phase: 'setup', order: [], turn: null, rolled: null, leg: 0,
+    bonusOwed: false, lastMove: null
   };
 }
+
+/**
+ * Every baron starts on a Freight and nothing upgrades one yet. Named here
+ * rather than inlined so the money spec has one place to make it a lookup —
+ * `src/state/useGame.ts` carries the same constant for the same reason.
+ */
+const TRAIN: TrainType = 'freight';
 
 export function replay(events: readonly GameEvent[]): GameState {
   const state = emptyState();
   let first: SeatId | null = null;
   /** Turns finished. The next one belongs to order[taken % order.length]. */
   let taken = 0;
-  /** The turn under way, if any. */
-  let open: { seat: SeatId; roll: TurnRoll; legs: number } | null = null;
+  /**
+   * The turn under way, if any.
+   *
+   * `legacy` is a turn whose `turnRolled` already carried a bonus face — a log
+   * written before the Bonus Roll moved to after the white movement. Those
+   * turns keep exactly the semantics they were played under (one continuous
+   * white+bonus leg, `bonusLegOwed` deciding the second), so an old saved game
+   * replays into the same game it always did.
+   */
+  let open: { seat: SeatId; roll: TurnRoll; legs: number; legacy: boolean } | null = null;
 
   for (const event of events) {
     if (event.type === 'started') {
@@ -108,8 +133,17 @@ export function replay(events: readonly GameEvent[]): GameState {
         open = {
           seat: event.seat,
           roll: { white: event.white, bonus: event.bonus },
-          legs: 0
+          legs: 0,
+          legacy: event.bonus !== null
         };
+        break;
+      case 'bonusRolled':
+        // The face arrives on the turn already open, which is what makes
+        // `state.rolled.bonus` non-null and hands the second leg the movement
+        // it has to spend. A `bonusRolled` with no turn open is a log that
+        // could not have been written by this app; it changes nothing rather
+        // than inventing a turn to hold it.
+        if (open !== null) open.roll = { white: open.roll.white, bonus: event.face };
         break;
       case 'moved':
         state.seats[event.seat] = {
@@ -122,9 +156,19 @@ export function replay(events: readonly GameEvent[]): GameState {
         state.lastMove = { seat: event.seat, path: event.path, arrived: event.arrived };
         if (open !== null) {
           open.legs += 1;
-          const over = open.legs >= 2
-            || !bonusLegOwed(open.roll, pathCost(event.path), event.arrived);
-          if (over) { taken += 1; open = null; }
+          // "A player can get no more than one Bonus Roll per turn" caps every
+          // turn at two legs. What decides the *first* leg is the staging:
+          //
+          // - live: entitlement was fixed when the whites landed, and it does
+          //   not depend on arrival. An entitled turn stays open whether the
+          //   pawn arrived or not — arriving means the bonus leg starts a new
+          //   trip, not arriving means it continues this one.
+          // - legacy: the whole roll was one continuous run, so only an
+          //   arrival inside the white dice left anything owed.
+          const owed = open.legacy
+            ? bonusLegOwed(open.roll, pathCost(event.path), event.arrived)
+            : earnsBonus(TRAIN, open.roll.white);
+          if (open.legs >= 2 || !owed) { taken += 1; open = null; }
         }
         break;
     }
@@ -137,6 +181,14 @@ export function replay(events: readonly GameEvent[]): GameState {
     : state.order[taken % state.order.length]!;
   state.rolled = open?.roll ?? null;
   state.leg = open?.legs ?? 0;
+  // Derived, never stored: an entitled turn that has walked its white leg and
+  // has no face on the bonus die yet. A legacy turn never reaches it — its
+  // face was in hand from the roll.
+  state.bonusOwed = open !== null
+    && !open.legacy
+    && open.legs >= 1
+    && open.roll.bonus === null
+    && earnsBonus(TRAIN, open.roll.white);
   return state;
 }
 
@@ -159,7 +211,10 @@ export function replay(events: readonly GameEvent[]): GameState {
  *   hands a baron their own region back) is its own action, and goes alone;
  * - a roll or a leg goes back with the whole turn it belongs to — through
  *   and including the `turnRolled` that opened it, which carries that turn's
- *   moves and any destination announced part-way through;
+ *   moves, its Bonus Roll and any destination announced part-way through. The
+ *   Bonus Roll is a roll and goes back the same way: popping it alone would
+ *   leave the turn owing one again, which is a state the player did not ask
+ *   to be in and which the row's own label ("Take back a turn") denies;
  * - anything else — seating, a rename, the roll for first player — goes one
  *   at a time, as it always did.
  */
@@ -169,7 +224,7 @@ export function undo(events: readonly GameEvent[]): GameEvent[] {
   if (events.length <= startedAt + 1) return [...events];
 
   const last = events[events.length - 1]!;
-  if (last.type === 'moved' || last.type === 'turnRolled') {
+  if (last.type === 'moved' || last.type === 'turnRolled' || last.type === 'bonusRolled') {
     // Never past `started`, which is the second guard again: a turn that
     // somehow has no roll behind it falls through to popping one event
     // rather than swallowing the game.

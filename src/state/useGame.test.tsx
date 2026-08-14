@@ -95,6 +95,85 @@ describe('rolling the movement dice', () => {
   });
 });
 
+/**
+ * The third gate, and the same split as the other two: the face is handed
+ * back, announced by the drums, and only `commitBonus` puts it in the log.
+ *
+ * Everything here is a Freight, so a double six is the entitlement.
+ */
+describe('rolling the Bonus Roll', () => {
+  /** Red rolls a double six and walks it without arriving. */
+  const owed: GameEvent[] = [...underway,
+    { type: 'turnRolled', seat: 'red', white: [6, 6], bonus: null },
+    { type: 'moved', seat: 'red', path: [MINNEAPOLIS, 'd66'], arrived: false }];
+
+  it('hands back a face without putting it in the log', () => {
+    saveLog(owed);
+    const { result } = renderHook(() => useGame(dice(3)));
+    expect(result.current.state.bonusOwed).toBe(true);
+    let face: unknown;
+    act(() => { face = result.current.rollBonus('red'); });
+    expect(face).toBe(3);
+    expect(result.current.state.rolled).toEqual({ white: [6, 6], bonus: null });
+  });
+
+  it('reaches the log only through commitBonus', () => {
+    saveLog(owed);
+    const { result } = renderHook(() => useGame(dice(3)));
+    act(() => { result.current.commitBonus('red', 3); });
+    expect(result.current.state.rolled).toEqual({ white: [6, 6], bonus: 3 });
+    expect(result.current.state.bonusOwed).toBe(false);
+  });
+
+  it('refuses one on a turn whose white pair earned nothing', () => {
+    saveLog([...underway,
+      { type: 'turnRolled', seat: 'red', white: [3, 4], bonus: null },
+      { type: 'moved', seat: 'red', path: [MINNEAPOLIS, 'd66'], arrived: false }]);
+    const { result } = renderHook(() => useGame(dice(3)));
+    expect(result.current.rollBonus('red')).toBeNull();
+  });
+
+  it('refuses one before the white movement has been walked', () => {
+    // The whole point of the staging: a player who knew the face here would
+    // be planning an eighteen-dot route.
+    saveLog([...underway, { type: 'turnRolled', seat: 'red', white: [6, 6], bonus: null }]);
+    const { result } = renderHook(() => useGame(dice(3)));
+    expect(result.current.rollBonus('red')).toBeNull();
+  });
+
+  it('refuses a second one inside the turn', () => {
+    saveLog([...owed, { type: 'bonusRolled', seat: 'red', face: 3 }]);
+    const { result } = renderHook(() => useGame(dice(5)));
+    expect(result.current.rollBonus('red')).toBeNull();
+  });
+
+  it('refuses a baron whose turn it is not', () => {
+    saveLog(owed);
+    const { result } = renderHook(() => useGame(dice(3)));
+    expect(result.current.rollBonus('green')).toBeNull();
+  });
+
+  it('waits for the new destination when the white leg arrived', () => {
+    // The book's order after an arrival: the baron is paid and rolls a new
+    // destination, and the Bonus Roll starts that new trip. Rolling the die
+    // first would be a face in hand with nowhere to spend it.
+    const arrivedFirst: GameEvent[] = [...underway,
+      { type: 'turnRolled', seat: 'red', white: [6, 6], bonus: null },
+      { type: 'moved', seat: 'red', path: [MINNEAPOLIS, ST_PAUL], arrived: true }];
+    saveLog(arrivedFirst);
+    const { result } = renderHook(() => useGame(dice(3)));
+    expect(result.current.state.bonusOwed, 'the turn is still open').toBe(true);
+    expect(result.current.rollBonus('red'), 'but the destination comes first').toBeNull();
+
+    act(() => {
+      saveLog([...arrivedFirst,
+        { type: 'arrived', seat: 'red', city: 43, region: 'PL', payout: 0 }]);
+      window.dispatchEvent(new StorageEvent('storage', { key: STORAGE_KEY }));
+    });
+    expect(result.current.rollBonus('red')).toBe(3);
+  });
+});
+
 describe('rolling a destination', () => {
   it('refuses one mid-trip', () => {
     saveLog([...seated,
