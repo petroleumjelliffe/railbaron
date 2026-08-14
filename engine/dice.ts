@@ -12,7 +12,15 @@ export type TrainType = 'freight' | 'express' | 'superchief';
 
 export interface TurnRoll {
   readonly white: readonly [number, number];
-  /** null when this turn earned no Bonus Roll. */
+  /**
+   * The Bonus Roll's face, or null.
+   *
+   * null covers two different situations, and the difference is *time* rather
+   * than entitlement: a turn that earned no Bonus Roll, and a turn that earned
+   * one which has not been thrown yet. `earnsBonus` tells them apart from the
+   * white pair alone, which is the whole point — entitlement is fixed when the
+   * whites land, the face is not known until the pawn has walked them.
+   */
   readonly bonus: number | null;
 }
 
@@ -31,9 +39,25 @@ export function earnsBonus(train: TrainType, white: readonly [number, number]): 
   }
 }
 
-export function rollTurn(train: TrainType, rng: Rng): TurnRoll {
+/**
+ * Two white dice, and nothing else — exactly two draws from `rng`, whatever
+ * the train.
+ *
+ * The Bonus Roll is not taken here. The book's order is: whites rolled and
+ * announced, entitlement fixed at that moment by `earnsBonus`, the pawn walks
+ * the full white roll, and only *then* is the bonus die thrown as its own,
+ * separately-announced roll. Playtest is what settled it: a player who knows
+ * the bonus face while walking the whites plans an 18-dot route, and a player
+ * at the table cannot. The staging is part of the rule, not presentation.
+ *
+ * `train` stays in the signature because entitlement is a fact about this
+ * roll and this train, and the caller asks `earnsBonus(train, roll.white)`
+ * the moment the whites land. Dropping the parameter would only move the
+ * same argument to a different call.
+ */
+export function rollTurn(_train: TrainType, rng: Rng): TurnRoll {
   const white: [number, number] = [d6(rng), d6(rng)];
-  return { white, bonus: earnsBonus(train, white) ? d6(rng) : null };
+  return { white, bonus: null };
 }
 
 export const movement = (roll: TurnRoll): number =>
@@ -52,6 +76,13 @@ export const movement = (roll: TurnRoll): number =>
  *
  * Arriving later than the white dice means the arrival happened during the
  * bonus movement of the same trip, which simply ends the turn.
+ *
+ * **This now serves only the legacy pre-rolled form.** `rollTurn` no longer
+ * hands back a bonus face, so a live turn reaches its second leg through
+ * `earnsBonus` on the white pair instead — arrival has nothing to do with it.
+ * A `turnRolled` event carrying a non-null bonus can only have come from a log
+ * written before the staging changed, and `replay` keeps exactly today's
+ * behaviour for those by calling this. Do not reach for it on the live path.
  */
 export function bonusLegOwed(roll: TurnRoll, spent: number, arrived: boolean): boolean {
   if (!arrived || roll.bonus === null) return false;

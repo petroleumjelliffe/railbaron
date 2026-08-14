@@ -37,19 +37,38 @@ describe('who earns a Bonus Roll', () => {
   });
 });
 
+/**
+ * These were rewritten when the Bonus Roll moved to after the white movement.
+ * They previously asserted that `rollTurn` hands back a bonus face up front —
+ * that is not a weakened assertion now, it is a *different rule*: the die is
+ * not thrown until the pawn has walked the whites, so there is no face to hand
+ * back and no third draw to make. Entitlement is all that is fixed here, and
+ * `earnsBonus` above is where it is fixed.
+ */
 describe('rolling a turn', () => {
-  it('rolls two white dice and no bonus when none is earned', () => {
+  it('rolls two white dice and never a bonus, whatever they show', () => {
     expect(rollTurn('freight', dice(3, 4))).toEqual({ white: [3, 4], bonus: null });
+    expect(rollTurn('freight', dice(6, 6))).toEqual({ white: [6, 6], bonus: null });
+    expect(rollTurn('superchief', dice(1, 2))).toEqual({ white: [1, 2], bonus: null });
   });
 
-  it('rolls the bonus die exactly once when one is earned', () => {
-    expect(rollTurn('freight', dice(6, 6, 2))).toEqual({ white: [6, 6], bonus: 2 });
+  it('takes exactly two draws, even on a turn that earns the die', () => {
+    // The scripted rng throws once the queue is empty, so a third draw is a
+    // failure rather than a face — and a double six on a Freight is precisely
+    // the turn that used to take one.
+    expect(() => rollTurn('freight', dice(6, 6))).not.toThrow();
+    expect(() => rollTurn('superchief', dice(1, 2))).not.toThrow();
+    // The other direction: a leftover face is never reached for.
+    const rng = dice(6, 6, 5);
+    expect(rollTurn('freight', rng).bonus).toBeNull();
+    // ...and it is still there, unread, for the Bonus Roll that follows later.
+    expect(d6(rng)).toBe(5);
   });
 
-  it('never rolls a second bonus die, however the dice fall', () => {
-    // Every scripted face is distinct: a bug that rolled the bonus die twice
-    // and kept the second would return 4, not 3.
-    expect(rollTurn('superchief', dice(1, 2, 3, 4)).bonus).toBe(3);
+  it('leaves entitlement to be read off the white pair', () => {
+    const rolled = rollTurn('freight', dice(6, 6));
+    expect(rolled.bonus, 'the face is not known yet').toBeNull();
+    expect(earnsBonus('freight', rolled.white), 'but the entitlement is').toBe(true);
   });
 
   it('adds the bonus into the movement it grants', () => {
@@ -58,6 +77,12 @@ describe('rolling a turn', () => {
   });
 });
 
+/**
+ * The legacy pre-rolled form, and nothing else — see `bonusLegOwed`'s comment.
+ * A live turn earns its second leg from `earnsBonus` now, whether or not the
+ * white leg arrived; these cases survive because logs written before the
+ * staging changed still replay through here.
+ */
 describe('whether a bonus leg is still owed', () => {
   const withBonus: TurnRoll = { white: [4, 4], bonus: 3 };
   const without: TurnRoll = { white: [4, 4], bonus: null };
