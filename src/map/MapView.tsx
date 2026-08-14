@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import {
   cityById, nodeForCity, path as pathOf,
   type NodeId, type RegionId, type TurnRoll
@@ -103,15 +103,28 @@ function Track({ nodes, edges }: Pick<ReturnType<typeof layout>, 'edges'> & { no
  * cover it.
  */
 
+/**
+ * How a lamp says the cursor is on *it*.
+ *
+ * Every lamp the leg can reach is lit at once, so lit alone never answered the
+ * question the player is actually asking — which of these am I about to take?
+ * The ring each candidate already wears is what carries it: under the pointer
+ * it closes in, brightens to full, and picks up a halo, so one lamp reads as
+ * chosen among its lit neighbours rather than merely lit.
+ */
+const HOVER_RING = { stroke: '#fffdf6', width: 2.6, opacity: 1 } as const;
+const IDLE_RING = { stroke: '#fff6e2', width: 1.4, opacity: 0.8 } as const;
+
 /** A bulb in its socket: the housing is always drawn, the filament is not. */
-function CityLamp({ node, color, lit, marker, candidate }: {
+function CityLamp({ node, color, lit, marker, candidate, hover }: {
   node: Placed; color: string; lit: boolean; marker: Marker | undefined;
-  candidate: boolean;
+  candidate: boolean; hover: boolean;
 }) {
   const r = CITY_R;
   const { x, y } = node;
+  const ring = hover ? HOVER_RING : IDLE_RING;
   return (
-    <g>
+    <g data-node={node.id} data-hover={hover ? 'true' : undefined}>
       <circle cx={x} cy={y + r * 0.07} r={r * 1.06} fill="#000" opacity={0.5} pointerEvents="none" />
       <circle cx={x - r * 0.07} cy={y - r * 0.09} r={r * 0.98} fill="#f2f0eb" pointerEvents="none" />
       <circle cx={x + r * 0.1} cy={y + r * 0.13} r={r * 0.88} fill="#9b9a96" pointerEvents="none" />
@@ -122,9 +135,14 @@ function CityLamp({ node, color, lit, marker, candidate }: {
         <circle cx={x} cy={y} r={r * 0.64} fill={color} pointerEvents="none" />
         <circle cx={x - r * 0.2} cy={y - r * 0.24} r={r * 0.2} fill="#fff" opacity={0.6} pointerEvents="none" />
       </g>
+      {hover && (
+        <circle cx={x} cy={y} r={r * 2.9} fill="#fffdf6" opacity={0.14} pointerEvents="none" />
+      )}
       {candidate && (
-        <circle cx={x} cy={y} r={r * 1.75} fill="none"
-                stroke="#fff6e2" strokeWidth={1.4} opacity={0.8} pointerEvents="none" />
+        <circle cx={x} cy={y} r={r * (hover ? 1.62 : 1.75)} fill="none"
+                stroke={ring.stroke} strokeWidth={ring.width} opacity={ring.opacity}
+                pointerEvents="none"
+                style={{ transition: 'r 90ms cubic-bezier(.2,.8,.3,1)' }} />
       )}
       <title>
         {node.name}
@@ -134,22 +152,26 @@ function CityLamp({ node, color, lit, marker, candidate }: {
   );
 }
 
-function RouteLamp({ node, lit, candidate }: {
-  node: Placed; lit: boolean; candidate: boolean;
+function RouteLamp({ node, lit, candidate, hover }: {
+  node: Placed; lit: boolean; candidate: boolean; hover: boolean;
 }) {
   const r = DOT_R;
   const { x, y } = node;
   return (
-    <g>
+    <g data-node={node.id} data-hover={hover ? 'true' : undefined}>
       <circle cx={x} cy={y} r={r * 1.5} fill="#2a1c0d" pointerEvents="none" />
       <g style={{ opacity: lit ? 1 : DIM, transition: 'opacity 110ms cubic-bezier(.2,.8,.3,1)' }}>
-        <circle cx={x} cy={y} r={r * 4.2} fill="#fff6e2" opacity={0.1} pointerEvents="none" />
+        <circle cx={x} cy={y} r={r * (hover ? 5.4 : 4.2)} fill="#fff6e2"
+                opacity={hover ? 0.2 : 0.1} pointerEvents="none" />
         <circle cx={x} cy={y} r={r * 2.2} fill="#fff6e2" opacity={0.2} pointerEvents="none" />
-        <circle cx={x} cy={y} r={r} fill="#fffaf0" pointerEvents="none" />
+        <circle cx={x} cy={y} r={r * (hover ? 1.35 : 1)} fill="#fffaf0" pointerEvents="none" />
       </g>
       {candidate && (
-        <circle cx={x} cy={y} r={r * 3.2} fill="none"
-                stroke="#fff6e2" strokeWidth={1} opacity={0.75} pointerEvents="none" />
+        <circle cx={x} cy={y} r={r * (hover ? 2.9 : 3.2)} fill="none"
+                stroke={hover ? HOVER_RING.stroke : IDLE_RING.stroke}
+                strokeWidth={hover ? 1.8 : 1} opacity={hover ? 1 : 0.75}
+                pointerEvents="none"
+                style={{ transition: 'r 90ms cubic-bezier(.2,.8,.3,1)' }} />
       )}
     </g>
   );
@@ -169,9 +191,10 @@ function RouteLamp({ node, lit, candidate }: {
  * the ones offered at this moment, and they are the ones in this layer. See
  * `sizeCandidates`.
  */
-function InteractionLayer({ nodes, legal, enabled, onTap }: {
+function InteractionLayer({ nodes, legal, enabled, onTap, onHover }: {
   nodes: readonly Placed[]; legal: ReadonlySet<NodeId>; enabled: boolean;
   onTap: (id: NodeId) => void;
+  onHover: (id: NodeId | null) => void;
 }) {
   const targets = useMemo(() => {
     const candidates = nodes.filter(node => legal.has(node.id));
@@ -190,6 +213,10 @@ function InteractionLayer({ nodes, legal, enabled, onTap }: {
             fill="transparent"
             role="button" aria-label={label}
             onClick={() => onTap(node.id)}
+            // Enter and leave rather than over and out: the targets abut, and
+            // over/out also fire for a move within one target.
+            onPointerEnter={() => onHover(node.id)}
+            onPointerLeave={() => onHover(null)}
             style={{ cursor: 'pointer' }}
           />
         );
@@ -238,6 +265,7 @@ export function MapView({
   const lamps = useMemo(() => markers(state), [state]);
   const route = useRoute(state, onMove);
   const viewport = useViewport(EXTENT);
+  const [pointedAt, setPointedAt] = useState<NodeId | null>(null);
   const drafted = route.draft === null ? null : pathOf(route.draft);
 
   /**
@@ -309,6 +337,25 @@ export function MapView({
   const playing = SEATS
     .map(id => state.seats[id])
     .filter(seat => seat.name !== null && seat.stops.length > 0);
+
+  /**
+   * Whether a lamp may be tapped at all — see the interaction layer below for
+   * the two things that close it.
+   */
+  const canTap = replaying.done && !owesBonus;
+
+  /**
+   * The lamp the pointer is on, derived rather than stored.
+   *
+   * A tap changes the leg beneath a cursor that has not moved, so no leave
+   * event arrives to clear it — and the lamp it was on is very often no longer
+   * a candidate. Deriving the mark against the current `legal` set means it
+   * cannot outlive what it was marking; the same holds when the layer closes
+   * for playback or a Bonus Roll.
+   */
+  const hovered = pointedAt !== null && canTap && route.legal.has(pointedAt)
+    ? pointedAt
+    : null;
 
   /** Where the baron up is standing — what FIND goes to, when there is one. */
   const standingAt = state.turn === null ? null : state.seats[state.turn].at;
@@ -420,7 +467,8 @@ export function MapView({
           <g>
             {board.nodes.filter(n => n.kind === 'dot').map(node => {
               const candidate = route.legal.has(node.id);
-              return <RouteLamp key={node.id} node={node} lit={candidate} candidate={candidate} />;
+              return <RouteLamp key={node.id} node={node} lit={candidate}
+                                candidate={candidate} hover={hovered === node.id} />;
             })}
           </g>
           <g>
@@ -439,6 +487,7 @@ export function MapView({
                   lit={marker !== undefined || candidate}
                   marker={marker}
                   candidate={candidate}
+                  hover={hovered === node.id}
                   color={marker
                     ? SEAT_COLORS[marker.seat]
                     : (region ? REGION_COLOR[region] : '#e8a13c')}
@@ -478,7 +527,8 @@ export function MapView({
           <InteractionLayer
             nodes={board.nodes}
             legal={route.legal}
-            enabled={replaying.done && !owesBonus}
+            enabled={canTap}
+            onHover={setPointedAt}
             /* A pan begun on a lamp must not also tap it. The lamps sit on
                the surface the player drags, so without this every drag that
                happened to start on a candidate drafted a step. */

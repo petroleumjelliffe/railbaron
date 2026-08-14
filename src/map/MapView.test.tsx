@@ -447,6 +447,75 @@ describe('playing a turn on the map', () => {
   });
 
   /**
+   * Several lamps are lit at once — every one the leg may reach — and lit is
+   * all they were, so the player could not tell which of them their cursor was
+   * about to take. Only the lamp under the pointer carries `data-hover`.
+   */
+  describe('picking out the lamp under the cursor', () => {
+    const hovered = (container: HTMLElement) =>
+      [...container.querySelectorAll('[data-hover="true"]')];
+
+    /** The lamp a hit target belongs to, found the way the DOM relates them. */
+    const lampFor = (name: RegExp) => screen.getByRole('button', { name });
+
+    const shownMidTurn = () => {
+      const { container } = render(
+        <MapView
+          state={replay(midTurn)}
+          onBack={() => {}}
+          onMove={vi.fn()}
+          dice={{ roll: null, live: false }}
+          onRollDice={() => {}}
+          onDiceLanded={() => {}}
+        />
+      );
+      return container;
+    };
+
+    it('marks the candidate the pointer is over, and only that one', () => {
+      const container = shownMidTurn();
+      expect(hovered(container)).toEqual([]);
+
+      fireEvent.pointerEnter(lampFor(/St\. Paul/));
+
+      const marked = hovered(container);
+      expect(marked).toHaveLength(1);
+      expect(marked[0]!.getAttribute('data-node')).toBe(nodeForCity(ST_PAUL));
+    });
+
+    it('lets go when the pointer leaves', () => {
+      const container = shownMidTurn();
+      fireEvent.pointerEnter(lampFor(/St\. Paul/));
+      fireEvent.pointerLeave(lampFor(/St\. Paul/));
+      expect(hovered(container)).toEqual([]);
+    });
+
+    it('follows the pointer from one candidate to the next', () => {
+      const container = shownMidTurn();
+      const dot = screen.getAllByRole('button', { name: /^Dot / })[0]!;
+      fireEvent.pointerEnter(lampFor(/St\. Paul/));
+      fireEvent.pointerEnter(dot);
+      // Without a leave in between — which is what happens when two targets
+      // abut — the mark must still move rather than double.
+      const marked = hovered(container);
+      expect(marked).toHaveLength(1);
+      expect(marked[0]!.getAttribute('data-node'))
+        .toBe(dot.getAttribute('aria-label')!.replace('Dot ', ''));
+    });
+
+    it('drops the mark when the tap it belonged to changes the leg', () => {
+      // The cursor does not move when a tap is taken, so no leave arrives —
+      // but the lamp it was over is no longer a candidate, and a highlight
+      // left burning on a lamp that can no longer be tapped is a lie.
+      const container = shownMidTurn();
+      const stPaul = lampFor(/St\. Paul/);
+      fireEvent.pointerEnter(stPaul);
+      fireEvent.click(stPaul);
+      expect(hovered(container)).toEqual([]);
+    });
+  });
+
+  /**
    * The cabinet is whatever size the window leaves it, and the map is drawn
    * into it through a viewBox — so every assertion here reads that attribute.
    * jsdom lays nothing out, so the cabinet measures 0 and the viewport falls
