@@ -53,6 +53,20 @@ describe('replay agrees with the golden runner', () => {
         { type: 'arrived', seat: 'red', city: home, region: cityById(home).region, payout: null },
         { type: 'orderRolled', seat: 'red', first: 'red' }
       ];
+      /**
+       * The log as it stood at each moment a Bonus Roll was about to be
+       * thrown — that is, immediately after leg 0's `moved`.
+       *
+       * Final state alone cannot see the rule these games exist to state. A
+       * turn wrongly closed after leg 0 self-heals by the end of the log: the
+       * orphaned `bonusRolled` is ignored, the next `moved` is applied to the
+       * pawn regardless, and the pawn and its sections come out identical. The
+       * reviewer demonstrated exactly that — the first draft's arrival-
+       * conditioned entitlement reintroduced, twelve other tests failing, and
+       * this one passing every game. The boundary is where the two rules
+       * actually disagree, so that is where they are compared.
+       */
+      const boundaries: GameEvent[][] = [];
       for (const record of finished.story) {
         if (record.kind === 'roll') {
           log.push({
@@ -60,6 +74,9 @@ describe('replay agrees with the golden runner', () => {
             white: [record.white[0], record.white[1]], bonus: null
           });
         } else if (record.kind === 'bonus') {
+          // Snapshot before the face goes in: the log ends on leg 0's `moved`,
+          // which is the state the player is in when the die is handed over.
+          boundaries.push([...log]);
           log.push({ type: 'bonusRolled', seat: 'red', face: record.face });
         } else {
           log.push({ type: 'moved', seat: 'red', path: [...record.path], arrived: record.arrived });
@@ -87,6 +104,20 @@ describe('replay agrees with the golden runner', () => {
         expect(state.leg, 'legs of the turn already walked').toBe(finished.leg);
         expect(state.bonusOwed, 'waiting on a Bonus Roll')
           .toBe(finished.roll !== null && finished.leg > 0 && finished.roll.bonus === null);
+
+        // And at each boundary the runner took a `bonusRoll` at, replay must
+        // agree the turn was owed one — open, one leg walked, die not thrown.
+        // The runner accepted the intent there, so replay accepting the event
+        // there is the same rule stated twice, and this is what makes that a
+        // comparison rather than a claim.
+        boundaries.forEach((prefix, index) => {
+          const at = replay(prefix);
+          const where = `${game.id} boundary ${index + 1} (after leg 0's move)`;
+          expect(at.bonusOwed, `${where} — a Bonus Roll is owed`).toBe(true);
+          expect(at.rolled !== null, `${where} — the turn is still open`).toBe(true);
+          expect(at.leg, `${where} — one leg walked`).toBe(1);
+          expect(at.turn, `${where} — and it is still the same baron's`).toBe('red');
+        });
       }
     });
   }

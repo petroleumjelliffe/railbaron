@@ -1,8 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, renderHook, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { nodeForCity } from '../../engine';
 import { MapView } from './MapView';
+import { useRoute } from './useRoute';
 import { replay } from '../state/game';
 import type { GameEvent } from '../state/events';
 
@@ -368,6 +369,73 @@ describe('playing a turn on the map', () => {
       shown(arrivedFirst, false);
       expect(screen.getByText(/roll a new destination/i)).toBeInTheDocument();
       expect(screen.queryByText(/bonus roll/i)).not.toBeInTheDocument();
+    });
+
+    it('offers no lamp at all, not even the free step across a twin pair', async () => {
+      // The one step a zero-movement leg can afford. The pawn is in
+      // Minneapolis and St. Paul is its twin: "each pair of twin cities count
+      // as one dot for the pair", so crossing costs nothing and the engine
+      // offers it however little movement is left. With COMMIT and UNDO hidden
+      // while the die is owed, tapping it drew a route line the player could
+      // neither finish nor take back.
+      const onTwin: GameEvent[] = [
+        { type: 'joined', seat: 'red', name: 'ADA' },
+        { type: 'started' },
+        { type: 'arrived', seat: 'red', city: ST_PAUL, region: 'PL', payout: null },
+        { type: 'orderRolled', seat: 'red', first: 'red' },
+        { type: 'arrived', seat: 'red', city: MINNEAPOLIS, region: 'PL', payout: 0 },
+        { type: 'turnRolled', seat: 'red', white: [6, 6], bonus: null },
+        { type: 'moved', seat: 'red',
+          path: [nodeForCity(ST_PAUL), nodeForCity(MINNEAPOLIS)], arrived: true },
+        // Arrived, so a new destination first — St. Paul again, back across
+        // the pair — and only then is the Bonus Roll due.
+        { type: 'arrived', seat: 'red', city: ST_PAUL, region: 'PL', payout: 0 }
+      ];
+      const state = replay(onTwin);
+      expect(state.bonusOwed, 'the die is genuinely owed here').toBe(true);
+      // Not a screen that suppresses something the engine never offered: with
+      // no movement at all, the engine still holds the free crossing legal.
+      const { result } = renderHook(() => useRoute(state, vi.fn()));
+      expect(result.current.remaining).toBe(0);
+      expect(result.current.legal.has(nodeForCity(ST_PAUL)),
+             'the engine offers the twin step at zero movement').toBe(true);
+
+      const user = userEvent.setup();
+      const draw = (events: GameEvent[]) => render(
+        <MapView
+          state={replay(events)}
+          onBack={vi.fn()}
+          onMove={vi.fn()}
+          dice={{ roll: { white: [6, 6], bonus: null }, live: true }}
+          onRollDice={() => {}}
+          onDiceLanded={() => {}}
+        />
+      );
+      /**
+       * The white leg is still playing back at first paint, and the layer is
+       * closed for *that* reason too — so an assertion made without finishing
+       * it passes whatever the Bonus Roll gate does. A tap on the cabinet
+       * skips to the end. (Found the hard way: the first version of this test
+       * stayed green with the gate deleted.)
+       */
+      const skipPlayback = async (container: HTMLElement) => {
+        await user.click(container.querySelector('svg')!.parentElement!);
+      };
+
+      // The control, and what makes the assertion below mean something: the
+      // same board and the same pawn one event later, with the die thrown.
+      // Lamps are offered there, so their absence below is the gate and not
+      // the playback still running or the position having nothing to offer.
+      const thrown = draw([...onTwin, { type: 'bonusRolled', seat: 'red', face: 3 }]);
+      await skipPlayback(thrown.container);
+      expect(screen.getByRole('button', { name: /St\. Paul/ }),
+             'with the die thrown, the crossing is on offer').toBeInTheDocument();
+      thrown.unmount();
+
+      const owed = draw(onTwin);
+      await skipPlayback(owed.container);
+      expect(screen.queryByRole('button', { name: /St\. Paul/ })).not.toBeInTheDocument();
+      expect(screen.queryAllByRole('button', { name: /^Dot / })).toEqual([]);
     });
 
     it('says none of it once the die has been thrown', () => {

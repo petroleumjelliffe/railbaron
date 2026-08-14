@@ -83,21 +83,43 @@ function emptyState(): GameState {
  */
 const TRAIN: TrainType = 'freight';
 
+/** The turn under way, while the log is being folded. */
+interface OpenTurn {
+  seat: SeatId;
+  roll: TurnRoll;
+  legs: number;
+  /**
+   * A turn whose `turnRolled` already carried a bonus face — a log written
+   * before the Bonus Roll moved to after the white movement. Those turns keep
+   * exactly the semantics they were played under (one continuous white+bonus
+   * leg, `bonusLegOwed` deciding the second), so an old saved game replays
+   * into the same game it always did.
+   */
+  legacy: boolean;
+}
+
+/**
+ * Whether this turn is waiting on its Bonus Roll: entitled by the white pair,
+ * white leg walked, die not yet thrown.
+ *
+ * Named once because it answers two questions that must not drift apart —
+ * which `bonusRolled` events replay will accept, and what `GameState.bonusOwed`
+ * reports. If those disagreed, the app would either offer a roll replay would
+ * discard or discard one it had offered.
+ */
+const owesBonusRoll = (turn: OpenTurn): boolean =>
+  !turn.legacy
+  && turn.legs >= 1
+  && turn.roll.bonus === null
+  && earnsBonus(TRAIN, turn.roll.white);
+
 export function replay(events: readonly GameEvent[]): GameState {
   const state = emptyState();
   let first: SeatId | null = null;
   /** Turns finished. The next one belongs to order[taken % order.length]. */
   let taken = 0;
-  /**
-   * The turn under way, if any.
-   *
-   * `legacy` is a turn whose `turnRolled` already carried a bonus face — a log
-   * written before the Bonus Roll moved to after the white movement. Those
-   * turns keep exactly the semantics they were played under (one continuous
-   * white+bonus leg, `bonusLegOwed` deciding the second), so an old saved game
-   * replays into the same game it always did.
-   */
-  let open: { seat: SeatId; roll: TurnRoll; legs: number; legacy: boolean } | null = null;
+  /** The turn under way, if any. */
+  let open: OpenTurn | null = null;
 
   for (const event of events) {
     if (event.type === 'started') {
@@ -140,10 +162,20 @@ export function replay(events: readonly GameEvent[]): GameState {
       case 'bonusRolled':
         // The face arrives on the turn already open, which is what makes
         // `state.rolled.bonus` non-null and hands the second leg the movement
-        // it has to spend. A `bonusRolled` with no turn open is a log that
-        // could not have been written by this app; it changes nothing rather
-        // than inventing a turn to hold it.
-        if (open !== null) open.roll = { white: open.roll.white, bonus: event.face };
+        // it has to spend — but only onto a turn that is actually owed one.
+        //
+        // Any other `bonusRolled` is a log this app could not have written,
+        // and the same answer serves all of them: change nothing. There is no
+        // turn open; the turn is not entitled; the die has already been
+        // thrown; or — the one that does real damage — the white leg has not
+        // been walked yet. That last would put the face on the roll *before*
+        // `moved`, so `movement()` would spend white+bonus on leg 0 and then
+        // offer the very same face again for leg 1: fifteen dots of movement
+        // walked as eighteen. Ignoring it leaves the die still owed, which is
+        // what the rest of the log goes on to say.
+        if (open !== null && owesBonusRoll(open)) {
+          open.roll = { white: open.roll.white, bonus: event.face };
+        }
         break;
       case 'moved':
         state.seats[event.seat] = {
@@ -184,11 +216,7 @@ export function replay(events: readonly GameEvent[]): GameState {
   // Derived, never stored: an entitled turn that has walked its white leg and
   // has no face on the bonus die yet. A legacy turn never reaches it — its
   // face was in hand from the roll.
-  state.bonusOwed = open !== null
-    && !open.legacy
-    && open.legs >= 1
-    && open.roll.bonus === null
-    && earnsBonus(TRAIN, open.roll.white);
+  state.bonusOwed = open !== null && owesBonusRoll(open);
   return state;
 }
 

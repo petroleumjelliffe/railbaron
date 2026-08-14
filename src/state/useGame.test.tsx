@@ -4,6 +4,7 @@ import { nodeForCity } from '../../engine';
 import { STORAGE_KEY, saveLog } from './storage';
 import type { GameEvent } from './events';
 import { useGame } from './useGame';
+import { needsDestination } from './turns';
 
 const MINNEAPOLIS = nodeForCity(43);
 const ST_PAUL = nodeForCity(47);
@@ -148,8 +149,24 @@ describe('rolling the Bonus Roll', () => {
   });
 
   it('refuses a baron whose turn it is not', () => {
-    saveLog(owed);
+    // Built on `bothUnderway` for the reason that fixture exists: green must
+    // reach the turn check to be refused by it. On `owed` (which is
+    // `underway`, where green has no destination of its own) `needsDestination`
+    // fires first and this passes with the turn check deleted — the guard would
+    // be masked and the test would be pinning nothing.
+    //
+    // Here green clears every later guard: a destination in hand, and the
+    // open turn is entitled with its white leg walked and no face on the die,
+    // so `state.bonusOwed` is true. The only thing wrong is whose turn it is.
+    saveLog([...bothUnderway,
+      { type: 'turnRolled', seat: 'red', white: [6, 6], bonus: null },
+      { type: 'moved', seat: 'red', path: [MINNEAPOLIS, 'd66'], arrived: false }]);
     const { result } = renderHook(() => useGame(dice(3)));
+    expect(result.current.state.turn, 'it is red who is owed the roll').toBe('red');
+    expect(result.current.state.bonusOwed).toBe(true);
+    expect(needsDestination(result.current.state.seats.green, nodeForCity),
+           'and green would otherwise be waved through').toBe(false);
+
     expect(result.current.rollBonus('green')).toBeNull();
   });
 

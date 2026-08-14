@@ -94,11 +94,23 @@ function apply(state: GoldenState, step: GoldenGame['steps'][number]): GoldenSta
       //   bonus leg starts a new trip with the sections released; not
       //   arriving means it carries on over the ones already spent.
       //
-      // The two sides are now held together rather than pinned separately:
-      // `src/state/replay.golden.test.ts` builds its log from `story`, whose
-      // rolls carry each game's real white faces, so a Freight game that earns
-      // the die here earns it there too — and that test compares the turn each
-      // side is left in, not only where the pawn stands.
+      // The two sides are held together by `src/state/replay.golden.test.ts`,
+      // which builds its log from `story` — real white faces, so a Freight
+      // game that earns the die here earns it there too.
+      //
+      // Precisely what that test compares is worth stating, because the
+      // obvious version of it does not work. Comparing only the state each
+      // side ends in cannot see this rule at all: a turn wrongly closed after
+      // leg 0 heals itself by the end of the log, since the orphaned
+      // `bonusRolled` is ignored and the next `moved` moves the pawn anyway,
+      // leaving the pawn and the sections identical. So it also replays the
+      // log prefix ending at each moment a `bonusRoll` was taken here, and
+      // asserts replay agrees a Bonus Roll was owed at that boundary. That is
+      // the moment the two rules disagree, and comparing them there is what
+      // makes this a comparison rather than a claim.
+      //
+      // Freight fixtures only, on the turn-state half: `replay` has no trains
+      // and reads every entitlement as a Freight's.
       const owed = state.leg === 0
         && state.roll !== null && earnsBonus(state.train, state.roll.white);
       return {

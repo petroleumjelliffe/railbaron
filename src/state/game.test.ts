@@ -395,6 +395,52 @@ describe('a turn that earns a Bonus Roll', () => {
   it('owes nothing on a turn that has not rolled at all', () => {
     expect(replay(upNext).bonusOwed).toBe(false);
   });
+
+  /**
+   * Logs this app could not have written. Replay has to stay coherent on any
+   * log it is handed — it already refuses a `bonusRolled` with no turn open —
+   * and the ordering cases are the ones that would quietly change the game
+   * rather than merely look odd.
+   */
+  describe('a bonusRolled that could not have been written by this app', () => {
+    it('does not put the face on a turn whose white leg is still unwalked', () => {
+      // The damaging one. With the face on the roll before `moved`, leg 0's
+      // `movement()` spends white+bonus — fifteen — and then leg 1 is offered
+      // the same face again: an eighteen-dot turn out of a fifteen-dot roll.
+      // Ignoring it leaves the die owed, which is what the log goes on to say.
+      const early: GameEvent[] = [...doubleSix,
+        { type: 'bonusRolled', seat: 'green', face: 3 }];
+      expect(replay(early).rolled, 'the face is not in hand yet')
+        .toEqual({ white: [6, 6], bonus: null });
+
+      const andWalked: GameEvent[] = [...early, whiteLeg(false)];
+      const state = replay(andWalked);
+      expect(state.rolled, 'and the white leg spent the whites alone')
+        .toEqual({ white: [6, 6], bonus: null });
+      expect(state.bonusOwed, 'the die is still owed, not already spent').toBe(true);
+    });
+
+    it('does not put a second face on a turn that already threw', () => {
+      const twice: GameEvent[] = [...doubleSix, whiteLeg(false),
+        { type: 'bonusRolled', seat: 'green', face: 3 },
+        { type: 'bonusRolled', seat: 'green', face: 6 }];
+      expect(replay(twice).rolled).toEqual({ white: [6, 6], bonus: 3 });
+    });
+
+    it('does not put one on a turn that earned nothing', () => {
+      const unearned: GameEvent[] = [...upNext,
+        { type: 'turnRolled', seat: 'green', white: [3, 4], bonus: null },
+        { type: 'bonusRolled', seat: 'green', face: 3 }];
+      expect(replay(unearned).rolled).toEqual({ white: [3, 4], bonus: null });
+    });
+
+    it('does not invent a turn to hold one', () => {
+      const orphan: GameEvent[] = [...upNext,
+        { type: 'bonusRolled', seat: 'green', face: 3 }];
+      expect(replay(orphan).rolled).toBeNull();
+      expect(replay(orphan).turn).toBe('green');
+    });
+  });
 });
 
 /**

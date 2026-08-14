@@ -248,10 +248,17 @@ export function MapView({
    *
    * A turn whose white pair earned a Bonus Roll stays open once the white
    * movement is walked — "if entitled, he must take it" — but the die has not
-   * been thrown, so the leg has no movement and nothing is tappable. Unlike
-   * the destination above, the roll that clears it is *here*: the same readout
-   * this screen already renders. So this says what is owed and leaves the
-   * dice, three inches away, to take it.
+   * been thrown, so the leg has nothing to spend. Unlike the destination
+   * above, the roll that clears it is *here*: the same readout this screen
+   * already renders. So this says what is owed and leaves the dice, three
+   * inches away, to take it.
+   *
+   * It also closes the interaction layer, which the destination case gets for
+   * free and this one does not. A zero-movement leg affords no step — except
+   * across a twin pair, which costs nothing and which the engine therefore
+   * offers correctly. Tapping it drew a line the player could neither commit
+   * nor undo, both controls being hidden here. So the suppression is explicit;
+   * see the layer's own comment below.
    *
    * A destination owed as well comes first, in the book's own order.
    */
@@ -434,13 +441,20 @@ export function MapView({
 
           {/* The tappable surface, last of all: see InteractionLayer above
               for why it must render after every painted lamp and pawn.
-              A lamp is not tappable while the last committed move is still
-              walking — a player must not start a new route over an
-              animation of the previous one. */}
+
+              Two things close it. A lamp is not tappable while the last
+              committed move is still walking — a player must not start a new
+              route over an animation of the previous one. And nothing is
+              tappable while a Bonus Roll is owed: the leg has no movement
+              until the die is thrown, so any step taken there is a step the
+              player cannot commit. That is not hypothetical — a pawn standing
+              on one half of a twin pair can cross to the other for nothing,
+              which the engine rightly offers at zero movement, and tapping it
+              drew a route line with no COMMIT and no UNDO to answer it. */}
           <InteractionLayer
             nodes={board.nodes}
             legal={route.legal}
-            enabled={replaying.done}
+            enabled={replaying.done && !owesBonus}
             onTap={route.tap}
           />
         </svg>
