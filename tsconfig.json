@@ -11,5 +11,6 @@
     "skipLibCheck": true,
     "types": ["vite/client", "vitest/globals", "@testing-library/jest-dom"]
   },
-  "include": ["engine", "src", "vite.config.ts", "basePath.ts"]
+  "include": ["engine", "src", "vite.config.ts", "basePath.ts",
+              "vendor/lobby/protocol", "vendor/lobby/client"]
 }
