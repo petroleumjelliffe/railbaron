@@ -12,9 +12,19 @@ import { CITY_R, DOT_R, layout, RAILROADS, sizeCandidates, type Placed } from '.
 import { markers, pawns, type Marker } from './lit';
 import { PLAYBACK_MS, usePlayback } from './usePlayback';
 import { useRoute } from './useRoute';
+import { STEP, useViewport } from './useViewport';
 
+/**
+ * The map's own coordinate space — no longer the cabinet's size on screen.
+ *
+ * The cabinet is whatever the window leaves it; this is the space the network
+ * is projected into once, and the viewBox is what reconciles the two. Keeping
+ * it fixed is what lets the projection stay a `useMemo` with no dependencies
+ * while the window is dragged about.
+ */
 const WIDTH = 1400;
 const HEIGHT = 788;
+const EXTENT = { width: WIDTH, height: HEIGHT } as const;
 
 /** One per region, so a city reads as its region before you read its name. */
 const REGION_COLOR: Record<RegionId, string> = {
@@ -26,6 +36,9 @@ const REGION_COLOR: Record<RegionId, string> = {
   NW: '#c58cff',
   SW: '#ff7ab8'
 };
+
+/** The narrowest cabinet that still has room for the game's name in the rail. */
+const TITLE_ROOM = 820;
 
 /** Unlit lamps still catch a little light, exactly as on a real board. */
 const DIM = 0.3;
@@ -224,6 +237,7 @@ export function MapView({
   const board = useMemo(() => layout(WIDTH, HEIGHT), []);
   const lamps = useMemo(() => markers(state), [state]);
   const route = useRoute(state, onMove);
+  const viewport = useViewport(EXTENT);
   const drafted = route.draft === null ? null : pathOf(route.draft);
 
   /**
@@ -296,11 +310,16 @@ export function MapView({
     .map(id => state.seats[id])
     .filter(seat => seat.name !== null && seat.stops.length > 0);
 
+  /** Where the baron up is standing — what FIND goes to, when there is one. */
+  const standingAt = state.turn === null ? null : state.seats[state.turn].at;
+  const baron = standingAt === null ? undefined : board.byId.get(standingAt);
+
   return (
     <div style={{
-      padding: 34,
-      minHeight: '100%',
+      padding: 'clamp(6px, 1.6vw, 34px)',
+      height: '100%',
       boxSizing: 'border-box',
+      overflow: 'hidden',
       background: '#e8e6e1',
       fontFamily: "'Roboto Condensed', system-ui, sans-serif"
     }}>
@@ -309,16 +328,21 @@ export function MapView({
           there is nothing left to skip: `usePlayback` treats a further call
           as a no-op. */}
       <div
+        ref={viewport.ref}
         onClick={replaying.skip}
+        onPointerDown={viewport.onPointerDown}
         style={{
-          width: WIDTH,
-          height: HEIGHT,
-          maxWidth: '100%',
+          width: '100%',
+          height: '100%',
           boxSizing: 'border-box',
           boxShadow: '0 30px 70px rgba(0,0,0,0.35)',
           overflow: 'hidden',
           position: 'relative',
-          background: 'linear-gradient(180deg,#4a2c17,#331d0e)'
+          background: 'linear-gradient(180deg,#4a2c17,#331d0e)',
+          // The gestures are the map's own. Without this the browser claims
+          // the drag for scrolling and the pinch for zooming the page.
+          touchAction: 'none',
+          cursor: viewport.dragging ? 'grabbing' : 'grab'
         }}
       >
         {/* Grain and a bevelled frame: the board is a lit cabinet, not a screen. */}
@@ -338,8 +362,8 @@ export function MapView({
         }} />
 
         <svg
-          width={WIDTH} height={HEIGHT} viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
-          style={{ position: 'absolute', inset: 0 }}
+          width="100%" height="100%" viewBox={viewport.viewBox}
+          style={{ position: 'absolute', inset: 0, display: 'block' }}
           // Not role="img": the lamps a baron may move to are real buttons
           // inside it, and a picture has no controls.
           role="group"
@@ -455,7 +479,10 @@ export function MapView({
             nodes={board.nodes}
             legal={route.legal}
             enabled={replaying.done && !owesBonus}
-            onTap={route.tap}
+            /* A pan begun on a lamp must not also tap it. The lamps sit on
+               the surface the player drags, so without this every drag that
+               happened to start on a candidate drafted a step. */
+            onTap={id => { if (!viewport.wasDrag()) route.tap(id); }}
           />
         </svg>
 
@@ -471,89 +498,150 @@ export function MapView({
           />
         </div>
 
+        {/* The top rail: BACK, the name of the game, and whatever the turn is
+            asking for, in one flow.
+
+            They used to be three absolutely positioned corners, which could
+            not collide while the cabinet was a fixed 1400 wide. It is now as
+            wide as the window, so at anything narrow the title ran straight
+            through the turn's controls. In a row they share the width instead:
+            the title takes what is left over and is clipped rather than
+            overrunning, since it is decoration and the controls are not.
+
+            The rail itself is transparent to the pointer so that a drag begun
+            on the empty part of it still pans the map; its children take their
+            clicks back individually. */}
         <div style={{
-          position: 'absolute', top: 24, left: 0, right: 0, textAlign: 'center',
-          fontSize: 30, fontWeight: 700, letterSpacing: '0.36em', textTransform: 'uppercase',
-          color: '#f0cd94', textShadow: '0 2px 0 #2b170a', zIndex: 2
+          position: 'absolute', top: 0, left: 0, right: 0, zIndex: 4,
+          display: 'flex', alignItems: 'center', gap: 12,
+          padding: '26px 34px', boxSizing: 'border-box', pointerEvents: 'none'
         }}>
-          Rail Baron
+          <button
+            onClick={onBack}
+            style={{
+              ...HUD_BUTTON, flex: '0 0 auto', cursor: 'pointer', pointerEvents: 'auto'
+            }}
+          >
+            Back
+          </button>
+
+          {/* Below this the row has room for BACK and the turn and nothing
+              else, and a title cut to "R" is worse than none. */}
+          {viewport.size.width >= TITLE_ROOM ? (
+            <div style={{
+              flex: '1 1 auto', minWidth: 0, textAlign: 'center',
+              fontSize: 'clamp(15px, 2.2vw, 30px)', fontWeight: 700,
+              letterSpacing: '0.36em', textTransform: 'uppercase',
+              whiteSpace: 'nowrap', overflow: 'hidden',
+              color: '#f0cd94', textShadow: '0 2px 0 #2b170a'
+            }}>
+              Rail Baron
+            </div>
+          ) : <div style={{ flex: '1 1 auto' }} />}
+
+          {/* The turn's controls. The draft they act on lives in screen state
+              and never in the log, which is why UNDO costs nothing and COMMIT
+              is the only thing here that writes anything down. */}
+          {state.turn !== null && owesDestination && (
+            <div style={{
+              flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: 10,
+              pointerEvents: 'auto'
+            }}>
+              <span style={{ ...HUD_BUTTON, background: 'rgba(43,23,10,0.35)' }}>
+                {state.rolled === null
+                  ? 'ROLL A NEW DESTINATION'
+                  : 'ARRIVED — ROLL A NEW DESTINATION'}
+              </span>
+              <button onClick={onBack} style={{ ...HUD_BUTTON, cursor: 'pointer' }}>
+                TO THE BOARD
+              </button>
+            </div>
+          )}
+
+          {owesBonus && (
+            <div style={{
+              flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: 10,
+              pointerEvents: 'auto'
+            }}>
+              <span style={{ ...HUD_BUTTON, background: 'rgba(43,23,10,0.35)' }}>
+                BONUS ROLL — TAKE THE RED DIE
+              </span>
+            </div>
+          )}
+
+          {state.turn !== null && !owesDestination && !owesBonus && (
+            <div style={{
+              flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: 10,
+              pointerEvents: 'auto'
+            }}>
+              <span style={{ ...HUD_BUTTON, background: 'rgba(43,23,10,0.35)' }}>
+                {route.remaining} left
+              </span>
+              <button
+                onClick={route.undo}
+                disabled={!route.draft?.steps.length}
+                style={{
+                  ...HUD_BUTTON,
+                  cursor: route.draft?.steps.length ? 'pointer' : 'default',
+                  opacity: route.draft?.steps.length ? 1 : 0.45
+                }}
+              >
+                UNDO
+              </button>
+              <button
+                onClick={route.commit}
+                disabled={!route.canCommit}
+                style={{
+                  ...HUD_BUTTON,
+                  cursor: route.canCommit ? 'pointer' : 'default',
+                  opacity: route.canCommit ? 1 : 0.45
+                }}
+              >
+                COMMIT
+              </button>
+            </div>
+          )}
         </div>
 
-        <button
-          onClick={onBack}
-          style={{
-            position: 'absolute', top: 26, left: 34, zIndex: 4,
-            fontFamily: "'DM Mono', ui-monospace, monospace", fontSize: 12,
-            letterSpacing: '0.18em', textTransform: 'uppercase',
-            color: '#f0cd94', background: 'rgba(43,23,10,0.55)',
-            border: '1px solid #5c3a1e', borderRadius: 3, padding: '6px 12px', cursor: 'pointer'
-          }}
-        >
-          Back
-        </button>
-
-        {/* The turn's controls. The draft they act on lives in screen state
-            and never in the log, which is why UNDO costs nothing and COMMIT
-            is the only thing here that writes anything down. */}
-        {state.turn !== null && owesDestination && (
-          <div style={{
-            position: 'absolute', top: 26, right: 34, zIndex: 4,
-            display: 'flex', alignItems: 'center', gap: 10
-          }}>
-            <span style={{ ...HUD_BUTTON, background: 'rgba(43,23,10,0.35)' }}>
-              {state.rolled === null
-                ? 'ROLL A NEW DESTINATION'
-                : 'ARRIVED — ROLL A NEW DESTINATION'}
-            </span>
-            <button onClick={onBack} style={{ ...HUD_BUTTON, cursor: 'pointer' }}>
-              TO THE BOARD
-            </button>
-          </div>
-        )}
-
-        {owesBonus && (
-          <div style={{
-            position: 'absolute', top: 26, right: 34, zIndex: 4,
-            display: 'flex', alignItems: 'center', gap: 10
-          }}>
-            <span style={{ ...HUD_BUTTON, background: 'rgba(43,23,10,0.35)' }}>
-              BONUS ROLL — TAKE THE RED DIE
-            </span>
-          </div>
-        )}
-
-        {state.turn !== null && !owesDestination && !owesBonus && (
-          <div style={{
-            position: 'absolute', top: 26, right: 34, zIndex: 4,
-            display: 'flex', alignItems: 'center', gap: 10
-          }}>
-            <span style={{ ...HUD_BUTTON, background: 'rgba(43,23,10,0.35)' }}>
-              {route.remaining} left
-            </span>
+        {/* The viewport's own controls, down the right-hand edge below the
+            turn's cluster. Everything here can be done with the wheel and a
+            drag; these are for touch, where there is no wheel, and for FIT,
+            which nothing else offers. */}
+        <div style={{
+          position: 'absolute', top: 96, right: 34, zIndex: 4,
+          display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'stretch'
+        }}>
+          <button
+            aria-label="Zoom in"
+            onClick={() => viewport.zoomBy(STEP)}
+            style={{ ...HUD_BUTTON, cursor: 'pointer', fontSize: 15, padding: '2px 12px' }}
+          >
+            +
+          </button>
+          <button
+            aria-label="Zoom out"
+            onClick={() => viewport.zoomBy(1 / STEP)}
+            style={{ ...HUD_BUTTON, cursor: 'pointer', fontSize: 15, padding: '2px 12px' }}
+          >
+            −
+          </button>
+          <button
+            aria-label="Fit the whole map"
+            onClick={viewport.fitAll}
+            style={{ ...HUD_BUTTON, cursor: 'pointer' }}
+          >
+            FIT
+          </button>
+          {baron && (
             <button
-              onClick={route.undo}
-              disabled={!route.draft?.steps.length}
-              style={{
-                ...HUD_BUTTON,
-                cursor: route.draft?.steps.length ? 'pointer' : 'default',
-                opacity: route.draft?.steps.length ? 1 : 0.45
-              }}
+              aria-label="Find the baron up"
+              onClick={() => viewport.goTo(baron)}
+              style={{ ...HUD_BUTTON, cursor: 'pointer' }}
             >
-              UNDO
+              FIND
             </button>
-            <button
-              onClick={route.commit}
-              disabled={!route.canCommit}
-              style={{
-                ...HUD_BUTTON,
-                cursor: route.canCommit ? 'pointer' : 'default',
-                opacity: route.canCommit ? 1 : 0.45
-              }}
-            >
-              COMMIT
-            </button>
-          </div>
-        )}
+          )}
+        </div>
 
         {playing.length > 0 && (
           <div style={{

@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { render, renderHook, screen } from '@testing-library/react';
+import { fireEvent, render, renderHook, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { nodeForCity } from '../../engine';
+import { layout } from './geo';
 import { MapView } from './MapView';
 import { useRoute } from './useRoute';
 import { replay } from '../state/game';
@@ -442,6 +443,155 @@ describe('playing a turn on the map', () => {
       shown([...bonusOwed, { type: 'bonusRolled', seat: 'red', face: 3 }], false);
       expect(screen.queryByText(/bonus roll/i)).not.toBeInTheDocument();
       expect(screen.getByText(/3 left/)).toBeInTheDocument();
+    });
+  });
+
+  /**
+   * The cabinet is whatever size the window leaves it, and the map is drawn
+   * into it through a viewBox — so every assertion here reads that attribute.
+   * jsdom lays nothing out, so the cabinet measures 0 and the viewport falls
+   * back to the map's own 1400×788: one screen pixel is one map unit, which is
+   * why the arithmetic below can be read directly.
+   */
+  describe('panning and zooming the map', () => {
+    const WHOLE_MAP = '0 0 1400 788';
+
+    const drawn = (onMove = vi.fn()) => {
+      const { container } = render(
+        <MapView
+          state={replay(midTurn)}
+          onBack={() => {}}
+          onMove={onMove}
+          dice={{ roll: null, live: false }}
+          onRollDice={() => {}}
+          onDiceLanded={() => {}}
+        />
+      );
+      const svg = container.querySelector('svg')!;
+      const box = () => svg.getAttribute('viewBox')!.split(' ').map(Number);
+      return { svg, box, onMove };
+    };
+
+    /** A drag, as the browser delivers one: down on the map, moves, then up. */
+    const drag = (from: Element, dx: number, dy: number) => {
+      fireEvent.pointerDown(from, { clientX: 700, clientY: 394, pointerId: 1, button: 0 });
+      fireEvent.pointerMove(window, { clientX: 700 + dx, clientY: 394 + dy, pointerId: 1 });
+      fireEvent.pointerUp(window, { clientX: 700 + dx, clientY: 394 + dy, pointerId: 1 });
+    };
+
+    it('opens on the whole map', () => {
+      expect(drawn().svg.getAttribute('viewBox')).toBe(WHOLE_MAP);
+    });
+
+    it('zooms about the pointer, not about the middle of the cabinet', () => {
+      const { svg, box } = drawn();
+      // The cursor is on the map's top-left corner, so that corner is what
+      // must stay under it — zooming about the centre would move it away.
+      fireEvent.wheel(svg, { deltaY: -240, clientX: 0, clientY: 0 });
+      const [x, y, width] = box();
+      expect(width).toBeLessThan(1400);
+      expect(x).toBeCloseTo(0);
+      expect(y).toBeCloseTo(0);
+    });
+
+    it('zooms back out no further than the whole map', () => {
+      const { svg } = drawn();
+      fireEvent.wheel(svg, { deltaY: -240, clientX: 700, clientY: 394 });
+      fireEvent.wheel(svg, { deltaY: 4000, clientX: 700, clientY: 394 });
+      expect(svg.getAttribute('viewBox')).toBe(WHOLE_MAP);
+    });
+
+    it('pans with a drag once there is somewhere to pan to', () => {
+      const { svg, box } = drawn();
+      fireEvent.wheel(svg, { deltaY: -240, clientX: 700, clientY: 394 });
+      const [x0, y0, w0] = box();
+
+      drag(svg, -100, 0);
+
+      const [x1, y1, w1] = box();
+      expect(w1).toBeCloseTo(w0!);       // a drag moves the map; it does not zoom it
+      expect(y1).toBeCloseTo(y0!);       // and only along the axis dragged
+      // Dragged 100px left, so 100px worth of map came in from the right.
+      expect(x1! - x0!).toBeCloseTo(100 * w0! / 1400, 1);
+    });
+
+    it('does not walk the pawn to a lamp a drag merely passed over', () => {
+      // The hazard the threshold exists for: every legal lamp is a click
+      // target sitting on the surface you pan with, so a drag that begins on
+      // one would otherwise tap it and draft a step nobody asked for.
+      const dragged = drawn();
+      fireEvent.wheel(dragged.svg, { deltaY: -240, clientX: 700, clientY: 394 });
+      const lamp = screen.getByRole('button', { name: /St\. Paul/ });
+      drag(lamp, -60, 0);
+      fireEvent.click(lamp);
+      expect(screen.getByRole('button', { name: 'COMMIT' })).toBeDisabled();
+    });
+
+    it('still takes a tap that stays put', () => {
+      // The control for the test above: the same events without the movement
+      // must still draft the step, or the threshold has broken tapping.
+      const { svg } = drawn();
+      const lamp = screen.getByRole('button', { name: /St\. Paul/ });
+      fireEvent.pointerDown(lamp, { clientX: 700, clientY: 394, pointerId: 1, button: 0 });
+      fireEvent.pointerUp(window, { clientX: 700, clientY: 394, pointerId: 1 });
+      fireEvent.click(lamp);
+      expect(screen.getByRole('button', { name: 'COMMIT' })).toBeEnabled();
+      expect(svg.getAttribute('viewBox')).toBe(WHOLE_MAP);
+    });
+
+    it('returns to the whole map on FIT', async () => {
+      const user = userEvent.setup();
+      const { svg } = drawn();
+      fireEvent.wheel(svg, { deltaY: -240, clientX: 200, clientY: 200 });
+      expect(svg.getAttribute('viewBox')).not.toBe(WHOLE_MAP);
+      await user.click(screen.getByRole('button', { name: /fit/i }));
+      expect(svg.getAttribute('viewBox')).toBe(WHOLE_MAP);
+    });
+
+    it('lays the title and the turn out in one row, so a narrow cabinet cannot stack them', () => {
+      // jsdom lays nothing out, so overlap itself cannot be asserted — but the
+      // cause can. While the cabinet was a fixed 1400 wide, BACK, the title and
+      // the turn's controls were three absolutely positioned siblings that
+      // could not collide; a cabinet that is now as wide as the window makes
+      // them collide at every narrow size unless they share a flow.
+      drawn();
+      const title = screen.getByText('Rail Baron');
+      const back = screen.getByRole('button', { name: /back/i });
+      const commit = screen.getByRole('button', { name: 'COMMIT' });
+      const row = title.parentElement!;
+      expect(row.style.display).toBe('flex');
+      expect(row.contains(back)).toBe(true);
+      expect(row.contains(commit)).toBe(true);
+    });
+
+    it('drops the title rather than clipping it when the cabinet is narrow', () => {
+      // Sharing the row means the title yields, and a title cut to "R" is
+      // worse than no title: the controls beside it are what the turn needs.
+      const measured = vi.spyOn(Element.prototype, 'getBoundingClientRect')
+        .mockReturnValue({ width: 520, height: 800, left: 0, top: 0,
+                           right: 520, bottom: 800, x: 0, y: 0,
+                           toJSON: () => ({}) } as DOMRect);
+      try {
+        drawn();
+        expect(screen.queryByText('Rail Baron')).not.toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'COMMIT' })).toBeInTheDocument();
+      } finally {
+        measured.mockRestore();
+      }
+    });
+
+    it('goes to the baron up when asked', async () => {
+      const user = userEvent.setup();
+      const { box } = drawn();
+      const at = replay(midTurn).seats.red.at!;
+      const pawn = layout(1400, 788).byId.get(at)!;
+
+      await user.click(screen.getByRole('button', { name: /find the baron/i }));
+
+      const [x, y, width, height] = box();
+      expect(width).toBeLessThan(1400);
+      expect(x! + width! / 2).toBeCloseTo(pawn.x, 0);
+      expect(y! + height! / 2).toBeCloseTo(pawn.y, 0);
     });
   });
 
