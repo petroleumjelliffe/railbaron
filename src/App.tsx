@@ -1,5 +1,5 @@
 import { lazy, Suspense, useState } from 'react';
-import { Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { matchPath, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import type { Rng } from '../engine';
 import { Board } from './board/Board';
 import { home } from './board/screens/home';
@@ -8,6 +8,7 @@ import { saved } from './board/screens/saved';
 import { confirm } from './board/screens/confirm';
 import type { Row, ScreenDef } from './board/types';
 import { useGameShell } from './GameShell';
+import { JoinRoomApp, RoomApp } from './OnlineApp';
 
 /**
  * The map is loaded only when someone asks for it. It carries the projected
@@ -36,6 +37,13 @@ const isKnown = (path: string): path is KnownRoute =>
   (ROUTES as readonly string[]).includes(path);
 
 /**
+ * The online routes are handled before the board is: `/room/:code` cannot be a
+ * member of a const list, and both mount their own Board — see OnlineApp for
+ * why that is a deliberate trade rather than an oversight.
+ */
+const ONLINE_ROUTE = '/online';
+
+/**
  * There is exactly one Board, mounted above the routing, and the route only
  * decides which ScreenDef it is handed.
  *
@@ -55,6 +63,10 @@ export default function App({ rng }: AppProps = {}) {
   const shell = useGameShell(game, 'all');
   const [editing, setEditing] = useState<{ seat: SeatId; placeholder: string } | null>(null);
   const [confirming, setConfirming] = useState(false);
+
+  if (pathname === ONLINE_ROUTE) return <JoinRoomApp />;
+  const inRoom = matchPath('/room/:code', pathname);
+  if (inRoom?.params.code) return <RoomApp code={inRoom.params.code} />;
 
   if (!isKnown(pathname)) return <Navigate to="/" replace />;
 
@@ -147,6 +159,9 @@ export default function App({ rng }: AppProps = {}) {
         break;
       case 'map':
         navigate('/pass-and-play/map');
+        break;
+      case 'joinRoom':
+        navigate(ONLINE_ROUTE);
         break;
     }
   };

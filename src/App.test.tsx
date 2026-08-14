@@ -461,3 +461,43 @@ describe('rolling the turn dice from the board', () => {
     expect(storedTypes()).toEqual(before);
   });
 });
+
+/**
+ * The online routes render their own Board — see OnlineApp for why that trade
+ * is deliberate. These check that the routes resolve at all: a bad route or a
+ * crash-on-mount is the failure mode that would otherwise reach a player as a
+ * white screen, and no server is running here.
+ */
+describe('the online routes', () => {
+  beforeEach(snapTransitions);
+
+  it('offers the join board at /online', () => {
+    at('/online');
+    expect(screen.getByText('JOIN A ROOM')).toBeInTheDocument();
+    expect(screen.getByText('NEW ROOM')).toBeInTheDocument();
+  });
+
+  it('will not join until a code has been typed', () => {
+    at('/online');
+    // Each cell is rendered three times — the accessible text plus the two
+    // halves of the flap — so these are always getAllByText.
+    expect(screen.getAllByText('TAP TO TYPE').length).toBeGreaterThan(0);
+    // The JOIN row is dim until six characters are in.
+    expect(screen.getAllByText('Need a code').length).toBeGreaterThan(0);
+  });
+
+  it('renders a room route without a server rather than crashing', () => {
+    // Nothing is listening, so this is the connecting lobby with six empty
+    // seats. The point is that it is a board and not a blank page, a crash,
+    // or a redirect home.
+    at('/room/ABC234');
+    expect(screen.getAllByText('OPEN').length).toBeGreaterThan(0);
+  });
+
+  it('sends the home screen’s online row to the join board', async () => {
+    const user = userEvent.setup();
+    at('/');
+    await user.click(screen.getByText('PLAY ONLINE'));
+    expect(screen.getByText('JOIN A ROOM')).toBeInTheDocument();
+  });
+});
