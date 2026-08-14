@@ -83,10 +83,15 @@ export async function startServer(
 
   return {
     port,
-    // io.close() disconnects every socket and closes the http server it was
-    // attached to. Awaited so a test's next boot cannot race a half-closed
-    // port.
-    close: () => new Promise<void>((resolve) => { io.close(() => { resolve(); }); }),
+    async close() {
+      // Saves before sockets. Handlers do not await persist, so a room whose
+      // last append is still being written would otherwise be restored a move
+      // behind — or not at all, if it was its first save.
+      await rooms.settled();
+      // io.close() disconnects every socket and closes the http server it was
+      // attached to. Awaited so a next boot cannot race a half-closed port.
+      await new Promise<void>((resolve) => { io.close(() => { resolve(); }); });
+    },
   };
 }
 

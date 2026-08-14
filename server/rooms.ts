@@ -49,6 +49,16 @@ export interface Rooms {
   /** Begin: seed a `joined` per seat and one `started`, in roster order. */
   seedOnBegin(room: GameRoom): void;
   persist(room: GameRoom): Promise<void>;
+  /**
+   * Resolves once every save started so far has finished.
+   *
+   * Handlers deliberately do not await `persist` — a player should not wait on
+   * a disk to see their own move — so at any instant there may be a write in
+   * flight. Shutdown has to wait for those, or the last move of every game is
+   * lost exactly when it matters most: a Render deploy stopping the process
+   * mid-turn, which is the case recovery exists for.
+   */
+  settled(): Promise<void>;
   /** Boot-only, before listen. Returns how many rooms came back. */
   restore(): Promise<number>;
   remove(roomId: string): Promise<void>;
@@ -60,6 +70,9 @@ export function createRooms(store: RoomStore): Rooms {
     SEAT_SPACE,
   );
 
+  /** Saves started but not yet finished. See `settled`. */
+  const inFlight = new Set<Promise<void>>();
+
   function persist(room: GameRoom): Promise<void> {
     const record: SavedRoom = {
       roomId: room.id,
@@ -69,7 +82,9 @@ export function createRooms(store: RoomStore): Rooms {
       players: room.players,
       log: room.log,
     };
-    return store.save(record);
+    const saving = store.save(record).finally(() => { inFlight.delete(saving); });
+    inFlight.add(saving);
+    return saving;
   }
 
   return {
@@ -92,6 +107,13 @@ export function createRooms(store: RoomStore): Rooms {
     },
 
     persist,
+
+    async settled() {
+      // Looped, not a single Promise.all: awaiting one batch yields to the
+      // event loop, and a handler that ran in the meantime may have started
+      // another save.
+      while (inFlight.size > 0) await Promise.all([...inFlight]);
+    },
 
     async restore() {
       const { records, skipped } = await store.loadAll();
