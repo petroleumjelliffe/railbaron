@@ -12,11 +12,17 @@ import { replay } from './game';
  * Without it the executable rules spec could drift away from the game the app
  * actually plays, and neither suite would notice.
  *
- * The log is built rather than scripted: a baron seated at the fixture's
- * starting node, then one `moved` per committed leg. `turnRolled` is included
- * because replay's leg counter reads it, and its faces are irrelevant here —
- * this test is about where the pawn ends and what the trip has spent, not
- * about the dice.
+ * The log is built rather than scripted, and it is built from the game's own
+ * story: a baron seated at the fixture's starting node, then the rolls and
+ * legs the runner actually made, in order — `turnRolled` for a white pair,
+ * `bonusRolled` for a Bonus Roll, `moved` for a committed leg.
+ *
+ * The faces used to be filler ([1,1] for every roll, which earns a Freight
+ * nothing) and that made this test blind to exactly the rule it should be
+ * holding: replay's bonus branch never ran. Carrying each game's real white
+ * faces across means an entitled turn here is an entitled turn there, so the
+ * two implementations of "how many legs does this turn have" can be compared
+ * rather than merely pinned separately.
  */
 /** Both spent-section tallies in one comparable shape: key and count, ordered. */
 const sections = (used: ReadonlyMap<string, number>): [string, number][] =>
@@ -47,12 +53,21 @@ describe('replay agrees with the golden runner', () => {
         { type: 'arrived', seat: 'red', city: home, region: cityById(home).region, payout: null },
         { type: 'orderRolled', seat: 'red', first: 'red' }
       ];
-      for (const leg of finished.legs) {
-        log.push({ type: 'turnRolled', seat: 'red', white: [1, 1], bonus: null });
-        log.push({ type: 'moved', seat: 'red', path: [...leg.path], arrived: leg.arrived });
+      for (const record of finished.story) {
+        if (record.kind === 'roll') {
+          log.push({
+            type: 'turnRolled', seat: 'red',
+            white: [record.white[0], record.white[1]], bonus: null
+          });
+        } else if (record.kind === 'bonus') {
+          log.push({ type: 'bonusRolled', seat: 'red', face: record.face });
+        } else {
+          log.push({ type: 'moved', seat: 'red', path: [...record.path], arrived: record.arrived });
+        }
       }
 
-      const seat = replay(log).seats.red;
+      const state = replay(log);
+      const seat = state.seats.red;
       expect(seat.at, 'where the pawn ended').toBe(finished.at);
       // The map, not its size. A section carrying two railroads may be
       // crossed twice, so the counts are the rule — comparing sizes alone
@@ -60,6 +75,19 @@ describe('replay agrees with the golden runner', () => {
       // it, and an app built on that would offer a third crossing.
       expect(sections(seat.used), 'sections the trip has spent')
         .toEqual(sections(finished.used));
+
+      // The turn each side is left holding, which is where the two leg-caps
+      // meet. Only for Freight games: `replay` has no trains yet and reads
+      // every entitlement as a Freight's, so an Express or Superchief fixture
+      // is not comparable on this — its pawn and its sections still are, which
+      // is why the assertions above run for every game.
+      if ((game.setup.train ?? 'freight') === 'freight') {
+        expect(state.rolled !== null, 'whether the turn is still open')
+          .toBe(finished.roll !== null);
+        expect(state.leg, 'legs of the turn already walked').toBe(finished.leg);
+        expect(state.bonusOwed, 'waiting on a Bonus Roll')
+          .toBe(finished.roll !== null && finished.leg > 0 && finished.roll.bonus === null);
+      }
     });
   }
 });

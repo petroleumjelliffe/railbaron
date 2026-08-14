@@ -23,6 +23,13 @@ import type { GoldenGame } from './types';
  *   c65 Los Angeles -> d402[AT&SF,SP] d452[AT&SF] d423[SP]
  *   d452            -> c65[AT&SF] c75 San Diego[AT&SF]
  *
+ * `bonus-die-freight` also walks the long GN run west of Minneapolis — its
+ * first turn ends on d372, and the double-six turn goes on c4 d324 d156 d353
+ * d304 d250 d221 d121 d129 d143 d284 d161, then d152 d163 d394 on the bonus.
+ * A Freight's double six costs twelve dots to walk, and the rule that game
+ * states is about not arriving inside them. Read off the built graph the same
+ * way, one dot at a time.
+ *
  * Every fixture starts on a city, so `src/state/replay.golden.test.ts` can
  * build a real log for each one and hold the runner and `replay` together.
  *
@@ -42,16 +49,16 @@ import type { GoldenGame } from './types';
  * `src/state/useGame.test.tsx` ("refuses a home city another baron already
  * holds"), which have the seats this file does not.
  *
- * A Freight game that only needs two dice still scripts a third, unused
- * face. `earnsBonus`'s Freight case fires only on double six, so a correct
- * engine never draws it — but a broken one (forced to grant a Bonus Roll on
- * every Freight turn) would draw a third face `rollTurn` has nowhere else to
- * get, and `runner.ts`'s `scripted()` throws on an empty queue rather than
- * returning a rejection. That throw would fail the game before its own
- * assertion ever ran, pinning nothing. The spare face gives the broken
- * engine somewhere to draw from, so the game runs to its real assertion and
- * fails there instead. `bonus-die-freight`'s double-six roll and `bonus-leg`
- * already script three faces for a genuine reason and need no spare.
+ * Several games still script a third, unused face for a two-dice roll, and
+ * the reason has changed with the staging rather than gone away. `rollTurn`
+ * now takes exactly two draws whatever the train — the Bonus Roll is a
+ * separate roll, and the `bonusRoll` intent carries its own face. So a
+ * correct engine never reaches the spare. An engine that regressed to rolling
+ * the bonus up front would, and `runner.ts`'s `scripted()` throws on an empty
+ * queue rather than returning a rejection: that throw would fail the game
+ * before its own assertion ever ran, pinning nothing. The spare gives the
+ * regressed engine somewhere to draw from, so the game runs on to its real
+ * `bonus: null` assertion and fails there, saying what actually broke.
  */
 export const GAMES: readonly GoldenGame[] = [
   {
@@ -263,41 +270,98 @@ export const GAMES: readonly GoldenGame[] = [
 
   {
     id: 'bonus-die-freight',
-    title: 'a Freight earns a Bonus Roll on double six, and on nothing else',
+    title: 'a Freight earns a Bonus Roll on double six, and takes it after the white leg',
     /**
      * Two turns, because the rule has two halves: snake eyes earn a Freight
      * nothing, and only the double six pays.
+     *
+     * The second turn is also where the staging is stated. The white pair
+     * lands with the die still in the cup — `bonus: null`, `entitled: true`,
+     * twelve dots to walk and no eighteen — and the Bonus Roll is refused
+     * until they have been walked. This leg does *not* arrive, which is the
+     * case the first draft of the spec got wrong: the entitlement was fixed
+     * when the whites landed and it does not depend on arriving, so the turn
+     * stays open and the bonus leg carries on over the same spent sections.
+     *
+     * Twelve steps is what a double six costs. They are written out because a
+     * fixture that computed its own route would be asserting the engine
+     * against itself.
      */
     setup: { at: 'c13', destination: 'c8', train: 'freight' },
     steps: [
       { name: 'a pair of ones is still a pair', intent: { kind: 'roll', faces: [1, 1, 2] },
-        then: { bonus: null, remaining: 2 } },
+        then: { bonus: null, entitled: false, remaining: 2 } },
+      { name: 'no Bonus Roll to take, whenever it is asked for',
+        intent: { kind: 'bonusRoll', face: 5 }, expectError: 'no-bonus-entitlement' },
       { name: 'walk it off', intent: { kind: 'step', to: 'd417' } },
       { name: 'and again', intent: { kind: 'step', to: 'd372' },
         then: { spent: 2, complete: true } },
       { name: 'end the turn', intent: { kind: 'commit' }, then: { legOwed: false } },
-      { name: 'double six, and the third die comes out',
+
+      { name: 'double six, and no third die comes out with it',
         intent: { kind: 'roll', faces: [6, 6, 5] },
-        then: { bonus: 5, remaining: 17 } }
-    ]
+        then: { bonus: null, entitled: true, remaining: 12 } },
+      { name: 'the die is not thrown until the whites have been walked',
+        intent: { kind: 'bonusRoll', face: 3 }, expectError: 'bonus-too-early' },
+      { name: 'on into Fargo', intent: { kind: 'step', to: 'c4' } },
+      { name: 'and on', intent: { kind: 'step', to: 'd324' } },
+      { name: 'and on', intent: { kind: 'step', to: 'd156' } },
+      { name: 'and on', intent: { kind: 'step', to: 'd353' } },
+      { name: 'and on', intent: { kind: 'step', to: 'd304' } },
+      { name: 'and on', intent: { kind: 'step', to: 'd250' } },
+      { name: 'and on', intent: { kind: 'step', to: 'd221' } },
+      { name: 'and on', intent: { kind: 'step', to: 'd121' } },
+      { name: 'and on', intent: { kind: 'step', to: 'd129' } },
+      { name: 'and on', intent: { kind: 'step', to: 'd143' } },
+      { name: 'the eleventh dot', intent: { kind: 'step', to: 'd284' } },
+      { name: 'the twelfth, still well short of Butte',
+        intent: { kind: 'step', to: 'd161' },
+        then: { spent: 12, remaining: 0, arrived: false, complete: true } },
+      { name: 'the white leg ends without arriving, and the turn does not end with it',
+        intent: { kind: 'commit' },
+        // Fourteen sections, not twelve: the two the first turn spent are
+        // still spent, because nothing has arrived anywhere yet.
+        then: { at: 'd161', usedCount: 14, legOwed: true, bonus: null, entitled: true } },
+      { name: 'and it cannot be rolled past — the entitlement must be taken',
+        intent: { kind: 'roll', faces: [2, 2] }, expectError: 'no-roll' },
+      { name: 'now the die is thrown, and it alone pays for the leg',
+        intent: { kind: 'bonusRoll', face: 3 },
+        then: { bonus: 3, spent: 0, remaining: 3, usedCount: 14 } },
+      { name: 'once, though — the face is on the table',
+        intent: { kind: 'bonusRoll', face: 6 }, expectError: 'bonus-already-taken' },
+      { name: 'no arrival released anything, so the bonus leg cannot go back the way it came',
+        intent: { kind: 'step', to: 'd284' }, expectError: 'section-used' },
+      { name: 'on into the bonus leg', intent: { kind: 'step', to: 'd152' },
+        then: { spent: 1 } },
+      { name: 'and on', intent: { kind: 'step', to: 'd163' }, then: { spent: 2 } },
+      { name: 'the last of the three', intent: { kind: 'step', to: 'd394' },
+        then: { spent: 3, remaining: 0, arrived: false, complete: true } },
+      { name: 'and now the turn is over', intent: { kind: 'commit' },
+        then: { at: 'd394', usedCount: 17, legOwed: false, bonus: null } }
+    ],
+    final: { at: 'd394', usedCount: 17, legOwed: false }
   },
 
   {
     id: 'bonus-die-express',
     title: 'an Express earns a Bonus Roll on any double',
-    /** Three the hard way earns nothing; three and three earns the die. */
+    /**
+     * Three the hard way earns nothing; three and three earns the die. Narrow
+     * on purpose: what a train is entitled to is the whole rule here, and the
+     * leg it buys is walked in `bonus-die-freight`.
+     */
     setup: { at: 'c13', destination: 'c8', train: 'express' },
     steps: [
       { name: 'one and two is no double', intent: { kind: 'roll', faces: [1, 2] },
-        then: { bonus: null, remaining: 3 } },
+        then: { bonus: null, entitled: false, remaining: 3 } },
       { name: 'walk it off', intent: { kind: 'step', to: 'd417' } },
       { name: 'and on', intent: { kind: 'step', to: 'd372' } },
       { name: 'as far as Fargo', intent: { kind: 'step', to: 'c4' },
         then: { spent: 3, arrived: false, complete: true } },
       { name: 'end the turn', intent: { kind: 'commit' }, then: { legOwed: false } },
-      { name: 'a double three is enough for an Express',
+      { name: 'a double three is enough for an Express — and the die stays in the cup',
         intent: { kind: 'roll', faces: [3, 3, 5] },
-        then: { bonus: 5, remaining: 11 } }
+        then: { bonus: null, entitled: true, remaining: 6 } }
     ]
   },
 
@@ -305,15 +369,16 @@ export const GAMES: readonly GoldenGame[] = [
     id: 'bonus-die-superchief',
     title: 'a Superchief earns a Bonus Roll every turn',
     /**
-     * No double, no double six — a Superchief takes the third die anyway, and
-     * it joins the white dice as movement. The same faces earn a Freight or an
-     * Express nothing at all.
+     * No double, no double six — a Superchief is entitled to the die anyway.
+     * The same faces earn a Freight or an Express nothing at all. And being
+     * entitled to it is not holding it: the white pair is all that is on the
+     * table, so the movement is three and not the old seven.
      */
     setup: { at: 'c13', destination: 'c8', train: 'superchief' },
     steps: [
       { name: 'a plain one and two still earns the die',
         intent: { kind: 'roll', faces: [1, 2, 4] },
-        then: { bonus: 4, remaining: 7 } }
+        then: { bonus: null, entitled: true, remaining: 3 } }
     ]
   },
 
@@ -322,27 +387,31 @@ export const GAMES: readonly GoldenGame[] = [
     title: 'arriving on the white dice, then a bonus leg',
     /**
      * Arriving inside the white dice does not end the turn: the baron is paid,
-     * rolls a new destination, and spends the Bonus Roll starting that new trip
-     * — with the old trip's sections released, which is why the bonus leg may
-     * re-cross every section the first leg just used.
+     * rolls a new destination, and only then throws the Bonus Roll — which
+     * starts that new trip, with the old trip's sections released, which is
+     * why the bonus leg may re-cross every section the first leg just used.
      *
-     * And it happens once. The bonus leg arrives inside the white dice too, and
-     * earns nothing for it: "a player can get no more than one Bonus Roll per
-     * turn."
+     * The order is the book's: arrive, new destination, *then* the die. The
+     * white leg is walked knowing only that a Bonus Roll is coming, never how
+     * far it will reach.
+     *
+     * And it happens once. The bonus leg arrives too, and earns nothing for
+     * it: "a player can get no more than one Bonus Roll per turn."
      */
     setup: { at: 'c4', destination: 'c13' },
     steps: [
       { name: 'double six on a Freight', intent: { kind: 'roll', faces: [6, 6, 6] },
-        then: { bonus: 6, remaining: 18 } },
+        then: { bonus: null, entitled: true, remaining: 12 } },
       { name: 'out of Fargo', intent: { kind: 'step', to: 'd372' } },
       { name: 'along the GN', intent: { kind: 'step', to: 'd417' } },
       { name: 'into Minneapolis on the third dot', intent: { kind: 'step', to: 'c13' },
         then: { spent: 3, arrived: true, complete: true } },
       { name: 'the turn is not over — a bonus leg is owed', intent: { kind: 'commit' },
-        then: { at: 'c13', usedCount: 0, legOwed: true, bonus: 6 } },
-      { name: 'a new destination for the bonus leg',
-        intent: { kind: 'destination', to: 'c4' },
-        then: { spent: 0, remaining: 6, usedCount: 0 } },
+        then: { at: 'c13', usedCount: 0, legOwed: true, bonus: null, entitled: true } },
+      { name: 'a new destination first, before the die is thrown',
+        intent: { kind: 'destination', to: 'c4' }, then: { usedCount: 0 } },
+      { name: 'and now the Bonus Roll', intent: { kind: 'bonusRoll', face: 6 },
+        then: { bonus: 6, spent: 0, remaining: 6, usedCount: 0 } },
       { name: 'back over a section the last leg used, now released',
         intent: { kind: 'step', to: 'd417' }, then: { spent: 1 } },
       { name: 'and the next one', intent: { kind: 'step', to: 'd372' },
