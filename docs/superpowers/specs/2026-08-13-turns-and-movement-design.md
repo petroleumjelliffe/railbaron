@@ -138,13 +138,17 @@ between them, so it becomes `setup | homes | playing`. Seating order stays the e
 
 ## State
 
-Three changes to the event log. Everything else derives by replay, as it does today.
+Four changes to the event log. Everything else derives by replay, as it does today.
 
-- **`turnRolled`** — the dice for a turn: both white dice and the bonus die when earned.
-  Recorded rather than re-rolled, so a replayed game is the same game. This is the
-  existing house rule that events record what happened, not what was rolled.
-- **`moved`** — one per turn: the path as node ids, and whether it ended on the
-  destination.
+- **`turnRolled`** — the white dice for a turn. Recorded rather than re-rolled, so a
+  replayed game is the same game. This is the existing house rule that events record what
+  happened, not what was rolled. *(It carried the bonus die too when this was written;
+  the amendment below moved the Bonus Roll to its own event. The field stays, and replay
+  still honours a face in it, so logs written before the amendment load unchanged.)*
+- **`bonusRolled`** — the Bonus Roll, thrown and announced on its own after the white leg.
+  See "The Bonus Roll is taken after the white movement, not with it".
+- **`moved`** — one per leg, so two in a turn that took a Bonus Roll: the path as node
+  ids, and whether it ended on the destination.
 - **A home city may not collide.** There is no `homeAssigned` event and this spec does
   not add one: a baron's home city is today the first `arrived` they record, the one that
   pays nothing. What changes is that rolling it must avoid cities already taken, so
