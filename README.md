@@ -6,9 +6,18 @@ the physical board; the app rolls each baron's next destination and works out th
 
 ```bash
 npm install
-npm run dev      # http://localhost:5173
+git submodule update --init --recursive   # vendor/lobby, needed by the server
+
+npm run dev        # client only, http://localhost:5173
+npm run dev:all    # client + game server, for online mode
 npm test
 ```
+
+Online mode needs both halves running. `npm run dev:server` starts the game server
+on port 3001 by default (`PORT` overrides it — the sibling Acquire server uses the
+same port, so set one if you run both). The client points at
+`http://<hostname>:3001` unless `VITE_SERVER_URL` says otherwise; the hostname
+rather than `localhost` so a phone on the same wifi can reach a dev server here.
 
 Built for a tablet in landscape, and deployed to GitHub Pages on every push to
 `main` — the suite and the typecheck gate the deploy, because a companion that

@@ -26,15 +26,28 @@ win condition) and Phase 3 (online multiplayer) are ahead.
 ```bash
 npm install
 npm run dev        # Vite dev server, http://localhost:5173
-npm test            # vitest run — engine/ and src/, once
+npm run dev:server  # game server (online mode), port 3001 — PORT overrides
+npm run dev:all     # both at once; online mode needs both
+npm test            # vitest run — every project, once
 npm run test:watch  # vitest, watch mode
 npm run typecheck   # tsc --noEmit
 npm run build        # vite build, production bundle to dist/
+npm run build:server # a guard, not a build: fails if vendor/lobby is empty
 npm run preview      # serve the production build locally
 ```
 
-`engine/` and `src/` run as two separate Vitest projects (`vite.config.ts`): `engine`
-under a plain `node` environment, `app` under `jsdom` with `src/test/setup.ts` loaded.
+The sibling Acquire server also defaults to 3001, so set `PORT` if both are up.
+
+Tests run as two Vitest projects (`vite.config.ts`). **`node`** takes everything that runs
+inside the server process in production — `engine/`, `session/`, `server/`, the pure half
+of `src/state/`, and the lobby's `protocol/` and `server/` halves. **`app`** takes the rest
+of `src/` and the lobby's `client/`, under `jsdom` with `src/test/setup.ts` loaded.
+
+The split of `src/state` is one honest line: `storage.test.ts` is the file whose subject
+*is* `localStorage`, so it stays in jsdom, and the extglob `src/state/!(storage).test.ts`
+names it once for both projects to read. Do not add a root-level `setupFiles` — vitest 4
+merges those into every project, which would bridge jsdom's Storage into the node project
+and silently disarm `session/nodeEnvironment.test.ts`, the test that guards the boundary.
 `engine/smoke.test.ts` asserts `window` is `undefined` in the engine project, so a React
 or DOM dependency creeping into `engine/` fails a test rather than surviving unnoticed.
 (It does not also assert `localStorage` is `undefined`: Node 26 defines
@@ -142,6 +155,50 @@ ask before changing it.
 
 The design project also holds the visual direction the port is built to: a departures-board
 split-flap treatment for the main screen, and a lightbulb-map treatment for the map view.
+
+## Online mode
+
+Built, tested, and **not yet deployed or played by hand** — see
+[`docs/superpowers/specs/2026-08-14-online-by-hand-notes.md`](docs/superpowers/specs/2026-08-14-online-by-hand-notes.md)
+for what building it found and what is still owed.
+
+**The log is the wire.** The acting client rolls locally behind the existing
+roll→announce→commit gates and sends the resulting `GameEvent`; the server validates it,
+appends, persists and broadcasts *the whole log*; every client's state is `replay(log)`,
+exactly as pass-and-play is `replay(localStorage)`. There is no incremental sync and no
+optimistic apply — a client that missed a broadcast is repaired by the next one.
+
+| Directory | What lives there |
+|---|---|
+| `session/` | The game half of the wire — versions, message shapes, rejection codes. Node-safe. |
+| `server/` | The authoritative server: store, rooms, the two game handlers, boot. |
+| `src/net/` | The client half — transport, `useRoom`, `useOnlineGame`. |
+| `src/board/screens/online.ts` | Boards 1d/1f and the terminals. |
+| `src/GameShell.ts` | The board-driving glue both modes share. |
+| `src/OnlineApp.tsx` | The online routes. |
+
+Three things carry the design, and breaking any of them breaks it quietly:
+
+- **`src/state/legal.ts` is the whole authority**, and it is pure over
+  `(log, event, sender)`. It is built from the same helpers `useGame`'s own guards read, so
+  the client's "may I?" and the server's "you may not" cannot drift into disagreeing. Both
+  directions are tested: `gameSocket.test.ts` proves it refuses illegal appends,
+  `goldenSocket.test.ts` proves it accepts every legal game. A table that refused
+  everything would pass the first suite alone.
+- **The lobby's seat ids ARE the game's colours.** `SEAT_SPACE.ids` is `SEATS`, so a lobby
+  `playerId` of `'red'` is the `SeatId` `'red'` and no mapping layer exists anywhere. Note
+  the server seats in `SEATS` order, so a two-player room is **red and green**, not
+  red and blue.
+- **The server seeds `joined` and `started` itself at Begin.** Clients can never append
+  them, and `appendLegality` refuses all three of `joined`/`renamed`/`started`.
+
+Two owner rulings are encoded rather than derivable: any *seated* player may report the
+roll for first player (`orderRolled` is the one event exempt from seat-matching), and undo
+belongs to the seat whose action would be popped.
+
+`vendor/lobby` is a git submodule and the server imports it at runtime — `npm run
+build:server` exists only to fail loudly when it is empty, because `tsx` compiles nothing
+ahead of time and the process would otherwise die at boot after a green build.
 
 ## What Phase 1 owes Phase 3
 
