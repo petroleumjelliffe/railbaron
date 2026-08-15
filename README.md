@@ -13,11 +13,18 @@ npm run dev:all    # client + game server, for online mode
 npm test
 ```
 
-Online mode needs both halves running. `npm run dev:server` starts the game server
-on port 3001 by default (`PORT` overrides it — the sibling Acquire server uses the
-same port, so set one if you run both). The client points at
-`http://<hostname>:3001` unless `VITE_SERVER_URL` says otherwise; the hostname
-rather than `localhost` so a phone on the same wifi can reach a dev server here.
+Online mode needs both halves running. The game server defaults to port 3001 — as
+does the sibling Acquire server, so if you run both, move this one:
+
+```bash
+PORT=3055 npm run dev:all          # and set VITE_SERVER_PORT=3055 in .env.local
+```
+
+The client works out the server's address from the page it was loaded from —
+`http://<hostname>:<port>` — using the hostname rather than `localhost` so a phone
+on the same wifi reaches the dev server on your machine instead of looking for one
+on the phone. `VITE_SERVER_PORT` moves only the port and keeps that; a full
+`VITE_SERVER_URL` replaces the lot, and is what production sets.
 
 Built for a tablet in landscape, and deployed to GitHub Pages on every push to
 `main` — the suite and the typecheck gate the deploy, because a companion that
