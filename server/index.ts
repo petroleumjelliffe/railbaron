@@ -76,7 +76,17 @@ export async function startServer(
   const restored = await rooms.restore();
   if (restored > 0) console.log(`✓ Restored ${restored} room(s)`);
 
-  await new Promise<void>((resolve) => { http.listen(opts.port, resolve); });
+  // `listen` reports failure by emitting 'error', not by throwing, and an
+  // unhandled 'error' on a server takes the process down with a stack trace
+  // that buries the one useful word in it. Surfacing it as a rejection lets
+  // the caller say something a person can act on.
+  await new Promise<void>((resolve, reject) => {
+    http.once('error', reject);
+    http.listen(opts.port, () => {
+      http.off('error', reject);
+      resolve();
+    });
+  });
   const address = http.address();
   const port = typeof address === 'object' && address !== null ? address.port : opts.port;
   console.log(`Server listening on ${port}`);
@@ -98,7 +108,37 @@ export async function startServer(
 // Run directly (`tsx server/index.ts`); imported by tests without starting.
 const invoked = process.argv[1] ?? '';
 if (invoked.endsWith('server/index.ts') || invoked.endsWith('server/index.js')) {
-  const port = Number(process.env.PORT ?? 3001);
+  // `.env.local` is where a developer moves the port off 3001, which the
+  // sibling Acquire server also defaults to. The client reads it through Vite;
+  // the server has no bundler to do that for it, so it loads the same file
+  // itself — one place to set the port, and both halves agree without anyone
+  // having to remember an env prefix on the command line.
+  //
+  // VITE_SERVER_PORT is a bundler-flavoured name for a variable this process
+  // also reads, and that is the point: the two halves must not be able to
+  // disagree about which port they mean.
+  try {
+    process.loadEnvFile('.env.local');
+  } catch {
+    // No such file is the ordinary case, not an error.
+  }
+
+  const port = Number(process.env.PORT ?? process.env.VITE_SERVER_PORT ?? 3001);
   const gamesDir = process.env.GAMES_DIR ?? 'server/games';
-  void startServer({ port, gamesDir });
+
+  startServer({ port, gamesDir }).catch((error: unknown) => {
+    const code = (error as { code?: string } | null)?.code;
+    if (code === 'EADDRINUSE') {
+      console.error(
+        `\n✗ Port ${port} is already in use — something is listening there.\n\n`
+        + '  Find it:   lsof -nP -iTCP:' + String(port) + ' -sTCP:LISTEN\n'
+        + '  Or move:   set VITE_SERVER_PORT in .env.local to a free port, which\n'
+        + '             moves this server and the client together.\n\n'
+        + '  Note 3001 is also the sibling Acquire dev server\'s default.\n',
+      );
+      process.exit(1);
+    }
+    console.error('✗ The server failed to start:', error);
+    process.exit(1);
+  });
 }

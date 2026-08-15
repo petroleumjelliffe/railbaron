@@ -14,11 +14,17 @@ npm test
 ```
 
 Online mode needs both halves running. The game server defaults to port 3001 — as
-does the sibling Acquire server, so if you run both, move this one:
+does the sibling Acquire server, so if you run both, move this one by putting a
+line in `.env.local` (gitignored) and then starting normally:
 
 ```bash
-PORT=3055 npm run dev:all          # and set VITE_SERVER_PORT=3055 in .env.local
+echo "VITE_SERVER_PORT=3055" >> .env.local
+npm run dev:all
 ```
+
+One file, both halves: Vite hands the port to the client, and the server loads the
+same file itself, so there is no env prefix to remember and no way for the two to
+disagree. `PORT` still overrides it for a one-off.
 
 The client works out the server's address from the page it was loaded from —
 `http://<hostname>:<port>` — using the hostname rather than `localhost` so a phone
