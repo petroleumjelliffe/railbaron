@@ -39,11 +39,65 @@ const titles = (container: HTMLElement) =>
 
 describe('the map', () => {
   it('draws a lamp for every city and route dot', () => {
+    // The shipped board names cities and nothing else. Developing, it also
+    // names every node — see the dev labels below — so this asks for the
+    // board as it ships.
+    vi.stubEnv('DEV', false);
     const { container } = show(join);
     // Cities carry a <title>; route dots do not, which is how they are told
     // apart without reaching for internals.
     expect(container.querySelectorAll('title')).toHaveLength(67);
     expect(container.querySelectorAll('svg')).toHaveLength(1);
+    vi.unstubAllEnvs();
+  });
+
+  /**
+   * Reporting a mis-traced node means naming it, and the board shows no ids —
+   * "the dot closest to Chattanooga" took a round trip to resolve. So while
+   * developing, every lamp says what it is on hover.
+   *
+   * It cannot ride on the lamps themselves: every circle they draw carries
+   * `pointerEvents: 'none'`, so nothing there is hoverable and a `<title>` on
+   * a lamp never appears. Hence a layer of its own — under the interaction
+   * layer, so it can never take a tap meant for a route.
+   */
+  describe('naming the nodes while developing', () => {
+    it('names a route dot by its id', () => {
+      const { container } = show(join);
+      const labels = [...container.querySelectorAll('[data-labels] title')]
+        .map(t => t.textContent);
+      // d309, on the Southern between the Chattanooga fork and Atlanta.
+      expect(labels).toContain('d309');
+      // And nothing for a junction: it draws no lamp, so there is no bulb to
+      // hover and a label there would sit on bare track.
+      expect(labels).not.toContain('d893');
+    });
+
+    it('names a city by name and id', () => {
+      const { container } = show(join);
+      const labels = [...container.querySelectorAll('[data-labels] title')]
+        .map(t => t.textContent);
+      expect(labels).toContain('Chicago (c24)');
+    });
+
+    it('says none of it in a production build', () => {
+      vi.stubEnv('DEV', false);
+      const { container } = show(join);
+      expect(container.querySelector('[data-labels]')).toBeNull();
+      vi.unstubAllEnvs();
+    });
+
+    it('keeps its hands off the taps', () => {
+      // Rendered before the interaction layer, so a candidate's real target
+      // still sits on top of it — the rule the whole SVG is ordered by.
+      const { container } = show(join);
+      const svg = container.querySelector('svg')!;
+      const children = [...svg.children];
+      const labels = children.findIndex(el => el.hasAttribute('data-labels'));
+      const taps = children.length - 1;
+      expect(labels).toBeGreaterThan(-1);
+      expect(labels).toBeLessThan(taps);
+    });
   });
 
   it('says whose destination a lit city is', () => {
@@ -832,8 +886,17 @@ describe('playing a turn on the map', () => {
 
     // (b) Every circle outside that layer is explicitly inert: it carries
     // pointer-events="none", or sits under aria-hidden decoration.
+    //
+    // The dev-only label layer is the one exception, and it has to be: a
+    // tooltip needs something hoverable, which is exactly what inert means it
+    // is not. It is safe for a different reason — it renders *before* the
+    // interaction layer, so a candidate's target always sits on top of it, and
+    // it carries no handler of its own. That ordering is asserted where the
+    // labels themselves are tested, and again here.
+    const labels = container.querySelector('[data-labels]');
+    expect(labels === null || rootChildren.indexOf(labels) < rootChildren.length - 1).toBe(true);
     const outsideCircles = [...container.querySelectorAll('circle')]
-      .filter(c => !interactionLayer.contains(c));
+      .filter(c => !interactionLayer.contains(c) && !(labels?.contains(c) ?? false));
     expect(outsideCircles.length).toBeGreaterThan(0);
     for (const circle of outsideCircles) {
       const inert = circle.getAttribute('pointer-events') === 'none'

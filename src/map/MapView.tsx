@@ -8,7 +8,9 @@ import { SEAT_COLORS } from '../game/tokens';
 import { SEATS, type SeatId } from '../state/events';
 import type { GameState } from '../state/game';
 import { needsDestination } from '../state/turns';
-import { CITY_R, DOT_R, layout, RAILROADS, sizeCandidates, type Placed } from './geo';
+import {
+  CITY_R, DOT_R, layout, RAILROADS, sizeCandidates, visualRadius, type Placed
+} from './geo';
 import { markers, pawns, type Marker } from './lit';
 import { PLAYBACK_MS, usePlayback } from './usePlayback';
 import { useRoute } from './useRoute';
@@ -208,6 +210,36 @@ function RouteLamp({ node, lit, candidate, hover }: {
                 pointerEvents="none"
                 style={{ transition: 'r 90ms cubic-bezier(.2,.8,.3,1)' }} />
       )}
+    </g>
+  );
+}
+
+/**
+ * Every node, named, for whoever is working on the board.
+ *
+ * A mis-traced node can only be reported by naming it, and the board shows no
+ * ids — "the dot closest to Chattanooga" cost a round trip to resolve. This
+ * gives each lamp a tooltip: the id for a route dot, name and id for a city.
+ *
+ * It needs a layer of its own because the lamps cannot carry it. Every circle
+ * they draw is `pointerEvents: 'none'`, so there is nothing there to hover and
+ * the `<title>` a city already has never appears. These circles are hoverable
+ * and exactly the size of the painted lamp — and rendered *before* the
+ * interaction layer, so a candidate's real target still sits on top and no tap
+ * is ever taken by a label.
+ *
+ * Development only: `import.meta.env.DEV` is false in the built bundle, so
+ * this renders nothing at all in the game as it ships.
+ */
+function NodeLabels({ nodes }: { nodes: readonly Placed[] }) {
+  if (!import.meta.env.DEV) return null;
+  return (
+    <g data-labels="">
+      {nodes.map(node => (
+        <circle key={node.id} cx={node.x} cy={node.y} r={visualRadius(node)} fill="transparent">
+          <title>{node.name ? `${node.name} (${node.id})` : node.id}</title>
+        </circle>
+      ))}
     </g>
   );
 }
@@ -604,6 +636,11 @@ export function MapView({
               on one half of a twin pair can cross to the other for nothing,
               which the engine rightly offers at zero movement, and tapping it
               drew a route line with no COMMIT and no UNDO to answer it. */}
+          {/* Named lamps for whoever is working on the board, and nothing at
+              all in the shipped bundle. Before the interaction layer, so a
+              real tap target always wins. */}
+          <NodeLabels nodes={board.nodes.filter(n => n.kind !== 'junction')} />
+
           <InteractionLayer
             nodes={board.nodes}
             legal={route.legal}
