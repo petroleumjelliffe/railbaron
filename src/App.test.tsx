@@ -461,3 +461,71 @@ describe('rolling the turn dice from the board', () => {
     expect(storedTypes()).toEqual(before);
   });
 });
+
+/**
+ * The online routes render their own Board — see OnlineApp for why that trade
+ * is deliberate. These check that the routes resolve at all: a bad route or a
+ * crash-on-mount is the failure mode that would otherwise reach a player as a
+ * white screen, and no server is running here.
+ */
+describe('the online routes', () => {
+  beforeEach(snapTransitions);
+
+  it('offers the join board at /online', () => {
+    at('/online');
+    expect(screen.getByText('JOIN A ROOM')).toBeInTheDocument();
+    expect(screen.getByText('NEW ROOM')).toBeInTheDocument();
+  });
+
+  it('will not join until a code has been typed', () => {
+    at('/online');
+    // Each cell is rendered three times — the accessible text plus the two
+    // halves of the flap — so these are always getAllByText.
+    expect(screen.getAllByText('TAP TO TYPE').length).toBeGreaterThan(0);
+    // The JOIN row is dim until six characters are in.
+    expect(screen.getAllByText('Need a code').length).toBeGreaterThan(0);
+  });
+
+  it('renders a room route without a server rather than crashing', () => {
+    // Nothing is listening, so this is the connecting lobby with six empty
+    // seats. The point is that it is a board and not a blank page, a crash,
+    // or a redirect home.
+    at('/room/ABC234');
+    expect(screen.getAllByText('OPEN').length).toBeGreaterThan(0);
+  });
+
+  it('sends the home screen’s online row to the join board', async () => {
+    const user = userEvent.setup();
+    at('/');
+    await user.click(screen.getByText('PLAY ONLINE'));
+    expect(screen.getByText('JOIN A ROOM')).toBeInTheDocument();
+  });
+});
+
+/**
+ * The join board's code entry, which is the only edit affordance in the app
+ * whose field is not a seat. It is here rather than in a screen test because
+ * the bug it guards was in the wiring between the screen and the Board, which
+ * a data-in-rows-out test cannot see: the screens were right, the Board never
+ * rendered an input, and nothing threw.
+ */
+describe('typing a room code', () => {
+  beforeEach(snapTransitions);
+
+  it('opens an input when the code row is tapped', async () => {
+    const user = userEvent.setup();
+    at('/online');
+    await user.click(screen.getAllByText('TAP TO TYPE')[0]!);
+    expect(screen.getByRole('textbox')).toBeInTheDocument();
+  });
+
+  it('takes a typed code and lights the join row', async () => {
+    const user = userEvent.setup();
+    at('/online');
+    await user.click(screen.getAllByText('TAP TO TYPE')[0]!);
+    await user.type(screen.getByRole('textbox'), 'ABC234{Enter}');
+    // The code is on the board, and JOIN ROOM is live rather than dim.
+    expect(screen.getAllByText('ABC234').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Takes a seat').length).toBeGreaterThan(0);
+  });
+});

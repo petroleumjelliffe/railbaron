@@ -1,10 +1,9 @@
 import { padRows, type ScreenDef } from '../types';
 
 /**
- * Online is shown disabled rather than hidden. The mode select's whole
- * statement is that both modes exist; concealing one misstates it, and a
- * player who has heard the game will be online-capable should see where it
- * is going rather than wonder whether they misremembered.
+ * Both modes are real now. Online used to be shown disabled rather than
+ * hidden, because the mode select's whole statement is that both exist and
+ * concealing one misstates it; the row keeps its place and gains its action.
  */
 export function home(): ScreenDef {
   return {
@@ -21,9 +20,9 @@ export function home(): ScreenDef {
       },
       {
         label: 'Mode 02', status: 'Remote', text: 'PLAY ONLINE',
-        amount: '2-6', showDollar: false, right: 'Soon',
-        chip: '#2f7fe8', tone: 'disabled',
-        action: null
+        amount: '2-6', showDollar: false, right: 'One each',
+        chip: '#2f7fe8', tone: 'normal',
+        action: { kind: 'navigate', to: 'joinRoom' }
       }
     ])
   };

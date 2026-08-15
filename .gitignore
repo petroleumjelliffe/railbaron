@@ -11,3 +11,6 @@ dist
 /docs/rail_baron.pdf
 
 .DS_Store
+
+# Rooms the server has saved. Real games, not source.
+server/games/

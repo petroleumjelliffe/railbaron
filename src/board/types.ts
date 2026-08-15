@@ -9,10 +9,16 @@ import type { SeatId } from '../state/events';
  * destination would cost more than this note does.
  */
 export type ScreenId =
-  | 'home' | 'passAndPlay' | 'saved' | 'confirm' | 'play' | 'regionBallot' | 'homes' | 'map';
+  | 'home' | 'passAndPlay' | 'saved' | 'confirm' | 'play' | 'regionBallot' | 'homes' | 'map'
+  /**
+   * Online. There is no id for "create a room": creating one seats you in it
+   * immediately (the Lobby Flow correction), so NEW ROOM is an action, not a
+   * screen you can be on.
+   */
+  | 'onlineLobby' | 'joinRoom';
 
-/** What an editable row is editing. Seat names today. */
-export type FieldId = `seat:${SeatId}`;
+/** What an editable row is editing. Seat names, and the room code to join. */
+export type FieldId = `seat:${SeatId}` | 'roomCode';
 
 export type RowAction =
   | { kind: 'navigate'; to: ScreenId }
@@ -21,6 +27,16 @@ export type RowAction =
   /** Roll for who goes first. One row, once per game, so it carries no payload. */
   | { kind: 'order' }
   | { kind: 'undo' }
+  /** Open a room and take the first seat in it, in one step. */
+  | { kind: 'createRoom' }
+  /** Join the room whose code has been typed. */
+  | { kind: 'joinRoom' }
+  /** Put the room's URL on the clipboard, for sending to the other players. */
+  | { kind: 'share' }
+  /** The host starts the game. */
+  | { kind: 'begin' }
+  /** Give up your seat and go home. Lobby-only; mid-game leaving is a drop. */
+  | { kind: 'leave' }
   | null;
 
 /**

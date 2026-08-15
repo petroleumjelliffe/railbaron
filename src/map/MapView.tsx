@@ -1,6 +1,6 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import {
-  cityById, nodeForCity, path as pathOf,
+  cityById, nodeForCity, path as pathOf, sectionKey, usedAfter,
   type NodeId, type RegionId, type TurnRoll
 } from '../../engine';
 import { DiceReadout } from '../board/DiceReadout';
@@ -8,13 +8,25 @@ import { SEAT_COLORS } from '../game/tokens';
 import { SEATS, type SeatId } from '../state/events';
 import type { GameState } from '../state/game';
 import { needsDestination } from '../state/turns';
-import { CITY_R, DOT_R, layout, RAILROADS, sizeCandidates, type Placed } from './geo';
+import {
+  CITY_R, DOT_R, layout, RAILROADS, sizeCandidates, visualRadius, type Placed
+} from './geo';
 import { markers, pawns, type Marker } from './lit';
 import { PLAYBACK_MS, usePlayback } from './usePlayback';
 import { useRoute } from './useRoute';
+import { STEP, useViewport } from './useViewport';
 
+/**
+ * The map's own coordinate space — no longer the cabinet's size on screen.
+ *
+ * The cabinet is whatever the window leaves it; this is the space the network
+ * is projected into once, and the viewBox is what reconciles the two. Keeping
+ * it fixed is what lets the projection stay a `useMemo` with no dependencies
+ * while the window is dragged about.
+ */
 const WIDTH = 1400;
 const HEIGHT = 788;
+const EXTENT = { width: WIDTH, height: HEIGHT } as const;
 
 /** One per region, so a city reads as its region before you read its name. */
 const REGION_COLOR: Record<RegionId, string> = {
@@ -27,6 +39,9 @@ const REGION_COLOR: Record<RegionId, string> = {
   SW: '#ff7ab8'
 };
 
+/** The narrowest cabinet that still has room for the game's name in the rail. */
+const TITLE_ROOM = 820;
+
 /** Unlit lamps still catch a little light, exactly as on a real board. */
 const DIM = 0.3;
 
@@ -34,7 +49,27 @@ const DIM = 0.3;
 const MAX_LINES_PER_EDGE = 3;
 const LINE_SPREAD = 1.7;
 
-function Track({ nodes, edges }: Pick<ReturnType<typeof layout>, 'edges'> & { nodes: Map<string, Placed> }) {
+/**
+ * How much of a section this trip has left, as the track is drawn.
+ *
+ * `null` is untouched; `'part'` means crossed, with a company still free to
+ * cross it again — the book's "he may move between the same two dots again, as
+ * long as it uses a different rail line"; `'true'` means every crossing is
+ * spent and the engine will refuse it with `section-used` until the pawn
+ * arrives and the whole trip is released.
+ */
+type Spent = 'true' | 'part' | null;
+
+const spentState = (crossings: number, lines: number): Spent =>
+  crossings <= 0 ? null : crossings >= lines ? 'true' : 'part';
+
+function Track({ nodes, edges, spent }: Pick<ReturnType<typeof layout>, 'edges'> & {
+  nodes: Map<string, Placed>;
+  /** Crossings this trip, by section — the very map the engine refuses steps with. */
+  spent: ReadonlyMap<string, number>;
+}) {
+  // Geometry depends on the projection alone, so tapping out a route — which
+  // changes `spent` on every step — does not recompute any of it.
   const segments = useMemo(() => edges.flatMap(edge => {
     const a = nodes.get(edge.a);
     const b = nodes.get(edge.b);
@@ -48,7 +83,10 @@ function Track({ nodes, edges }: Pick<ReturnType<typeof layout>, 'edges'> & { no
     const ny = dx / length;
     const lines = edge.railroads.slice(0, MAX_LINES_PER_EDGE);
     const offset = (lines.length - 1) / 2;
-    return [{ key: `${edge.a}-${edge.b}`, a, b, nx, ny, lines, offset }];
+    return [{
+      key: `${edge.a}-${edge.b}`, section: sectionKey(edge.a, edge.b),
+      a, b, nx, ny, lines, offset, capacity: edge.railroads.length
+    }];
   }), [edges, nodes]);
 
   return (
@@ -62,18 +100,30 @@ function Track({ nodes, edges }: Pick<ReturnType<typeof layout>, 'edges'> & { no
         ))}
       </g>
       <g>
-        {segments.map(s => s.lines.map((id, i) => {
-          const k = (i - s.offset) * LINE_SPREAD;
+        {segments.map(s => {
+          const state = spentState(spent.get(s.section) ?? 0, s.capacity);
           return (
-            <line
-              key={`${s.key}-${id}`}
-              x1={s.a.x + s.nx * k} y1={s.a.y + s.ny * k}
-              x2={s.b.x + s.nx * k} y2={s.b.y + s.ny * k}
-              stroke={RAILROADS.get(id)?.color ?? '#8b6a42'}
-              strokeWidth={1.5} strokeLinecap="round" opacity={0.85}
-            />
+            <g key={s.key} data-edge={s.section} {...(state ? { 'data-spent': state } : {})}>
+              {s.lines.map((id, i) => {
+                const k = (i - s.offset) * LINE_SPREAD;
+                return (
+                  <line
+                    key={`${s.key}-${id}`}
+                    x1={s.a.x + s.nx * k} y1={s.a.y + s.ny * k}
+                    x2={s.b.x + s.nx * k} y2={s.b.y + s.ny * k}
+                    stroke={RAILROADS.get(id)?.color ?? '#8b6a42'}
+                    strokeWidth={1.5} strokeLinecap="round"
+                    // Spent track burns out: the colour drops away and the
+                    // dark bed beneath shows through. Part-spent track is
+                    // dashed — still there, and only on another line.
+                    opacity={state === 'true' ? 0.12 : 0.85}
+                    {...(state === 'part' ? { strokeDasharray: '3 3' } : {})}
+                  />
+                );
+              })}
+            </g>
           );
-        }))}
+        })}
       </g>
     </>
   );
@@ -90,15 +140,28 @@ function Track({ nodes, edges }: Pick<ReturnType<typeof layout>, 'edges'> & { no
  * cover it.
  */
 
+/**
+ * How a lamp says the cursor is on *it*.
+ *
+ * Every lamp the leg can reach is lit at once, so lit alone never answered the
+ * question the player is actually asking — which of these am I about to take?
+ * The ring each candidate already wears is what carries it: under the pointer
+ * it closes in, brightens to full, and picks up a halo, so one lamp reads as
+ * chosen among its lit neighbours rather than merely lit.
+ */
+const HOVER_RING = { stroke: '#fffdf6', width: 2.6, opacity: 1 } as const;
+const IDLE_RING = { stroke: '#fff6e2', width: 1.4, opacity: 0.8 } as const;
+
 /** A bulb in its socket: the housing is always drawn, the filament is not. */
-function CityLamp({ node, color, lit, marker, candidate }: {
+function CityLamp({ node, color, lit, marker, candidate, hover }: {
   node: Placed; color: string; lit: boolean; marker: Marker | undefined;
-  candidate: boolean;
+  candidate: boolean; hover: boolean;
 }) {
   const r = CITY_R;
   const { x, y } = node;
+  const ring = hover ? HOVER_RING : IDLE_RING;
   return (
-    <g>
+    <g data-node={node.id} data-hover={hover ? 'true' : undefined}>
       <circle cx={x} cy={y + r * 0.07} r={r * 1.06} fill="#000" opacity={0.5} pointerEvents="none" />
       <circle cx={x - r * 0.07} cy={y - r * 0.09} r={r * 0.98} fill="#f2f0eb" pointerEvents="none" />
       <circle cx={x + r * 0.1} cy={y + r * 0.13} r={r * 0.88} fill="#9b9a96" pointerEvents="none" />
@@ -109,9 +172,14 @@ function CityLamp({ node, color, lit, marker, candidate }: {
         <circle cx={x} cy={y} r={r * 0.64} fill={color} pointerEvents="none" />
         <circle cx={x - r * 0.2} cy={y - r * 0.24} r={r * 0.2} fill="#fff" opacity={0.6} pointerEvents="none" />
       </g>
+      {hover && (
+        <circle cx={x} cy={y} r={r * 2.9} fill="#fffdf6" opacity={0.14} pointerEvents="none" />
+      )}
       {candidate && (
-        <circle cx={x} cy={y} r={r * 1.75} fill="none"
-                stroke="#fff6e2" strokeWidth={1.4} opacity={0.8} pointerEvents="none" />
+        <circle cx={x} cy={y} r={r * (hover ? 1.62 : 1.75)} fill="none"
+                stroke={ring.stroke} strokeWidth={ring.width} opacity={ring.opacity}
+                pointerEvents="none"
+                style={{ transition: 'r 90ms cubic-bezier(.2,.8,.3,1)' }} />
       )}
       <title>
         {node.name}
@@ -121,23 +189,57 @@ function CityLamp({ node, color, lit, marker, candidate }: {
   );
 }
 
-function RouteLamp({ node, lit, candidate }: {
-  node: Placed; lit: boolean; candidate: boolean;
+function RouteLamp({ node, lit, candidate, hover }: {
+  node: Placed; lit: boolean; candidate: boolean; hover: boolean;
 }) {
   const r = DOT_R;
   const { x, y } = node;
   return (
-    <g>
+    <g data-node={node.id} data-hover={hover ? 'true' : undefined}>
       <circle cx={x} cy={y} r={r * 1.5} fill="#2a1c0d" pointerEvents="none" />
       <g style={{ opacity: lit ? 1 : DIM, transition: 'opacity 110ms cubic-bezier(.2,.8,.3,1)' }}>
-        <circle cx={x} cy={y} r={r * 4.2} fill="#fff6e2" opacity={0.1} pointerEvents="none" />
+        <circle cx={x} cy={y} r={r * (hover ? 5.4 : 4.2)} fill="#fff6e2"
+                opacity={hover ? 0.2 : 0.1} pointerEvents="none" />
         <circle cx={x} cy={y} r={r * 2.2} fill="#fff6e2" opacity={0.2} pointerEvents="none" />
-        <circle cx={x} cy={y} r={r} fill="#fffaf0" pointerEvents="none" />
+        <circle cx={x} cy={y} r={r * (hover ? 1.35 : 1)} fill="#fffaf0" pointerEvents="none" />
       </g>
       {candidate && (
-        <circle cx={x} cy={y} r={r * 3.2} fill="none"
-                stroke="#fff6e2" strokeWidth={1} opacity={0.75} pointerEvents="none" />
+        <circle cx={x} cy={y} r={r * (hover ? 2.9 : 3.2)} fill="none"
+                stroke={hover ? HOVER_RING.stroke : IDLE_RING.stroke}
+                strokeWidth={hover ? 1.8 : 1} opacity={hover ? 1 : 0.75}
+                pointerEvents="none"
+                style={{ transition: 'r 90ms cubic-bezier(.2,.8,.3,1)' }} />
       )}
+    </g>
+  );
+}
+
+/**
+ * Every node, named, for whoever is working on the board.
+ *
+ * A mis-traced node can only be reported by naming it, and the board shows no
+ * ids — "the dot closest to Chattanooga" cost a round trip to resolve. This
+ * gives each lamp a tooltip: the id for a route dot, name and id for a city.
+ *
+ * It needs a layer of its own because the lamps cannot carry it. Every circle
+ * they draw is `pointerEvents: 'none'`, so there is nothing there to hover and
+ * the `<title>` a city already has never appears. These circles are hoverable
+ * and exactly the size of the painted lamp — and rendered *before* the
+ * interaction layer, so a candidate's real target still sits on top and no tap
+ * is ever taken by a label.
+ *
+ * Development only: `import.meta.env.DEV` is false in the built bundle, so
+ * this renders nothing at all in the game as it ships.
+ */
+function NodeLabels({ nodes }: { nodes: readonly Placed[] }) {
+  if (!import.meta.env.DEV) return null;
+  return (
+    <g data-labels="">
+      {nodes.map(node => (
+        <circle key={node.id} cx={node.x} cy={node.y} r={visualRadius(node)} fill="transparent">
+          <title>{node.name ? `${node.name} (${node.id})` : node.id}</title>
+        </circle>
+      ))}
     </g>
   );
 }
@@ -156,9 +258,10 @@ function RouteLamp({ node, lit, candidate }: {
  * the ones offered at this moment, and they are the ones in this layer. See
  * `sizeCandidates`.
  */
-function InteractionLayer({ nodes, legal, enabled, onTap }: {
+function InteractionLayer({ nodes, legal, enabled, onTap, onHover }: {
   nodes: readonly Placed[]; legal: ReadonlySet<NodeId>; enabled: boolean;
   onTap: (id: NodeId) => void;
+  onHover: (id: NodeId | null) => void;
 }) {
   const targets = useMemo(() => {
     const candidates = nodes.filter(node => legal.has(node.id));
@@ -177,6 +280,10 @@ function InteractionLayer({ nodes, legal, enabled, onTap }: {
             fill="transparent"
             role="button" aria-label={label}
             onClick={() => onTap(node.id)}
+            // Enter and leave rather than over and out: the targets abut, and
+            // over/out also fire for a move within one target.
+            onPointerEnter={() => onHover(node.id)}
+            onPointerLeave={() => onHover(null)}
             style={{ cursor: 'pointer' }}
           />
         );
@@ -224,6 +331,8 @@ export function MapView({
   const board = useMemo(() => layout(WIDTH, HEIGHT), []);
   const lamps = useMemo(() => markers(state), [state]);
   const route = useRoute(state, onMove);
+  const viewport = useViewport(EXTENT);
+  const [pointedAt, setPointedAt] = useState<NodeId | null>(null);
   const drafted = route.draft === null ? null : pathOf(route.draft);
 
   /**
@@ -272,35 +381,103 @@ export function MapView({
   // the first still showing.
   const replaying = usePlayback(lastMove?.path ?? null, PLAYBACK_MS, lastMove?.seat ?? null);
 
-  // While the last committed leg is still walking, the moving baron's pawn
-  // sits at the node playback has reached rather than at rest on `seat.at` —
-  // the two agree once `replaying.done`, since the log already recorded the
-  // leg's true end the moment it committed.
+  /**
+   * Where the baron up has walked to so far this leg.
+   *
+   * The draft is the only record of it — the log hears about a leg once, when
+   * it commits — so until then `seat.at` still holds where the leg began. That
+   * is right for the log and wrong for the board: a route tapped out across
+   * three states used to leave the pawn standing in the first one, and FIND,
+   * which goes to the baron up, went to where they set out from rather than
+   * where they now stand.
+   */
+  const walkedTo = drafted === null || drafted.length < 2
+    ? null
+    : drafted[drafted.length - 1]!;
+
+  /**
+   * The pawns as drawn, which is not quite the pawns as logged.
+   *
+   * Two things move one: the last committed leg still playing back, where the
+   * mover sits at the node playback has reached rather than at rest on
+   * `seat.at` (the two agree once `replaying.done`, the log having recorded
+   * the leg's true end when it committed); and the draft above. They cannot
+   * both apply — no lamp is tappable until playback finishes — so playback
+   * comes first and the draft answers for every other moment.
+   */
   const standing = useMemo(() => {
     const base = pawns(state);
-    if (lastMove === null || replaying.done) return base;
-    const at = replaying.shown[replaying.shown.length - 1];
-    if (at === undefined) return base;
+    const playing = lastMove !== null && !replaying.done
+      ? { seat: lastMove.seat, at: replaying.shown[replaying.shown.length - 1] }
+      : state.turn !== null && walkedTo !== null
+        ? { seat: state.turn, at: walkedTo }
+        : null;
+    if (playing === null || playing.at === undefined) return base;
+
     const out = new Map<NodeId, SeatId[]>();
     for (const [node, seats] of base) {
-      const rest = seats.filter(id => id !== lastMove.seat);
+      const rest = seats.filter(id => id !== playing.seat);
       if (rest.length > 0) out.set(node, rest);
     }
-    const here = out.get(at);
-    if (here) here.push(lastMove.seat);
-    else out.set(at, [lastMove.seat]);
+    const here = out.get(playing.at);
+    if (here) here.push(playing.seat);
+    else out.set(playing.at, [playing.seat]);
     return out;
-  }, [state, lastMove, replaying.shown, replaying.done]);
+  }, [state, lastMove, replaying.shown, replaying.done, walkedTo]);
 
   const playing = SEATS
     .map(id => state.seats[id])
     .filter(seat => seat.name !== null && seat.stops.length > 0);
 
+  /**
+   * Whether a lamp may be tapped at all — see the interaction layer below for
+   * the two things that close it.
+   */
+  const canTap = replaying.done && !owesBonus;
+
+  /**
+   * The lamp the pointer is on, derived rather than stored.
+   *
+   * A tap changes the leg beneath a cursor that has not moved, so no leave
+   * event arrives to clear it — and the lamp it was on is very often no longer
+   * a candidate. Deriving the mark against the current `legal` set means it
+   * cannot outlive what it was marking; the same holds when the layer closes
+   * for playback or a Bonus Roll.
+   */
+  const hovered = pointedAt !== null && canTap && route.legal.has(pointedAt)
+    ? pointedAt
+    : null;
+
+  /**
+   * The sections this trip has spent, for the baron up alone.
+   *
+   * `usedAfter` counts the draft's own steps on top of what earlier turns of
+   * the trip spent, so the track closes behind the pawn as the route is tapped
+   * rather than only once it commits. It is the same map `tripOf` hands the
+   * engine, which is what keeps the drawing and the rule from disagreeing:
+   * what is drawn spent is exactly what `section-used` will refuse.
+   *
+   * Only the baron up. Another seat's spent track is their business, and
+   * drawing all of them at once would say nothing about the turn in hand.
+   */
+  const spentTrack = useMemo(() => {
+    if (route.draft !== null) return usedAfter(route.draft);
+    const seat = state.turn === null ? null : state.seats[state.turn];
+    return seat?.used ?? new Map<string, number>();
+  }, [route.draft, state]);
+
+  /** Where the baron up is standing — mid-route that is the draft, not the log. */
+  const standingAt = state.turn === null
+    ? null
+    : walkedTo ?? state.seats[state.turn].at;
+  const baron = standingAt === null ? undefined : board.byId.get(standingAt);
+
   return (
     <div style={{
-      padding: 34,
-      minHeight: '100%',
+      padding: 'clamp(6px, 1.6vw, 34px)',
+      height: '100%',
       boxSizing: 'border-box',
+      overflow: 'hidden',
       background: '#e8e6e1',
       fontFamily: "'Roboto Condensed', system-ui, sans-serif"
     }}>
@@ -309,16 +486,21 @@ export function MapView({
           there is nothing left to skip: `usePlayback` treats a further call
           as a no-op. */}
       <div
+        ref={viewport.ref}
         onClick={replaying.skip}
+        onPointerDown={viewport.onPointerDown}
         style={{
-          width: WIDTH,
-          height: HEIGHT,
-          maxWidth: '100%',
+          width: '100%',
+          height: '100%',
           boxSizing: 'border-box',
           boxShadow: '0 30px 70px rgba(0,0,0,0.35)',
           overflow: 'hidden',
           position: 'relative',
-          background: 'linear-gradient(180deg,#4a2c17,#331d0e)'
+          background: 'linear-gradient(180deg,#4a2c17,#331d0e)',
+          // The gestures are the map's own. Without this the browser claims
+          // the drag for scrolling and the pinch for zooming the page.
+          touchAction: 'none',
+          cursor: viewport.dragging ? 'grabbing' : 'grab'
         }}
       >
         {/* Grain and a bevelled frame: the board is a lit cabinet, not a screen. */}
@@ -338,8 +520,8 @@ export function MapView({
         }} />
 
         <svg
-          width={WIDTH} height={HEIGHT} viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
-          style={{ position: 'absolute', inset: 0 }}
+          width="100%" height="100%" viewBox={viewport.viewBox}
+          style={{ position: 'absolute', inset: 0, display: 'block' }}
           // Not role="img": the lamps a baron may move to are real buttons
           // inside it, and a picture has no controls.
           role="group"
@@ -350,7 +532,7 @@ export function MapView({
           <path d={board.landPath} fill="rgba(255,240,214,0.045)" stroke="#d6ab6d" strokeWidth={1.5}
                 strokeLinejoin="round" />
 
-          <Track edges={board.edges} nodes={board.byId} />
+          <Track edges={board.edges} nodes={board.byId} spent={spentTrack} />
 
           {/* The portion of the last committed move walked so far — the same
               path everyone watching this log sees, drawn in the mover's own
@@ -396,7 +578,8 @@ export function MapView({
           <g>
             {board.nodes.filter(n => n.kind === 'dot').map(node => {
               const candidate = route.legal.has(node.id);
-              return <RouteLamp key={node.id} node={node} lit={candidate} candidate={candidate} />;
+              return <RouteLamp key={node.id} node={node} lit={candidate}
+                                candidate={candidate} hover={hovered === node.id} />;
             })}
           </g>
           <g>
@@ -415,6 +598,7 @@ export function MapView({
                   lit={marker !== undefined || candidate}
                   marker={marker}
                   candidate={candidate}
+                  hover={hovered === node.id}
                   color={marker
                     ? SEAT_COLORS[marker.seat]
                     : (region ? REGION_COLOR[region] : '#e8a13c')}
@@ -429,7 +613,8 @@ export function MapView({
               const node = board.byId.get(id);
               if (!node) return null;
               return seats.map((seatId, i) => (
-                <g key={`${id}-${seatId}`} role="img" aria-label={state.seats[seatId].name ?? seatId}>
+                <g key={`${id}-${seatId}`} role="img" data-node={id}
+                   aria-label={state.seats[seatId].name ?? seatId}>
                   <circle cx={node.x + i * 5} cy={node.y - 11} r={5}
                           fill={SEAT_COLORS[seatId]} stroke="#100c08" strokeWidth={1.4}
                           pointerEvents="none" />
@@ -451,11 +636,20 @@ export function MapView({
               on one half of a twin pair can cross to the other for nothing,
               which the engine rightly offers at zero movement, and tapping it
               drew a route line with no COMMIT and no UNDO to answer it. */}
+          {/* Named lamps for whoever is working on the board, and nothing at
+              all in the shipped bundle. Before the interaction layer, so a
+              real tap target always wins. */}
+          <NodeLabels nodes={board.nodes.filter(n => n.kind !== 'junction')} />
+
           <InteractionLayer
             nodes={board.nodes}
             legal={route.legal}
-            enabled={replaying.done && !owesBonus}
-            onTap={route.tap}
+            enabled={canTap}
+            onHover={setPointedAt}
+            /* A pan begun on a lamp must not also tap it. The lamps sit on
+               the surface the player drags, so without this every drag that
+               happened to start on a candidate drafted a step. */
+            onTap={id => { if (!viewport.wasDrag()) route.tap(id); }}
           />
         </svg>
 
@@ -471,89 +665,150 @@ export function MapView({
           />
         </div>
 
+        {/* The top rail: BACK, the name of the game, and whatever the turn is
+            asking for, in one flow.
+
+            They used to be three absolutely positioned corners, which could
+            not collide while the cabinet was a fixed 1400 wide. It is now as
+            wide as the window, so at anything narrow the title ran straight
+            through the turn's controls. In a row they share the width instead:
+            the title takes what is left over and is clipped rather than
+            overrunning, since it is decoration and the controls are not.
+
+            The rail itself is transparent to the pointer so that a drag begun
+            on the empty part of it still pans the map; its children take their
+            clicks back individually. */}
         <div style={{
-          position: 'absolute', top: 24, left: 0, right: 0, textAlign: 'center',
-          fontSize: 30, fontWeight: 700, letterSpacing: '0.36em', textTransform: 'uppercase',
-          color: '#f0cd94', textShadow: '0 2px 0 #2b170a', zIndex: 2
+          position: 'absolute', top: 0, left: 0, right: 0, zIndex: 4,
+          display: 'flex', alignItems: 'center', gap: 12,
+          padding: '26px 34px', boxSizing: 'border-box', pointerEvents: 'none'
         }}>
-          Rail Baron
+          <button
+            onClick={onBack}
+            style={{
+              ...HUD_BUTTON, flex: '0 0 auto', cursor: 'pointer', pointerEvents: 'auto'
+            }}
+          >
+            Back
+          </button>
+
+          {/* Below this the row has room for BACK and the turn and nothing
+              else, and a title cut to "R" is worse than none. */}
+          {viewport.size.width >= TITLE_ROOM ? (
+            <div style={{
+              flex: '1 1 auto', minWidth: 0, textAlign: 'center',
+              fontSize: 'clamp(15px, 2.2vw, 30px)', fontWeight: 700,
+              letterSpacing: '0.36em', textTransform: 'uppercase',
+              whiteSpace: 'nowrap', overflow: 'hidden',
+              color: '#f0cd94', textShadow: '0 2px 0 #2b170a'
+            }}>
+              Rail Baron
+            </div>
+          ) : <div style={{ flex: '1 1 auto' }} />}
+
+          {/* The turn's controls. The draft they act on lives in screen state
+              and never in the log, which is why UNDO costs nothing and COMMIT
+              is the only thing here that writes anything down. */}
+          {state.turn !== null && owesDestination && (
+            <div style={{
+              flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: 10,
+              pointerEvents: 'auto'
+            }}>
+              <span style={{ ...HUD_BUTTON, background: 'rgba(43,23,10,0.35)' }}>
+                {state.rolled === null
+                  ? 'ROLL A NEW DESTINATION'
+                  : 'ARRIVED — ROLL A NEW DESTINATION'}
+              </span>
+              <button onClick={onBack} style={{ ...HUD_BUTTON, cursor: 'pointer' }}>
+                TO THE BOARD
+              </button>
+            </div>
+          )}
+
+          {owesBonus && (
+            <div style={{
+              flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: 10,
+              pointerEvents: 'auto'
+            }}>
+              <span style={{ ...HUD_BUTTON, background: 'rgba(43,23,10,0.35)' }}>
+                BONUS ROLL — TAKE THE RED DIE
+              </span>
+            </div>
+          )}
+
+          {state.turn !== null && !owesDestination && !owesBonus && (
+            <div style={{
+              flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: 10,
+              pointerEvents: 'auto'
+            }}>
+              <span style={{ ...HUD_BUTTON, background: 'rgba(43,23,10,0.35)' }}>
+                {route.remaining} left
+              </span>
+              <button
+                onClick={route.undo}
+                disabled={!route.draft?.steps.length}
+                style={{
+                  ...HUD_BUTTON,
+                  cursor: route.draft?.steps.length ? 'pointer' : 'default',
+                  opacity: route.draft?.steps.length ? 1 : 0.45
+                }}
+              >
+                UNDO
+              </button>
+              <button
+                onClick={route.commit}
+                disabled={!route.canCommit}
+                style={{
+                  ...HUD_BUTTON,
+                  cursor: route.canCommit ? 'pointer' : 'default',
+                  opacity: route.canCommit ? 1 : 0.45
+                }}
+              >
+                COMMIT
+              </button>
+            </div>
+          )}
         </div>
 
-        <button
-          onClick={onBack}
-          style={{
-            position: 'absolute', top: 26, left: 34, zIndex: 4,
-            fontFamily: "'DM Mono', ui-monospace, monospace", fontSize: 12,
-            letterSpacing: '0.18em', textTransform: 'uppercase',
-            color: '#f0cd94', background: 'rgba(43,23,10,0.55)',
-            border: '1px solid #5c3a1e', borderRadius: 3, padding: '6px 12px', cursor: 'pointer'
-          }}
-        >
-          Back
-        </button>
-
-        {/* The turn's controls. The draft they act on lives in screen state
-            and never in the log, which is why UNDO costs nothing and COMMIT
-            is the only thing here that writes anything down. */}
-        {state.turn !== null && owesDestination && (
-          <div style={{
-            position: 'absolute', top: 26, right: 34, zIndex: 4,
-            display: 'flex', alignItems: 'center', gap: 10
-          }}>
-            <span style={{ ...HUD_BUTTON, background: 'rgba(43,23,10,0.35)' }}>
-              {state.rolled === null
-                ? 'ROLL A NEW DESTINATION'
-                : 'ARRIVED — ROLL A NEW DESTINATION'}
-            </span>
-            <button onClick={onBack} style={{ ...HUD_BUTTON, cursor: 'pointer' }}>
-              TO THE BOARD
-            </button>
-          </div>
-        )}
-
-        {owesBonus && (
-          <div style={{
-            position: 'absolute', top: 26, right: 34, zIndex: 4,
-            display: 'flex', alignItems: 'center', gap: 10
-          }}>
-            <span style={{ ...HUD_BUTTON, background: 'rgba(43,23,10,0.35)' }}>
-              BONUS ROLL — TAKE THE RED DIE
-            </span>
-          </div>
-        )}
-
-        {state.turn !== null && !owesDestination && !owesBonus && (
-          <div style={{
-            position: 'absolute', top: 26, right: 34, zIndex: 4,
-            display: 'flex', alignItems: 'center', gap: 10
-          }}>
-            <span style={{ ...HUD_BUTTON, background: 'rgba(43,23,10,0.35)' }}>
-              {route.remaining} left
-            </span>
+        {/* The viewport's own controls, down the right-hand edge below the
+            turn's cluster. Everything here can be done with the wheel and a
+            drag; these are for touch, where there is no wheel, and for FIT,
+            which nothing else offers. */}
+        <div style={{
+          position: 'absolute', top: 96, right: 34, zIndex: 4,
+          display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'stretch'
+        }}>
+          <button
+            aria-label="Zoom in"
+            onClick={() => viewport.zoomBy(STEP)}
+            style={{ ...HUD_BUTTON, cursor: 'pointer', fontSize: 15, padding: '2px 12px' }}
+          >
+            +
+          </button>
+          <button
+            aria-label="Zoom out"
+            onClick={() => viewport.zoomBy(1 / STEP)}
+            style={{ ...HUD_BUTTON, cursor: 'pointer', fontSize: 15, padding: '2px 12px' }}
+          >
+            −
+          </button>
+          <button
+            aria-label="Fit the whole map"
+            onClick={viewport.fitAll}
+            style={{ ...HUD_BUTTON, cursor: 'pointer' }}
+          >
+            FIT
+          </button>
+          {baron && (
             <button
-              onClick={route.undo}
-              disabled={!route.draft?.steps.length}
-              style={{
-                ...HUD_BUTTON,
-                cursor: route.draft?.steps.length ? 'pointer' : 'default',
-                opacity: route.draft?.steps.length ? 1 : 0.45
-              }}
+              aria-label="Find the baron up"
+              onClick={() => viewport.goTo(baron)}
+              style={{ ...HUD_BUTTON, cursor: 'pointer' }}
             >
-              UNDO
+              FIND
             </button>
-            <button
-              onClick={route.commit}
-              disabled={!route.canCommit}
-              style={{
-                ...HUD_BUTTON,
-                cursor: route.canCommit ? 'pointer' : 'default',
-                opacity: route.canCommit ? 1 : 0.45
-              }}
-            >
-              COMMIT
-            </button>
-          </div>
-        )}
+          )}
+        </div>
 
         {playing.length > 0 && (
           <div style={{

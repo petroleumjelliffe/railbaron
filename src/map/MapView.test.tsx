@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { render, renderHook, screen } from '@testing-library/react';
+import { fireEvent, render, renderHook, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { nodeForCity } from '../../engine';
+import { layout } from './geo';
 import { MapView } from './MapView';
 import { useRoute } from './useRoute';
 import { replay } from '../state/game';
@@ -38,11 +39,65 @@ const titles = (container: HTMLElement) =>
 
 describe('the map', () => {
   it('draws a lamp for every city and route dot', () => {
+    // The shipped board names cities and nothing else. Developing, it also
+    // names every node — see the dev labels below — so this asks for the
+    // board as it ships.
+    vi.stubEnv('DEV', false);
     const { container } = show(join);
     // Cities carry a <title>; route dots do not, which is how they are told
     // apart without reaching for internals.
     expect(container.querySelectorAll('title')).toHaveLength(67);
     expect(container.querySelectorAll('svg')).toHaveLength(1);
+    vi.unstubAllEnvs();
+  });
+
+  /**
+   * Reporting a mis-traced node means naming it, and the board shows no ids —
+   * "the dot closest to Chattanooga" took a round trip to resolve. So while
+   * developing, every lamp says what it is on hover.
+   *
+   * It cannot ride on the lamps themselves: every circle they draw carries
+   * `pointerEvents: 'none'`, so nothing there is hoverable and a `<title>` on
+   * a lamp never appears. Hence a layer of its own — under the interaction
+   * layer, so it can never take a tap meant for a route.
+   */
+  describe('naming the nodes while developing', () => {
+    it('names a route dot by its id', () => {
+      const { container } = show(join);
+      const labels = [...container.querySelectorAll('[data-labels] title')]
+        .map(t => t.textContent);
+      // d309, on the Southern between the Chattanooga fork and Atlanta.
+      expect(labels).toContain('d309');
+      // And nothing for a junction: it draws no lamp, so there is no bulb to
+      // hover and a label there would sit on bare track.
+      expect(labels).not.toContain('d893');
+    });
+
+    it('names a city by name and id', () => {
+      const { container } = show(join);
+      const labels = [...container.querySelectorAll('[data-labels] title')]
+        .map(t => t.textContent);
+      expect(labels).toContain('Chicago (c24)');
+    });
+
+    it('says none of it in a production build', () => {
+      vi.stubEnv('DEV', false);
+      const { container } = show(join);
+      expect(container.querySelector('[data-labels]')).toBeNull();
+      vi.unstubAllEnvs();
+    });
+
+    it('keeps its hands off the taps', () => {
+      // Rendered before the interaction layer, so a candidate's real target
+      // still sits on top of it — the rule the whole SVG is ordered by.
+      const { container } = show(join);
+      const svg = container.querySelector('svg')!;
+      const children = [...svg.children];
+      const labels = children.findIndex(el => el.hasAttribute('data-labels'));
+      const taps = children.length - 1;
+      expect(labels).toBeGreaterThan(-1);
+      expect(labels).toBeLessThan(taps);
+    });
   });
 
   it('says whose destination a lit city is', () => {
@@ -446,6 +501,352 @@ describe('playing a turn on the map', () => {
   });
 
   /**
+   * "Each section of rail can be used only once per trip" — and a trip is not
+   * a turn, so what a leg spends stays spent until the pawn arrives. Deep into
+   * a long trip that leaves a corridor one lamp wide, which is indistinguishable
+   * from a broken board unless the spent track is drawn as spent.
+   *
+   * Reported from live play, on a trip that had crossed 38 sections: the map
+   * lit one lamp at every dot for five dots running and said nothing about why.
+   */
+  describe('drawing the track this trip has spent', () => {
+    /** A committed leg that stopped short of Chicago, so nothing is released. */
+    const midTrip: GameEvent[] = [
+      { type: 'joined', seat: 'red', name: 'ADA' },
+      { type: 'started' },
+      { type: 'arrived', seat: 'red', city: MINNEAPOLIS, region: 'PL', payout: null },
+      { type: 'orderRolled', seat: 'red', first: 'red' },
+      { type: 'arrived', seat: 'red', city: CHICAGO, region: 'NC', payout: 4500 },
+      { type: 'turnRolled', seat: 'red', white: [1, 1], bonus: null },
+      { type: 'moved', seat: 'red', path: ['c13', 'd352', 'd266'], arrived: false },
+      { type: 'turnRolled', seat: 'red', white: [2, 2], bonus: null }
+    ];
+
+    const drawn = (events: GameEvent[]) => {
+      const { container } = render(
+        <MapView
+          state={replay(events)}
+          onBack={() => {}}
+          onMove={vi.fn()}
+          dice={{ roll: null, live: false }}
+          onRollDice={() => {}}
+          onDiceLanded={() => {}}
+        />
+      );
+      return (section: string) =>
+        container.querySelector(`[data-edge="${section}"]`)?.getAttribute('data-spent') ?? null;
+    };
+
+    it('draws a section spent when the trip has no crossings of it left', () => {
+      const spent = drawn(midTrip);
+      // c13|d352 carries the Milwaukee Road alone, and last turn crossed it.
+      expect(spent('c13|d352')).toBe('true');
+      expect(spent('d266|d352')).toBe('true');
+    });
+
+    it('leaves untouched track alone', () => {
+      const spent = drawn(midTrip);
+      // Out of the same city, never crossed.
+      expect(spent('c13|d417')).toBeNull();
+      expect(spent('c13|d66')).toBeNull();
+    });
+
+    it('draws a shared section part spent while a line across it is still free', () => {
+      // Minneapolis–St. Paul carries four companies, so one crossing spends
+      // one of four: the pawn may cross again on another line, and the board
+      // must not claim otherwise.
+      const spent = drawn([...midTrip.slice(0, 6),
+        { type: 'moved', seat: 'red', path: ['c13', 'c95'], arrived: false },
+        { type: 'turnRolled', seat: 'red', white: [2, 2], bonus: null }]);
+      expect(spent('c13|c95')).toBe('part');
+    });
+
+    it('spends the section as the step is tapped, not when it is committed', async () => {
+      // The corridor has to close as the player walks it — a draft that only
+      // showed after COMMIT would answer the question too late to be any use.
+      const user = userEvent.setup();
+      const spent = drawn(midTurn);
+      expect(spent('c13|c95')).toBeNull();
+      await user.click(screen.getByRole('button', { name: /St\. Paul/ }));
+      expect(spent('c13|c95')).toBe('part');
+    });
+  });
+
+  /**
+   * The pawn used to sit where the leg began until the move was committed, so
+   * a route tapped out across three states left it behind in the first — and
+   * FIND, which goes to the baron up, went to where they had set out from
+   * rather than where they now stood.
+   */
+  describe('walking the pawn as the route is tapped out', () => {
+    const drawnMidTurn = () => {
+      const { container } = render(
+        <MapView
+          state={replay(midTurn)}
+          onBack={() => {}}
+          onMove={vi.fn()}
+          dice={{ roll: null, live: false }}
+          onRollDice={() => {}}
+          onDiceLanded={() => {}}
+        />
+      );
+      const pawn = () => container.querySelector('[aria-label="ADA"]')!.getAttribute('data-node');
+      const svg = container.querySelector('svg')!;
+      const box = () => svg.getAttribute('viewBox')!.split(' ').map(Number);
+      return { pawn, box, container };
+    };
+
+    it('stands the pawn where the tapping has reached', async () => {
+      const user = userEvent.setup();
+      const { pawn } = drawnMidTurn();
+      expect(pawn()).toBe(nodeForCity(MINNEAPOLIS));
+
+      await user.click(screen.getByRole('button', { name: /St\. Paul/ }));
+
+      expect(pawn()).toBe(nodeForCity(ST_PAUL));
+    });
+
+    it('puts it back on undo', async () => {
+      const user = userEvent.setup();
+      const { pawn } = drawnMidTurn();
+      await user.click(screen.getByRole('button', { name: /St\. Paul/ }));
+      await user.click(screen.getByRole('button', { name: 'UNDO' }));
+      expect(pawn()).toBe(nodeForCity(MINNEAPOLIS));
+    });
+
+    it('sends FIND to where the pawn stands now, not where the leg began', async () => {
+      const user = userEvent.setup();
+      const { box } = drawnMidTurn();
+      const walkedTo = layout(1400, 788).byId.get(nodeForCity(ST_PAUL))!;
+
+      await user.click(screen.getByRole('button', { name: /St\. Paul/ }));
+      await user.click(screen.getByRole('button', { name: /find the baron/i }));
+
+      const [x, y, width, height] = box();
+      expect(x! + width! / 2).toBeCloseTo(walkedTo.x, 0);
+      expect(y! + height! / 2).toBeCloseTo(walkedTo.y, 0);
+    });
+  });
+
+  /**
+   * Several lamps are lit at once — every one the leg may reach — and lit is
+   * all they were, so the player could not tell which of them their cursor was
+   * about to take. Only the lamp under the pointer carries `data-hover`.
+   */
+  describe('picking out the lamp under the cursor', () => {
+    const hovered = (container: HTMLElement) =>
+      [...container.querySelectorAll('[data-hover="true"]')];
+
+    /** The lamp a hit target belongs to, found the way the DOM relates them. */
+    const lampFor = (name: RegExp) => screen.getByRole('button', { name });
+
+    const shownMidTurn = () => {
+      const { container } = render(
+        <MapView
+          state={replay(midTurn)}
+          onBack={() => {}}
+          onMove={vi.fn()}
+          dice={{ roll: null, live: false }}
+          onRollDice={() => {}}
+          onDiceLanded={() => {}}
+        />
+      );
+      return container;
+    };
+
+    it('marks the candidate the pointer is over, and only that one', () => {
+      const container = shownMidTurn();
+      expect(hovered(container)).toEqual([]);
+
+      fireEvent.pointerEnter(lampFor(/St\. Paul/));
+
+      const marked = hovered(container);
+      expect(marked).toHaveLength(1);
+      expect(marked[0]!.getAttribute('data-node')).toBe(nodeForCity(ST_PAUL));
+    });
+
+    it('lets go when the pointer leaves', () => {
+      const container = shownMidTurn();
+      fireEvent.pointerEnter(lampFor(/St\. Paul/));
+      fireEvent.pointerLeave(lampFor(/St\. Paul/));
+      expect(hovered(container)).toEqual([]);
+    });
+
+    it('follows the pointer from one candidate to the next', () => {
+      const container = shownMidTurn();
+      const dot = screen.getAllByRole('button', { name: /^Dot / })[0]!;
+      fireEvent.pointerEnter(lampFor(/St\. Paul/));
+      fireEvent.pointerEnter(dot);
+      // Without a leave in between — which is what happens when two targets
+      // abut — the mark must still move rather than double.
+      const marked = hovered(container);
+      expect(marked).toHaveLength(1);
+      expect(marked[0]!.getAttribute('data-node'))
+        .toBe(dot.getAttribute('aria-label')!.replace('Dot ', ''));
+    });
+
+    it('drops the mark when the tap it belonged to changes the leg', () => {
+      // The cursor does not move when a tap is taken, so no leave arrives —
+      // but the lamp it was over is no longer a candidate, and a highlight
+      // left burning on a lamp that can no longer be tapped is a lie.
+      const container = shownMidTurn();
+      const stPaul = lampFor(/St\. Paul/);
+      fireEvent.pointerEnter(stPaul);
+      fireEvent.click(stPaul);
+      expect(hovered(container)).toEqual([]);
+    });
+  });
+
+  /**
+   * The cabinet is whatever size the window leaves it, and the map is drawn
+   * into it through a viewBox — so every assertion here reads that attribute.
+   * jsdom lays nothing out, so the cabinet measures 0 and the viewport falls
+   * back to the map's own 1400×788: one screen pixel is one map unit, which is
+   * why the arithmetic below can be read directly.
+   */
+  describe('panning and zooming the map', () => {
+    const WHOLE_MAP = '0 0 1400 788';
+
+    const drawn = (onMove = vi.fn()) => {
+      const { container } = render(
+        <MapView
+          state={replay(midTurn)}
+          onBack={() => {}}
+          onMove={onMove}
+          dice={{ roll: null, live: false }}
+          onRollDice={() => {}}
+          onDiceLanded={() => {}}
+        />
+      );
+      const svg = container.querySelector('svg')!;
+      const box = () => svg.getAttribute('viewBox')!.split(' ').map(Number);
+      return { svg, box, onMove };
+    };
+
+    /** A drag, as the browser delivers one: down on the map, moves, then up. */
+    const drag = (from: Element, dx: number, dy: number) => {
+      fireEvent.pointerDown(from, { clientX: 700, clientY: 394, pointerId: 1, button: 0 });
+      fireEvent.pointerMove(window, { clientX: 700 + dx, clientY: 394 + dy, pointerId: 1 });
+      fireEvent.pointerUp(window, { clientX: 700 + dx, clientY: 394 + dy, pointerId: 1 });
+    };
+
+    it('opens on the whole map', () => {
+      expect(drawn().svg.getAttribute('viewBox')).toBe(WHOLE_MAP);
+    });
+
+    it('zooms about the pointer, not about the middle of the cabinet', () => {
+      const { svg, box } = drawn();
+      // The cursor is on the map's top-left corner, so that corner is what
+      // must stay under it — zooming about the centre would move it away.
+      fireEvent.wheel(svg, { deltaY: -240, clientX: 0, clientY: 0 });
+      const [x, y, width] = box();
+      expect(width).toBeLessThan(1400);
+      expect(x).toBeCloseTo(0);
+      expect(y).toBeCloseTo(0);
+    });
+
+    it('zooms back out no further than the whole map', () => {
+      const { svg } = drawn();
+      fireEvent.wheel(svg, { deltaY: -240, clientX: 700, clientY: 394 });
+      fireEvent.wheel(svg, { deltaY: 4000, clientX: 700, clientY: 394 });
+      expect(svg.getAttribute('viewBox')).toBe(WHOLE_MAP);
+    });
+
+    it('pans with a drag once there is somewhere to pan to', () => {
+      const { svg, box } = drawn();
+      fireEvent.wheel(svg, { deltaY: -240, clientX: 700, clientY: 394 });
+      const [x0, y0, w0] = box();
+
+      drag(svg, -100, 0);
+
+      const [x1, y1, w1] = box();
+      expect(w1).toBeCloseTo(w0!);       // a drag moves the map; it does not zoom it
+      expect(y1).toBeCloseTo(y0!);       // and only along the axis dragged
+      // Dragged 100px left, so 100px worth of map came in from the right.
+      expect(x1! - x0!).toBeCloseTo(100 * w0! / 1400, 1);
+    });
+
+    it('does not walk the pawn to a lamp a drag merely passed over', () => {
+      // The hazard the threshold exists for: every legal lamp is a click
+      // target sitting on the surface you pan with, so a drag that begins on
+      // one would otherwise tap it and draft a step nobody asked for.
+      const dragged = drawn();
+      fireEvent.wheel(dragged.svg, { deltaY: -240, clientX: 700, clientY: 394 });
+      const lamp = screen.getByRole('button', { name: /St\. Paul/ });
+      drag(lamp, -60, 0);
+      fireEvent.click(lamp);
+      expect(screen.getByRole('button', { name: 'COMMIT' })).toBeDisabled();
+    });
+
+    it('still takes a tap that stays put', () => {
+      // The control for the test above: the same events without the movement
+      // must still draft the step, or the threshold has broken tapping.
+      const { svg } = drawn();
+      const lamp = screen.getByRole('button', { name: /St\. Paul/ });
+      fireEvent.pointerDown(lamp, { clientX: 700, clientY: 394, pointerId: 1, button: 0 });
+      fireEvent.pointerUp(window, { clientX: 700, clientY: 394, pointerId: 1 });
+      fireEvent.click(lamp);
+      expect(screen.getByRole('button', { name: 'COMMIT' })).toBeEnabled();
+      expect(svg.getAttribute('viewBox')).toBe(WHOLE_MAP);
+    });
+
+    it('returns to the whole map on FIT', async () => {
+      const user = userEvent.setup();
+      const { svg } = drawn();
+      fireEvent.wheel(svg, { deltaY: -240, clientX: 200, clientY: 200 });
+      expect(svg.getAttribute('viewBox')).not.toBe(WHOLE_MAP);
+      await user.click(screen.getByRole('button', { name: /fit/i }));
+      expect(svg.getAttribute('viewBox')).toBe(WHOLE_MAP);
+    });
+
+    it('lays the title and the turn out in one row, so a narrow cabinet cannot stack them', () => {
+      // jsdom lays nothing out, so overlap itself cannot be asserted — but the
+      // cause can. While the cabinet was a fixed 1400 wide, BACK, the title and
+      // the turn's controls were three absolutely positioned siblings that
+      // could not collide; a cabinet that is now as wide as the window makes
+      // them collide at every narrow size unless they share a flow.
+      drawn();
+      const title = screen.getByText('Rail Baron');
+      const back = screen.getByRole('button', { name: /back/i });
+      const commit = screen.getByRole('button', { name: 'COMMIT' });
+      const row = title.parentElement!;
+      expect(row.style.display).toBe('flex');
+      expect(row.contains(back)).toBe(true);
+      expect(row.contains(commit)).toBe(true);
+    });
+
+    it('drops the title rather than clipping it when the cabinet is narrow', () => {
+      // Sharing the row means the title yields, and a title cut to "R" is
+      // worse than no title: the controls beside it are what the turn needs.
+      const measured = vi.spyOn(Element.prototype, 'getBoundingClientRect')
+        .mockReturnValue({ width: 520, height: 800, left: 0, top: 0,
+                           right: 520, bottom: 800, x: 0, y: 0,
+                           toJSON: () => ({}) } as DOMRect);
+      try {
+        drawn();
+        expect(screen.queryByText('Rail Baron')).not.toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'COMMIT' })).toBeInTheDocument();
+      } finally {
+        measured.mockRestore();
+      }
+    });
+
+    it('goes to the baron up when asked', async () => {
+      const user = userEvent.setup();
+      const { box } = drawn();
+      const at = replay(midTurn).seats.red.at!;
+      const pawn = layout(1400, 788).byId.get(at)!;
+
+      await user.click(screen.getByRole('button', { name: /find the baron/i }));
+
+      const [x, y, width, height] = box();
+      expect(width).toBeLessThan(1400);
+      expect(x! + width! / 2).toBeCloseTo(pawn.x, 0);
+      expect(y! + height! / 2).toBeCloseTo(pawn.y, 0);
+    });
+  });
+
+  /**
    * Reported from live play: touch targets felt too small, and a city's
    * glow was visibly sitting over neighbouring dots. jsdom cannot do real
    * geometric hit-testing (no layout, no paint), so this pins the fix
@@ -485,8 +886,17 @@ describe('playing a turn on the map', () => {
 
     // (b) Every circle outside that layer is explicitly inert: it carries
     // pointer-events="none", or sits under aria-hidden decoration.
+    //
+    // The dev-only label layer is the one exception, and it has to be: a
+    // tooltip needs something hoverable, which is exactly what inert means it
+    // is not. It is safe for a different reason — it renders *before* the
+    // interaction layer, so a candidate's target always sits on top of it, and
+    // it carries no handler of its own. That ordering is asserted where the
+    // labels themselves are tested, and again here.
+    const labels = container.querySelector('[data-labels]');
+    expect(labels === null || rootChildren.indexOf(labels) < rootChildren.length - 1).toBe(true);
     const outsideCircles = [...container.querySelectorAll('circle')]
-      .filter(c => !interactionLayer.contains(c));
+      .filter(c => !interactionLayer.contains(c) && !(labels?.contains(c) ?? false));
     expect(outsideCircles.length).toBeGreaterThan(0);
     for (const circle of outsideCircles) {
       const inert = circle.getAttribute('pointer-events') === 'none'

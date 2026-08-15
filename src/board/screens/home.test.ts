@@ -17,12 +17,13 @@ describe('the home screen', () => {
     expect(home().rows[0]!.action).toEqual({ kind: 'navigate', to: 'passAndPlay' });
   });
 
-  it('shows online as coming rather than hiding it', () => {
-    // The mode select's whole statement is that both modes exist.
+  it('sends online somewhere real too', () => {
+    // The mode select's whole statement is that both modes exist. Online was
+    // shown disabled while it was being built rather than hidden, for that
+    // reason; the row kept its place and has gained its action.
     const online = home().rows[1]!;
-    expect(online.tone).toBe('disabled');
-    expect(online.right).toBe('Soon');
-    expect(online.action).toBeNull();
+    expect(online.tone).toBe('normal');
+    expect(online.action).toEqual({ kind: 'navigate', to: 'joinRoom' });
   });
 
   it('has nowhere to go back to', () => {
