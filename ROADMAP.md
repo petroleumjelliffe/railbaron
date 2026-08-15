@@ -8,6 +8,20 @@ complete for what it claims to be: a roller and a map, used beside a board that 
 are playing themselves. Phase 4 is the game itself, and it is a different application
 wearing the same clothes.
 
+## What's next, in order
+
+1. **Finish online mode** — deploy it, play a game by hand, reconcile the lobby copy.
+   The close-out checklist is in Phase 3. It goes first because every money event will
+   also be a wire event — `legal.ts`, the session protocol and the server handlers all
+   grow with the money spec — so the pipe gets proven while the event surface is small.
+2. **Roll animation on the map** — destination and payout rolls animated; the design
+   already exists in the design project. A small, shovel-ready win before the big
+   design effort. Phase 5.
+3. **The money spec** — Phase 4's second half: cash, ownership, the bill per turn, the
+   auction, and trains. One design; the dependency order is inside Phase 4.
+4. **Auto-zoom to the current player** — gated on a design-project pass first, so it
+   trails the money work. Phase 5.
+
 ## Phase 0 — map data
 
 Convert the printed map into a graph. Done in a one-off editor that runs against a scan of
@@ -85,6 +99,13 @@ survives the upgrade rather than being silently dropped.
 > to is `2026-08-14-online-mode-design.md`. The decisions listed below were made there,
 > except hosting — a second Render service — which is still the owner's to confirm.
 
+Closing it out means:
+
+- [ ] Deploy the game server — the owner's Render workspace; the hosting decision below
+      gets made here
+- [ ] Play a first game by hand, in two real browsers
+- [ ] Reconcile the 1d/1f board copy against the design project
+
 Reuse the lobby from [`acquire-startups-m1`](../acquire-startups-m1) rather than building
 one. That repo extracted its lobby — rooms, seats, join/rejoin tokens, presence, rename,
 leave, and the screens around them — into a game-agnostic piece specifically so the next
@@ -135,9 +156,28 @@ tab watches play back. The movement rules are stored as data rather than prose i
 cross-checked against the event log's own replay. The Bonus Roll, the once-per-trip
 section rule, twin cities and stranding are all in there.
 
-**The money is not.** Buying railroads, the auction, user fees, cash and the win
-condition are still undesigned, and the second of the two questions below is the one
-that decides them. The first is answered: the app keeps turn order.
+**The money is not — it is the next design.** One spec covers it, in dependency
+order:
+
+1. **Cash, ownership, and the bill per turn** — the core loop. Track each baron's
+   money and railroads, and compute what a turn's movement owes from the edges the
+   route crossed — every edge already names its railroads, so the data is waiting.
+2. **The auction** — needs ownership and cash to exist first.
+3. **Train upgrades, shown on the board** — paid for in cash, and displayed as the
+   train column on the departures board. Landing this retires the two
+   delete-me-when-trains-land guards: the golden cross-check's Freight-only
+   turn-state assertions, and `useGame.rollDice`'s hardcoded `'freight'`. The design
+   file's train list includes "Fast Freight", which this rulebook does not have —
+   do not copy it.
+
+The rulebook's forced-sale rule rides along: a baron who cannot pay must sell rail
+lines until they can, and is out of the game if still short. Model it; don't guard
+against reaching it.
+
+Every event this adds is also a wire event — `legal.ts`, the session protocol and
+the server handlers grow with each one — which is why online mode closes out first
+(see What's next). The second of the two questions below is the one that decides
+how far all of this goes; the first is answered: the app keeps turn order.
 
 ### What the map already gives us
 
@@ -168,3 +208,19 @@ mean reading the board again:
 The `$0` constraint, the event log as the single source of truth, and the rule that
 a roll is not told until the board has finished announcing it. Those are load-bearing
 and documented in [CLAUDE.md](CLAUDE.md).
+
+## Phase 5 — map experience
+
+Map work that is design-first: each item goes through the **Rail Baron Game Board
+Design** project on claude.ai/design before it is buildable here.
+
+- [ ] **Roll animation** — destination and payout rolls animated on the map. The
+      design already exists in the design project, which makes this the shovel-ready
+      one; it is slotted before the money spec (see What's next).
+- [ ] **Auto-zoom to the current player** — zoom to the moving baron's surroundings
+      while they walk their route. A playtest idea; it needs its design pass first,
+      so it trails the money work.
+
+Parked, unprioritized: **keyboard accessibility on the map lamps.** Tap targets are
+`<circle role="button">` with no `tabIndex` and no key handler. This needs a design
+decision about pointerless map navigation, not a patch.
