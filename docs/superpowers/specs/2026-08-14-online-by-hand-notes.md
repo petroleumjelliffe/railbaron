@@ -108,6 +108,61 @@ written down rather than silently accepted if it proved unavoidable.
   unchanged and untouched, which is what makes it an extraction rather than a rewrite.
 - The production build is clean and the map is still lazily split (105 kB separate chunk).
 
+## What the first by-hand pass found (2026-08-15)
+
+The owner ran the first real pass. Five bugs, zero caught by the suite as it stood, and
+four of the five clustered in one stratum: the client glue between the lobby and the
+boards. The root-cause analysis and the remediation are one story.
+
+### The bugs
+
+- **The join board could not be typed into.** `Board` matched the editing row by
+  rebuilding a field id from a seat (`seat:${editing.seat}`), which could not express
+  `roomCode` — the one editable field that is not a seat. `FieldId` had been widened; its
+  consumer had not. Fixed: the prop carries the `FieldId` itself.
+- **NEW ROOM failed silently.** `JoinRoomApp` never subscribed to `rejected`, and the
+  thing refusing it was the sibling Acquire dev server on port 3001 answering protocol 3
+  to a protocol-1 client. Fixed: refusals and an 8s no-answer timeout reach the board.
+- **The port collision itself.** Both games default to 3001. `VITE_SERVER_PORT` in
+  `.env.local` now moves server and client together — the server loads the same file, so
+  no env prefix to forget (forgetting it was the first thing that happened).
+- **The room stuck on "Reconnecting", roster empty, zero console errors.** `useRoom`
+  built its connection in `useMemo` and closed it in an effect cleanup; StrictMode's
+  mount-unmount-remount pass ran the cleanup — `close()` is a permanent
+  `socket.disconnect()` — and `useMemo` never re-ran. The discarded first render also
+  leaked a second orphaned socket.
+- **Latent, found by reading Acquire while fixing the above: the creator would arrive in
+  their own room as a stranger.** The join screen created the room on its own connection
+  and closed it on navigate. Identity is only stored by the `joined` reply the *room*
+  screen waits for, so at that moment the socket binding is the creator's only claim to
+  their seat — and it was being thrown away.
+
+### The correction to this document's own record
+
+The plan (and an earlier comment in `useRoom`) claimed StrictMode's double-mount was
+survivable because "the rejoin binding resolves it". **That claim was inherited without
+verification and is false for the structure as built.** Acquire survives StrictMode
+because its connection is a module-scope singleton no component lifecycle can close —
+not because closing is harmless.
+
+### The root cause, in one sentence
+
+The client integration was built against the lobby's API surface rather than against its
+proven usage pattern — which lived in Acquire's `src/net/connection.ts` and page tests —
+and the lobby repo's "don't mock the socket" rule was over-extended to excuse the glue
+layer from testing, which is exactly where all the bugs were.
+
+### The remediation
+
+`src/net/connection.ts` is now the reference pattern: one lazy module-owned connection,
+`getConnection()`/`closeConnection()`, closed only on explicit leave. `useRoom` takes an
+injectable `connect`, which is also how the new lifecycle tests observe socket creation
+and closing with no server anywhere — the StrictMode test showed two-sockets-one-closed
+against the old code. A wire test pins the server's same-socket rejoin (disable the
+binding shortcut and the creator arrives as green in their own room). Lobby refusals the
+roster outranks now reach the lobby board's sub. The consumer checklist is upstreamed:
+multiplayer-game-lobby PR #3.
+
 ## Still owed
 
 1. **Push `vendor/lobby`**, then bump this repo's submodule pointer.
