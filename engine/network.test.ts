@@ -16,14 +16,17 @@ const cityNodes = nodes.filter(n => n.kind === 'city');
 
 describe('the built network', () => {
   it('carries one node per city, dot and junction in the traced graph', () => {
-    expect(nodes).toHaveLength(551);
+    // Read against the printed board, node by node, and corrected where the
+    // trace and the board disagreed:
+    //   d893 dot → junction, the Southern's fork out of Chattanooga
+    //   d936 dot → junction, a bend on the NYC into Cleveland
+    //   d872 removed, a crossing of the NYC and the B&O that the trace had
+    //        made a shared node, letting a pawn change lines where the board
+    //        prints no dot
+    expect(nodes).toHaveLength(550);
     expect(cityNodes).toHaveLength(67);
-    // 470/14 since d893, where the Southern forks out of Chattanooga toward
-    // Atlanta and Knoxville, was retyped from dot to junction: the board
-    // prints no dot on it, and a dot the board does not print charges a move
-    // the board does not charge.
-    expect(nodes.filter(n => n.kind === 'dot')).toHaveLength(470);
-    expect(nodes.filter(n => n.kind === 'junction')).toHaveLength(14);
+    expect(nodes.filter(n => n.kind === 'dot')).toHaveLength(468);
+    expect(nodes.filter(n => n.kind === 'junction')).toHaveLength(15);
     expect(new Set(nodes.map(n => n.id)).size).toBe(nodes.length);
   });
 

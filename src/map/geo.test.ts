@@ -20,9 +20,9 @@ const gap = (a: string, b: string) => Math.hypot(city(a).x - city(b).x, city(a).
 
 describe('placing the network on the cabinet', () => {
   it('places every node the network carries', () => {
-    expect(board.nodes).toHaveLength(551);
+    expect(board.nodes).toHaveLength(550);
     expect(board.nodes.filter(n => n.kind === 'city')).toHaveLength(67);
-    expect(board.byId.size).toBe(551);
+    expect(board.byId.size).toBe(550);
   });
 
   it('keeps everything inside the cabinet', () => {
@@ -75,7 +75,7 @@ describe('placing the network on the cabinet', () => {
   });
 
   it('names a railroad for every segment, and knows each one', () => {
-    expect(board.edges).toHaveLength(712);
+    expect(board.edges).toHaveLength(710);
     for (const edge of board.edges) {
       expect(board.byId.has(edge.a)).toBe(true);
       expect(board.byId.has(edge.b)).toBe(true);
