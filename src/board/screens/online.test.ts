@@ -131,3 +131,17 @@ describe('the join board when the server refuses', () => {
     expect(fine.rows[2]!.status).toBe('Or');
   });
 });
+
+describe('the lobby board when the server refuses something', () => {
+  it('carries the refusal, and keeps the room code beside it', () => {
+    // The lobby hook ranks the roster above refusal messages so a seated
+    // player is never thrown back to a join form — which means the message
+    // reaches nobody unless this board shows it.
+    const refused = onlineLobby(view(), 'only the host may begin the game');
+    expect(refused.sub).toBe('ROOM ABC234 · ONLY THE HOST MAY BEGIN THE GAME');
+  });
+
+  it('reads as the connection state when nothing has been refused', () => {
+    expect(onlineLobby(view()).sub).toBe('ROOM ABC234 · LIVE');
+  });
+});

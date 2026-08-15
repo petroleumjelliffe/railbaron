@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import { RB_PROTOCOL_VERSION } from '../../session/protocol';
-import { createLobbyConnection } from '../../vendor/lobby/client/connection';
+import type { LobbyConnection } from '../../vendor/lobby/client/connection';
 import { createIdentityStore } from '../../vendor/lobby/client/identity';
 import { useLobbyRoom, type LobbyPhase, type LobbyRoomState } from '../../vendor/lobby/client/useLobbyRoom';
-import { SERVER_URL } from '../config';
 import { SEATS, type GameEvent, type SeatId } from '../state/events';
+import { getConnection } from './connection';
 import { createGameTransport, type GameTransport } from './transport';
 
 export type RoomPhase =
@@ -40,18 +39,23 @@ export function rankPhase(lobbyPhase: LobbyPhase, logHasStarted: boolean): RoomP
   return logHasStarted ? 'playing' : lobbyPhase;
 }
 
-export function useRoom(roomId: string): RoomState {
-  // One connection per mount. StrictMode double-mounts in development: the
-  // cleanup closes the first socket before the second opens, which the lobby's
-  // own rejoin binding resolves.
-  const connection = useMemo(
-    () => createLobbyConnection({
-      serverUrl: SERVER_URL,
-      protocolVersion: RB_PROTOCOL_VERSION,
-    }),
-    [],
-  );
-  useEffect(() => () => { connection.close(); }, [connection]);
+/**
+ * `connect` is injectable, exactly as the reference consumer's `useRoom` is —
+ * tests hand in a fake and observe lifecycle without a socket anywhere.
+ */
+export function useRoom(
+  roomId: string,
+  connect: () => LobbyConnection = getConnection,
+): RoomState {
+  // The connection is the module's, not this mount's — see net/connection.ts
+  // for why (StrictMode, and the creator's seat riding the socket binding).
+  // Deliberately nothing here closes it: an earlier draft owned a connection
+  // per mount and closed it in an effect cleanup, and StrictMode's
+  // mount-unmount-remount pass killed the socket permanently — the cleanup
+  // ran, `useMemo` never re-ran, and the room sat on "Reconnecting" forever.
+  // `useState`'s lazy initializer keeps the reference stable per mount; the
+  // singleton keeps it one socket across the app.
+  const [connection] = useState(connect);
 
   const lobby = useLobbyRoom(roomId, connection, identity);
   const transport = useMemo(() => createGameTransport(connection), [connection]);

@@ -32,8 +32,17 @@ const CONNECTION: Record<LobbyView['connection'], string> = {
   dropped: 'Reconnecting',
 };
 
-/** Board 1d: the room, its seats, and the way into the game. */
-export function onlineLobby(view: LobbyView): ScreenDef {
+/**
+ * Board 1d: the room, its seats, and the way into the game.
+ *
+ * `note` is a refusal to show *in* the lobby — "only the host may begin",
+ * a rename the server wouldn't take. The lobby hook deliberately ranks the
+ * roster above such messages so a seated player is never thrown back to a
+ * join form; the price of that ranking is that the message reaches nobody
+ * unless a screen carries it, and this board is that screen. Failure on this
+ * wire is opt-in — every channel left unread is a refusal shown to no one.
+ */
+export function onlineLobby(view: LobbyView, note: string | null = null): ScreenDef {
   const seats: Row[] = view.seats.map((seat) => {
     if (seat.id === null) {
       return {
@@ -80,7 +89,9 @@ export function onlineLobby(view: LobbyView): ScreenDef {
 
   return {
     title: 'Online',
-    sub: `ROOM ${view.code} · ${CONNECTION[view.connection].toUpperCase()}`,
+    // The room code survives a refusal — it is the one thing a player might
+    // need to read out loud at any moment.
+    sub: `ROOM ${view.code} · ${(note ?? CONNECTION[view.connection]).toUpperCase()}`,
     back: 'home',
     cols: ['Seat', 'State', 'Player name', '', 'Action'],
     rows: padRows([...seats, departure]),

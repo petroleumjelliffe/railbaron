@@ -123,6 +123,30 @@ async function begunRoom(): Promise<Begun> {
 }
 
 describe('the game wire', () => {
+  it('hands a creator who joins on the same socket their own seat back', async () => {
+    // The client's whole create→room flow rides on this: the join screen
+    // creates the room, navigates, and the room screen joins — same socket,
+    // no stored identity yet, because identity is only saved by the joined
+    // reply the room screen is waiting for. The server's binding shortcut is
+    // what makes that arrival the host coming home rather than a stranger
+    // taking a second seat.
+    const socket = client();
+    const created = await createRoom(socket);
+    const again = await joinRoom(socket, created.roomId);
+
+    expect(again.playerId).toBe('red');
+    expect(again.roomId).toBe(created.roomId);
+
+    // And Begin seeds one baron, not a host plus their own ghost — the
+    // seeded log is the roster, stated in the game's own vocabulary.
+    const begun = next<LogMessage>(socket, GAME_SERVER_EVENTS.log);
+    socket.emit('beginGame');
+    expect((await begun).events).toEqual([
+      { type: 'joined', seat: 'red', name: 'ADA' },
+      { type: 'started' },
+    ]);
+  });
+
   it('seeds a joined per seat and one started at Begin, in roster order', async () => {
     const { log, guestSeat } = await begunRoom();
     expect(guestSeat.playerId).toBe('green');

@@ -1,7 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { RB_PROTOCOL_VERSION } from '../session/protocol';
-import { createLobbyConnection } from '../vendor/lobby/client/connection';
 import { lobbyView, type LobbyLimits } from '../vendor/lobby/client/view';
 import { Board } from './board/Board';
 import {
@@ -10,6 +8,7 @@ import {
 import type { FieldId, Row, ScreenDef } from './board/types';
 import { useGameShell } from './GameShell';
 import { SERVER_URL } from './config';
+import { closeConnection, getConnection } from './net/connection';
 import { useOnlineGame } from './net/useOnlineGame';
 import { useRoom, type RoomState } from './net/useRoom';
 import { SEATS, type SeatId } from './state/events';
@@ -46,17 +45,20 @@ export function JoinRoomApp() {
   const [creating, setCreating] = useState(false);
   const [note, setNote] = useState<string | null>(null);
 
-  // Opened only when somebody actually asks for a room, so the join screen
-  // itself costs no socket.
+  // The shared connection, touched only when somebody actually asks for a
+  // room, so the join screen itself costs no socket. Shared is the point, not
+  // a convenience: the seat this create binds rides the socket itself, and
+  // `useRoom` on the next route reuses the same socket — the server's rejoin
+  // shortcut hands it the same seat back, before any identity reaches
+  // storage. An earlier draft opened its own connection here and closed it on
+  // navigate, which threw that binding away: the creator arrived in their own
+  // room as a stranger.
   useEffect(() => {
     if (!creating) return;
-    const connection = createLobbyConnection({
-      serverUrl: SERVER_URL, protocolVersion: RB_PROTOCOL_VERSION,
-    });
+    const connection = getConnection();
 
     const offJoined = connection.onJoined((msg) => {
-      // The room exists and this socket holds seat one of it. Hand the route
-      // the code; `useRoom` rejoins with the identity just stored.
+      // The room exists and this socket holds seat one of it.
       navigate(`/room/${msg.roomId}`);
     });
 
@@ -78,11 +80,13 @@ export function JoinRoomApp() {
     }, 8000);
 
     connection.createRoom();
+    // Unsubscribe only — the connection is the app's, and the room screen
+    // this navigates to is about to need it. Closing it here is how the
+    // creator lost their seat.
     return () => {
       clearTimeout(timer);
       offJoined();
       offRejected();
-      connection.close();
     };
   }, [creating, navigate]);
 
@@ -165,7 +169,10 @@ function RoomBoard({ room, onHome }: { room: RoomState; onHome: () => void }) {
         ? roomRefused(room.lobby.message)
         : playing
           ? shell.gameScreen
-          : onlineLobby(view);
+          // The message is a refusal to show in the lobby — a begin or a
+          // rename the server wouldn't take — and this board is the only
+          // thing that can show it.
+          : onlineLobby(view, room.lobby.message);
 
   const onRowAct = (row: Row, index: number) => {
     if (row.action === null) return;
@@ -183,6 +190,10 @@ function RoomBoard({ room, onHome }: { room: RoomState; onHome: () => void }) {
         return;
       case 'leave':
         room.lobby.leaveSeat();
+        // Leaving is a real disconnect, not just a route change — the next
+        // online visit opens a fresh socket rather than finding this one
+        // still bound to a room the player walked out of.
+        closeConnection();
         onHome();
         return;
       case 'edit':
