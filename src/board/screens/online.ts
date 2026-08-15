@@ -87,12 +87,20 @@ export function onlineLobby(view: LobbyView): ScreenDef {
   };
 }
 
-/** Board 1f: type a code, or open a room of your own. */
-export function joinRoom(code: string): ScreenDef {
+/**
+ * Board 1f: type a code, or open a room of your own.
+ *
+ * `note` is how a refusal becomes visible. Opening a room is the one action
+ * here that talks to the server, and every way it can fail — no server
+ * listening, a server speaking a different protocol — arrives as a rejection
+ * or as nothing at all. Without somewhere to say so, the row is tapped and the
+ * screen simply sits there.
+ */
+export function joinRoom(code: string, note: string | null = null): ScreenDef {
   const ready = code.length === 6;
   return {
     title: 'Online',
-    sub: 'JOIN A ROOM',
+    sub: note === null ? 'JOIN A ROOM' : note.toUpperCase(),
     back: 'home',
     cols: ['', 'State', 'Room', '', 'Action'],
     rows: padRows([
@@ -118,10 +126,10 @@ export function joinRoom(code: string): ScreenDef {
       },
       {
         label: '',
-        status: 'Or',
+        status: note === null ? 'Or' : 'Failed',
         text: 'NEW ROOM',
         amount: '', showDollar: false,
-        right: 'Seats you first',
+        right: note === null ? 'Seats you first' : 'Try again',
         chip: null,
         tone: 'normal',
         // Creating seats you immediately — there is no room-setup screen

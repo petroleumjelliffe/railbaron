@@ -6,7 +6,7 @@ import { home } from './board/screens/home';
 import { passAndPlay } from './board/screens/passAndPlay';
 import { saved } from './board/screens/saved';
 import { confirm } from './board/screens/confirm';
-import type { Row, ScreenDef } from './board/types';
+import type { FieldId, Row, ScreenDef } from './board/types';
 import { useGameShell } from './GameShell';
 import { JoinRoomApp, RoomApp } from './OnlineApp';
 
@@ -61,7 +61,12 @@ export default function App({ rng }: AppProps = {}) {
   const { state, savedAt, rename, start, reset } = game;
   // Pass-and-play: one device, every baron.
   const shell = useGameShell(game, 'all');
-  const [editing, setEditing] = useState<{ seat: SeatId; placeholder: string } | null>(null);
+  // The field is kept beside the seat rather than rebuilt as `seat:${seat}`
+  // at the Board: the seat is what `rename` needs, the field is what the
+  // Board matches on, and deriving either from the other is what let the
+  // join board's non-seat field render nothing at all.
+  const [editing, setEditing] =
+    useState<{ field: FieldId; seat: SeatId; placeholder: string } | null>(null);
   const [confirming, setConfirming] = useState(false);
 
   if (pathname === ONLINE_ROUTE) return <JoinRoomApp />;
@@ -130,9 +135,12 @@ export default function App({ rng }: AppProps = {}) {
     if (shell.actOnRow(row, index)) return;
 
     if (row.action.kind === 'edit') {
-      // No `as any`: FieldId is the template literal `seat:${SeatId}`, so
-      // slicing the prefix yields a SeatId by construction.
+      // Every editable row on this app's screens is a seat — the room code is
+      // the join board's, which App never renders. Guard anyway rather than
+      // slice blindly: FieldId now has a member that is not a seat.
+      if (!row.action.field.startsWith('seat:')) return;
       setEditing({
+        field: row.action.field,
         seat: row.action.field.slice('seat:'.length) as SeatId,
         placeholder: row.action.placeholder
       });
@@ -173,7 +181,11 @@ export default function App({ rng }: AppProps = {}) {
         awaitRegion={shell.awaitRegion}
         onRollDice={shell.onRollDice}
         awaitDice={shell.awaitDice}
-        editing={editing}
+        editing={editing && {
+          field: editing.field,
+          placeholder: editing.placeholder,
+          initial: state.seats[editing.seat].name ?? ''
+        }}
         onCommit={value => {
           if (editing) rename(editing.seat, value || null);
           setEditing(null);

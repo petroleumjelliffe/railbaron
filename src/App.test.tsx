@@ -501,3 +501,31 @@ describe('the online routes', () => {
     expect(screen.getByText('JOIN A ROOM')).toBeInTheDocument();
   });
 });
+
+/**
+ * The join board's code entry, which is the only edit affordance in the app
+ * whose field is not a seat. It is here rather than in a screen test because
+ * the bug it guards was in the wiring between the screen and the Board, which
+ * a data-in-rows-out test cannot see: the screens were right, the Board never
+ * rendered an input, and nothing threw.
+ */
+describe('typing a room code', () => {
+  beforeEach(snapTransitions);
+
+  it('opens an input when the code row is tapped', async () => {
+    const user = userEvent.setup();
+    at('/online');
+    await user.click(screen.getAllByText('TAP TO TYPE')[0]!);
+    expect(screen.getByRole('textbox')).toBeInTheDocument();
+  });
+
+  it('takes a typed code and lights the join row', async () => {
+    const user = userEvent.setup();
+    at('/online');
+    await user.click(screen.getAllByText('TAP TO TYPE')[0]!);
+    await user.type(screen.getByRole('textbox'), 'ABC234{Enter}');
+    // The code is on the board, and JOIN ROOM is live rather than dim.
+    expect(screen.getAllByText('ABC234').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Takes a seat').length).toBeGreaterThan(0);
+  });
+});

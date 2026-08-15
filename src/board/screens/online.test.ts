@@ -112,3 +112,22 @@ describe('the terminals', () => {
     expect(gone.rows).toHaveLength(BOARD_ROWS);
   });
 });
+
+describe('the join board when the server refuses', () => {
+  it('says so rather than sitting there', () => {
+    // The bug this guards: JoinRoomApp ignored the rejected channel, so a
+    // version mismatch or a dead server produced no change on screen at all.
+    const refused = joinRoom('', 'Server speaks a different protocol');
+    expect(refused.sub).toBe('SERVER SPEAKS A DIFFERENT PROTOCOL');
+    expect(refused.rows[2]!.status).toBe('Failed');
+    expect(refused.rows[2]!.right).toBe('Try again');
+    // And NEW ROOM stays tappable, because retrying is the remedy.
+    expect(refused.rows[2]!.action).toEqual({ kind: 'createRoom' });
+  });
+
+  it('reads normally when nothing has gone wrong', () => {
+    const fine = joinRoom('');
+    expect(fine.sub).toBe('JOIN A ROOM');
+    expect(fine.rows[2]!.status).toBe('Or');
+  });
+});

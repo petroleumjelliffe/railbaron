@@ -3,8 +3,7 @@ import { BoardRow, BOARD_COLUMN_WIDTHS, BOARD_TILE } from './BoardRow';
 import { DiceReadout } from './DiceReadout';
 import { RowInput } from './RowInput';
 import { useFlap } from './useFlap';
-import { padRows, type Row, type ScreenDef } from './types';
-import type { SeatId } from '../state/events';
+import { padRows, type FieldId, type Row, type ScreenDef } from './types';
 import { TOKENS } from '../game/tokens';
 
 export interface BoardProps {
@@ -20,8 +19,21 @@ export interface BoardProps {
   /** Fires once the dice have finished turning — the gate, as `awaitRegion` is. */
   awaitDice?: { onLanded: () => void } | null;
   onRollDice?: () => void;
-  /** The seat currently being typed into, if any. */
-  editing?: { seat: SeatId; placeholder: string } | null;
+  /**
+   * The row currently being typed into, named by the same `FieldId` its action
+   * carries — not by seat.
+   *
+   * It used to be a `SeatId`, and the row was found by rebuilding the field id
+   * as `seat:${seat}`. That silently could not express the one field that is
+   * not a seat: the join board's room code matched no row, so no input was
+   * ever rendered, and because every step of that is a no-op rather than a
+   * throw, the screen simply did nothing and said nothing.
+   *
+   * `initial` is supplied rather than read off the row's display text, so the
+   * input is seeded with the real underlying value instead of whatever prompt
+   * the row happens to be showing.
+   */
+  editing?: { field: FieldId; placeholder: string; initial: string } | null;
   onCommit?: (value: string) => void;
   onCancel?: () => void;
 }
@@ -137,7 +149,7 @@ export function Board({
           const isEditing =
             editing !== null &&
             row.action?.kind === 'edit' &&
-            row.action.field === `seat:${editing.seat}`;
+            row.action.field === editing.field;
 
           return (
             <div key={index} data-board-row="" style={{ display: 'flex', flex: 1 }}>
@@ -150,7 +162,7 @@ export function Board({
                 amountSettled={settled[index]?.amount ?? true}
                 input={isEditing ? (
                   <RowInput
-                    initial={row.text === 'TAP TO JOIN' ? '' : row.text}
+                    initial={editing.initial}
                     placeholder={editing.placeholder}
                     onCommit={value => onCommit?.(value)}
                     onCancel={() => onCancel?.()}

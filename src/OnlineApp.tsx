@@ -7,7 +7,7 @@ import { Board } from './board/Board';
 import {
   joinRoom as joinRoomScreen, onlineLobby, roomGone, roomRefused, staleClient,
 } from './board/screens/online';
-import type { Row, ScreenDef } from './board/types';
+import type { FieldId, Row, ScreenDef } from './board/types';
 import { useGameShell } from './GameShell';
 import { SERVER_URL } from './config';
 import { useOnlineGame } from './net/useOnlineGame';
@@ -44,6 +44,7 @@ export function JoinRoomApp() {
   const [code, setCode] = useState('');
   const [editing, setEditing] = useState<{ placeholder: string } | null>(null);
   const [creating, setCreating] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
 
   // Opened only when somebody actually asks for a room, so the join screen
   // itself costs no socket.
@@ -52,19 +53,44 @@ export function JoinRoomApp() {
     const connection = createLobbyConnection({
       serverUrl: SERVER_URL, protocolVersion: RB_PROTOCOL_VERSION,
     });
-    const off = connection.onJoined((msg) => {
+
+    const offJoined = connection.onJoined((msg) => {
       // The room exists and this socket holds seat one of it. Hand the route
       // the code; `useRoom` rejoins with the identity just stored.
       navigate(`/room/${msg.roomId}`);
     });
+
+    // Every way this can fail arrives here or not at all, and both used to be
+    // silent: a refusal was ignored, and a server that never answered left the
+    // row tapped and the screen unchanged. The commonest cause is not exotic —
+    // the sibling Acquire server also defaults to port 3001, and it answers
+    // with a protocol this client does not speak.
+    const offRejected = connection.onRejected((msg) => {
+      setCreating(false);
+      setNote(msg.code === 'versionMismatch'
+        ? 'Server speaks a different protocol — reload, or check the port'
+        : msg.message);
+    });
+
+    const timer = setTimeout(() => {
+      setCreating(false);
+      setNote(`No answer from ${SERVER_URL} — is the game server running?`);
+    }, 8000);
+
     connection.createRoom();
-    return () => { off(); connection.close(); };
+    return () => {
+      clearTimeout(timer);
+      offJoined();
+      offRejected();
+      connection.close();
+    };
   }, [creating, navigate]);
 
   const onRowAct = (row: Row) => {
     if (row.action === null) return;
     switch (row.action.kind) {
       case 'createRoom':
+        setNote(null);
         setCreating(true);
         return;
       case 'joinRoom':
@@ -81,11 +107,16 @@ export function JoinRoomApp() {
   return (
     <main style={shellStyle}>
       <Board
-        screen={joinRoomScreen(code)}
+        screen={joinRoomScreen(code, note)}
         awaitRegion={null}
         onRollDice={() => {}}
         awaitDice={null}
-        editing={editing && { seat: 'red', placeholder: editing.placeholder }}
+        editing={editing && {
+          field: 'roomCode',
+          placeholder: editing.placeholder,
+          // The code itself, not the row's prompt text.
+          initial: code
+        }}
         onCommit={(value) => {
           // Room codes are six unambiguous uppercase characters; typing them
           // in lower case is the ordinary way a person copies one off a phone.
@@ -113,7 +144,8 @@ function RoomBoard({ room, onHome }: { room: RoomState; onHome: () => void }) {
   // is nothing to act with, and 'all' would be wrong — but no game screen is
   // shown then either.
   const shell = useGameShell(game, room.seat ?? 'all');
-  const [editing, setEditing] = useState<{ seat: SeatId; placeholder: string } | null>(null);
+  const [editing, setEditing] =
+    useState<{ field: FieldId; seat: SeatId; placeholder: string } | null>(null);
   const [onMap, setOnMap] = useState(false);
 
   const view = useMemo(() => lobbyView({
@@ -156,6 +188,7 @@ function RoomBoard({ room, onHome }: { room: RoomState; onHome: () => void }) {
       case 'edit':
         if (!row.action.field.startsWith('seat:')) return;
         setEditing({
+          field: row.action.field,
           seat: row.action.field.slice('seat:'.length) as SeatId,
           placeholder: row.action.placeholder,
         });
@@ -190,7 +223,12 @@ function RoomBoard({ room, onHome }: { room: RoomState; onHome: () => void }) {
         awaitRegion={playing ? shell.awaitRegion : null}
         onRollDice={shell.onRollDice}
         awaitDice={playing ? shell.awaitDice : null}
-        editing={editing}
+        editing={editing && {
+          field: editing.field,
+          placeholder: editing.placeholder,
+          // The name the roster holds, not the row's prompt.
+          initial: view.seats.find((s) => s.id === editing.seat)?.name ?? ''
+        }}
         onCommit={(value) => {
           // Names are the lobby's online: the roster broadcast is the answer,
           // and no `renamed` event ever reaches the game log.
