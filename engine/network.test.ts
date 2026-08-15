@@ -18,8 +18,12 @@ describe('the built network', () => {
   it('carries one node per city, dot and junction in the traced graph', () => {
     expect(nodes).toHaveLength(551);
     expect(cityNodes).toHaveLength(67);
-    expect(nodes.filter(n => n.kind === 'dot')).toHaveLength(471);
-    expect(nodes.filter(n => n.kind === 'junction')).toHaveLength(13);
+    // 470/14 since d893, where the Southern forks out of Chattanooga toward
+    // Atlanta and Knoxville, was retyped from dot to junction: the board
+    // prints no dot on it, and a dot the board does not print charges a move
+    // the board does not charge.
+    expect(nodes.filter(n => n.kind === 'dot')).toHaveLength(470);
+    expect(nodes.filter(n => n.kind === 'junction')).toHaveLength(14);
     expect(new Set(nodes.map(n => n.id)).size).toBe(nodes.length);
   });
 
