@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "vite --host",
     "dev:server": "tsx watch server/index.ts",
     "dev:all": "concurrently \"npm run dev\" \"npm run dev:server\"",
     "start:server": "tsx server/index.ts",

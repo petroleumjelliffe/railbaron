@@ -10,10 +10,11 @@ wearing the same clothes.
 
 ## What's next, in order
 
-1. **Finish online mode** — deploy it, play a game by hand, reconcile the lobby copy.
-   The close-out checklist is in Phase 3. It goes first because every money event will
-   also be a wire event — `legal.ts`, the session protocol and the server handlers all
-   grow with the money spec — so the pipe gets proven while the event surface is small.
+1. **Finish online mode** — play a full game over local wifi, reconcile the lobby copy;
+   deployment is deferred. The close-out checklist is in Phase 3. It goes first because
+   every money event will also be a wire event — `legal.ts`, the session protocol and
+   the server handlers all grow with the money spec — so the pipe gets proven while the
+   event surface is small.
 2. **Roll animation on the map** — destination and payout rolls animated; the design
    already exists in the design project. A small, shovel-ready win before the big
    design effort. Phase 5.
@@ -92,19 +93,23 @@ survives the upgrade rather than being silently dropped.
 
 > **Built, with notes.** Tasks 1–10 of
 > `docs/superpowers/plans/2026-08-14-online-mode.md` are done: the authoritative server,
-> the client hooks, the lobby boards and the routes, all tested. **Not yet deployed and not
-> yet played by hand** — those need the owner's Render workspace and two real browsers, and
-> the 1d/1f copy still needs reconciling against the design project. What building it found
-> is in `docs/superpowers/specs/2026-08-14-online-by-hand-notes.md`; the design it was built
+> the client hooks, the lobby boards and the routes, all tested. **A first by-hand pass
+> has run across two real machines** and found five bugs — four in the client glue the
+> test exemption had excused, all fixed — plus one correction to our own record; it's all
+> in `docs/superpowers/specs/2026-08-14-online-by-hand-notes.md`. The design it was built
 > to is `2026-08-14-online-mode-design.md`. The decisions listed below were made there,
-> except hosting — a second Render service — which is still the owner's to confirm.
+> except hosting, which is deferred (see the checklist).
 
 Closing it out means:
 
-- [ ] Deploy the game server — the owner's Render workspace; the hosting decision below
-      gets made here
-- [ ] Play a first game by hand, in two real browsers
+- [x] A first by-hand pass, two real machines — five bugs found and fixed, notes filed,
+      the consumer checklist upstreamed to the lobby repo
+- [ ] Play a full game by hand over local wifi — `vite --host` plus the game server on
+      the LAN; this is the current test rig
 - [ ] Reconcile the 1d/1f board copy against the design project
+- [ ] Deploy the game server — **deferred**, not being done yet. When it happens, the
+      hosting decision below gets made there (owner's Render workspace, or one process
+      for both games)
 
 Reuse the lobby from [`acquire-startups-m1`](../acquire-startups-m1) rather than building
 one. That repo extracted its lobby — rooms, seats, join/rejoin tokens, presence, rename,
