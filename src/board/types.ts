@@ -11,14 +11,18 @@ import type { SeatId } from '../state/events';
 export type ScreenId =
   | 'home' | 'passAndPlay' | 'saved' | 'confirm' | 'play' | 'regionBallot' | 'homes' | 'map'
   /**
-   * Online. There is no id for "create a room": creating one seats you in it
-   * immediately (the Lobby Flow correction), so NEW ROOM is an action, not a
-   * screen you can be on.
+   * Online. `online` is board 1d — the two ways in, stated as destinations.
+   * There is no id for "create a room": creating one seats you in it
+   * immediately (the Lobby Flow correction), so CREATE ROOM is an action, not
+   * a screen you can be on. `joinRoom` is board 1f.
    */
-  | 'onlineLobby' | 'joinRoom';
+  | 'online' | 'onlineLobby' | 'joinRoom';
 
-/** What an editable row is editing. Seat names, and the room code to join. */
-export type FieldId = `seat:${SeatId}` | 'roomCode';
+/**
+ * What an editable row is editing. Seat names, the room code to join, and the
+ * optional name to join under (board 1f's second row).
+ */
+export type FieldId = `seat:${SeatId}` | 'roomCode' | 'joinName';
 
 export type RowAction =
   | { kind: 'navigate'; to: ScreenId }
@@ -31,8 +35,6 @@ export type RowAction =
   | { kind: 'createRoom' }
   /** Join the room whose code has been typed. */
   | { kind: 'joinRoom' }
-  /** Put the room's URL on the clipboard, for sending to the other players. */
-  | { kind: 'share' }
   /** The host starts the game. */
   | { kind: 'begin' }
   /** Give up your seat and go home. Lobby-only; mid-game leaving is a drop. */
@@ -93,6 +95,13 @@ export interface ScreenDef {
    * uses it, so this belongs to the screen rather than to a row.
    */
   dice?: { roll: TurnRoll | null; live: boolean } | null;
+  /**
+   * The room code, shown big in the header where the dice otherwise go —
+   * the owner's ruling that resolved seven rows being one too few for six
+   * seats, a code row and START GAME. The lobby has no dice and the game
+   * needs no code, so the slot is never contested.
+   */
+  code?: string | null;
 }
 
 /** The board is this many rows on every screen, without exception. */

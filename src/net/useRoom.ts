@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { LobbyConnection } from '../../vendor/lobby/client/connection';
-import { createIdentityStore } from '../../vendor/lobby/client/identity';
 import { useLobbyRoom, type LobbyPhase, type LobbyRoomState } from '../../vendor/lobby/client/useLobbyRoom';
 import { SEATS, type GameEvent, type SeatId } from '../state/events';
 import { getConnection } from './connection';
+import { identity } from './identity';
 import { createGameTransport, type GameTransport } from './transport';
 
 export type RoomPhase =
@@ -17,12 +17,6 @@ export interface RoomState {
   seat: SeatId | null;
   transport: GameTransport;
 }
-
-/**
- * Namespaced: both games share the GitHub Pages origin, so an unprefixed key
- * would have Acquire and Rail Baron overwriting each other's identities.
- */
-const identity = createIdentityStore('railbaron');
 
 /**
  * Which phase wins when the lobby and the log disagree.

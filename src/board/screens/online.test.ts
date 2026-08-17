@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { lobbyView, type LobbySnapshot } from '../../../vendor/lobby/client/view';
 import { BOARD_ROWS } from '../types';
-import { joinRoom, onlineLobby, roomGone } from './online';
+import { joinRoom, onlineChoice, onlineLobby, roomGone } from './online';
 
 const LIMITS = { capacity: 6, minPlayers: 2 };
 
@@ -22,16 +22,101 @@ const snapshot = (over: Partial<LobbySnapshot> = {}): LobbySnapshot => ({
 
 const view = (over: Partial<LobbySnapshot> = {}) => lobbyView(snapshot(over), LIMITS);
 
-describe('the online lobby board', () => {
+describe('the online choice board (1d)', () => {
+  it('is seven rows like every other screen', () => {
+    expect(onlineChoice().rows).toHaveLength(BOARD_ROWS);
+  });
+
+  it('offers exactly the two ways in, and no code entry', () => {
+    const { rows } = onlineChoice();
+    expect(rows[0]!.text).toBe('CREATE ROOM');
+    expect(rows[0]!.action).toEqual({ kind: 'createRoom' });
+    expect(rows[1]!.text).toBe('JOIN WITH CODE');
+    expect(rows[1]!.action).toEqual({ kind: 'navigate', to: 'joinRoom' });
+    // The rest of the board is blank — the code is typed on 1f, not here.
+    expect(rows.slice(2).every((r) => r.action === null && r.text === '')).toBe(true);
+  });
+
+  it('carries the approved copy for each row', () => {
+    const { rows } = onlineChoice();
+    expect(rows[0]!.label).toBe('Host');
+    expect(rows[0]!.status).toBe('New room');
+    expect(rows[0]!.right).toBe('Seats you now');
+    expect(rows[1]!.label).toBe('Guest');
+    expect(rows[1]!.status).toBe('Have a code');
+    expect(rows[1]!.right).toBe('Six letters');
+  });
+
+  it('says so when creating a room fails, and keeps the row tappable', () => {
+    // The bug this guards: the create flow ignored the rejected channel, so a
+    // version mismatch or a dead server produced no change on screen at all.
+    const refused = onlineChoice('Server speaks a different protocol');
+    expect(refused.sub).toBe('SERVER SPEAKS A DIFFERENT PROTOCOL');
+    expect(refused.rows[0]!.status).toBe('Failed');
+    expect(refused.rows[0]!.right).toBe('Try again');
+    expect(refused.rows[0]!.action).toEqual({ kind: 'createRoom' });
+  });
+
+  it('reads normally when nothing has gone wrong', () => {
+    expect(onlineChoice().sub).toBe('EACH PLAYER, OWN DEVICE');
+  });
+});
+
+describe('the join board (1f)', () => {
+  it('is seven rows', () => {
+    expect(joinRoom('', '').rows).toHaveLength(BOARD_ROWS);
+  });
+
+  it('asks for the code first and will not join without six characters', () => {
+    const empty = joinRoom('', '');
+    expect(empty.rows[0]!.action).toEqual({
+      kind: 'edit', field: 'roomCode', placeholder: 'Six letters, press Enter',
+    });
+    expect(empty.rows[0]!.status).toBe('Required');
+    expect(empty.rows[2]!.action).toBeNull();
+    expect(empty.rows[2]!.right).toBe('Code first');
+
+    const ready = joinRoom('ABC234', '');
+    expect(ready.rows[0]!.status).toBe('Ready');
+    expect(ready.rows[2]!.action).toEqual({ kind: 'joinRoom' });
+    expect(ready.rows[2]!.right).toBe('Takes a seat');
+  });
+
+  it('offers a name, optional, with the server naming the seat otherwise', () => {
+    const anonymous = joinRoom('ABC234', '');
+    expect(anonymous.rows[1]!.status).toBe('Optional');
+    expect(anonymous.rows[1]!.right).toBe('Or be seated');
+    expect(anonymous.rows[1]!.action).toEqual({
+      kind: 'edit', field: 'joinName', placeholder: 'Optional, press Enter',
+    });
+
+    const named = joinRoom('ABC234', 'KIT');
+    expect(named.rows[1]!.text).toBe('KIT');
+    expect(named.rows[1]!.status).toBe('Ready');
+    expect(named.rows[1]!.right).toBe('Tap to edit');
+  });
+
+  it('no longer offers a room of its own — that moved to the choice board', () => {
+    const { rows } = joinRoom('', '');
+    expect(rows.every((r) => r.action?.kind !== 'createRoom')).toBe(true);
+  });
+});
+
+describe('the room board (1e)', () => {
   it('is seven rows like every other screen', () => {
     expect(onlineLobby(view()).rows).toHaveLength(BOARD_ROWS);
   });
 
-  it('renders a row per seat, with the empty ones dim and open', () => {
+  it('hands the room code to the header readout, not a row', () => {
+    const screen = onlineLobby(view());
+    expect(screen.code).toBe('ABC234');
+    expect(screen.rows.every((r) => r.text !== 'ABC234' && r.right !== 'ABC234')).toBe(true);
+  });
+
+  it('renders a row per seat, all six, with the empty ones dim and waiting', () => {
     const { rows } = onlineLobby(view());
     expect(rows.slice(0, 2).map((r) => r.text)).toEqual(['ADA', 'BEN']);
-    // Six seats: two taken, four open.
-    expect(rows.slice(2, 6).map((r) => r.text)).toEqual(['OPEN', 'OPEN', 'OPEN', 'OPEN']);
+    expect(rows.slice(2, 6).map((r) => r.text)).toEqual(['WAITING', 'WAITING', 'WAITING', 'WAITING']);
     expect(rows[2]!.tone).toBe('dim');
     expect(rows[2]!.action).toBeNull();
   });
@@ -40,6 +125,12 @@ describe('the online lobby board', () => {
     const { rows } = onlineLobby(view());
     expect(rows[0]!.chip).toBe('#e02b1d');   // red
     expect(rows[1]!.chip).toBe('#5fbb2e');   // green
+  });
+
+  it('names the host on their seat label', () => {
+    const { rows } = onlineLobby(view());
+    expect(rows[0]!.label).toBe('Seat 1 · host');
+    expect(rows[1]!.label).toBe('Seat 2');
   });
 
   it('marks a dropped baron away rather than removing them', () => {
@@ -56,28 +147,30 @@ describe('the online lobby board', () => {
     expect(rows[1]!.text).toBe('BEN');
   });
 
-  it('offers DEPART to the host once there are enough barons', () => {
+  it('offers START GAME to the host once there are enough barons', () => {
     const departure = onlineLobby(view()).rows[6]!;
-    expect(departure.text).toBe('DEPART');
+    expect(departure.text).toBe('START GAME');
+    expect(departure.status).toBe('Ready');
+    expect(departure.right).toBe('Host only');
     expect(departure.action).toEqual({ kind: 'begin' });
-    expect(departure.right).toBe('ABC234');
   });
 
-  it('says why it cannot depart, and offers the code to share instead', () => {
+  it('says why it cannot start yet', () => {
     const alone = onlineLobby(view({
       roster: {
         roomId: 'ABC234', lifecycle: 'lobby',
         players: [{ id: 'red', name: 'ADA', isHost: true, connected: true }],
       },
     })).rows[6]!;
+    expect(alone.text).toBe('START GAME');
     expect(alone.status).toBe('Need 2 barons');
-    expect(alone.action).toEqual({ kind: 'share' });
+    expect(alone.action).toBeNull();
   });
 
-  it('does not offer DEPART to a player who is not the host', () => {
+  it('does not offer START GAME to a player who is not the host', () => {
     const guest = onlineLobby(view({ playerId: 'green' })).rows[6]!;
     expect(guest.status).toBe('Host starts');
-    expect(guest.action).toEqual({ kind: 'share' });
+    expect(guest.action).toBeNull();
   });
 
   it('lets you edit your own seat and nobody else’s', () => {
@@ -86,21 +179,6 @@ describe('the online lobby board', () => {
       kind: 'edit', field: 'seat:red', placeholder: 'Type a name, press Enter',
     });
     expect(rows[1]!.action).toBeNull();
-  });
-});
-
-describe('the join board', () => {
-  it('will not join until the code is six characters', () => {
-    expect(joinRoom('ABC').rows[1]!.action).toBeNull();
-    expect(joinRoom('ABC234').rows[1]!.action).toEqual({ kind: 'joinRoom' });
-  });
-
-  it('always offers a room of your own', () => {
-    expect(joinRoom('').rows[2]!.action).toEqual({ kind: 'createRoom' });
-  });
-
-  it('is seven rows', () => {
-    expect(joinRoom('').rows).toHaveLength(BOARD_ROWS);
   });
 });
 
@@ -113,26 +191,7 @@ describe('the terminals', () => {
   });
 });
 
-describe('the join board when the server refuses', () => {
-  it('says so rather than sitting there', () => {
-    // The bug this guards: JoinRoomApp ignored the rejected channel, so a
-    // version mismatch or a dead server produced no change on screen at all.
-    const refused = joinRoom('', 'Server speaks a different protocol');
-    expect(refused.sub).toBe('SERVER SPEAKS A DIFFERENT PROTOCOL');
-    expect(refused.rows[2]!.status).toBe('Failed');
-    expect(refused.rows[2]!.right).toBe('Try again');
-    // And NEW ROOM stays tappable, because retrying is the remedy.
-    expect(refused.rows[2]!.action).toEqual({ kind: 'createRoom' });
-  });
-
-  it('reads normally when nothing has gone wrong', () => {
-    const fine = joinRoom('');
-    expect(fine.sub).toBe('JOIN A ROOM');
-    expect(fine.rows[2]!.status).toBe('Or');
-  });
-});
-
-describe('the lobby board when the server refuses something', () => {
+describe('the room board when the server refuses something', () => {
   it('carries the refusal, and keeps the room code beside it', () => {
     // The lobby hook ranks the roster above refusal messages so a seated
     // player is never thrown back to a join form — which means the message
