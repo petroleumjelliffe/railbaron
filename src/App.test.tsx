@@ -471,19 +471,21 @@ describe('rolling the turn dice from the board', () => {
 describe('the online routes', () => {
   beforeEach(snapTransitions);
 
-  it('offers the join board at /online', () => {
+  it('offers the two ways in at /online, with no code entry', () => {
     at('/online');
-    expect(screen.getByText('JOIN A ROOM')).toBeInTheDocument();
-    expect(screen.getByText('NEW ROOM')).toBeInTheDocument();
+    expect(screen.getByText('EACH PLAYER, OWN DEVICE')).toBeInTheDocument();
+    // Each cell is rendered three times — the accessible text plus the two
+    // halves of the flap — so these are always getAllByText.
+    expect(screen.getAllByText('CREATE ROOM').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('JOIN WITH CODE').length).toBeGreaterThan(0);
+    expect(screen.queryByText('TAP TO ENTER')).toBeNull();
   });
 
   it('will not join until a code has been typed', () => {
-    at('/online');
-    // Each cell is rendered three times — the accessible text plus the two
-    // halves of the flap — so these are always getAllByText.
-    expect(screen.getAllByText('TAP TO TYPE').length).toBeGreaterThan(0);
+    at('/online/join');
+    expect(screen.getAllByText('TAP TO ENTER').length).toBeGreaterThan(0);
     // The JOIN row is dim until six characters are in.
-    expect(screen.getAllByText('Need a code').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Code first').length).toBeGreaterThan(0);
   });
 
   it('renders a room route without a server rather than crashing', () => {
@@ -491,14 +493,21 @@ describe('the online routes', () => {
     // seats. The point is that it is a board and not a blank page, a crash,
     // or a redirect home.
     at('/room/ABC234');
-    expect(screen.getAllByText('OPEN').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('WAITING').length).toBeGreaterThan(0);
   });
 
-  it('sends the home screen’s online row to the join board', async () => {
+  it('sends the home screen’s online row to the choice board', async () => {
     const user = userEvent.setup();
     at('/');
     await user.click(screen.getByText('PLAY ONLINE'));
-    expect(screen.getByText('JOIN A ROOM')).toBeInTheDocument();
+    expect(screen.getByText('EACH PLAYER, OWN DEVICE')).toBeInTheDocument();
+  });
+
+  it('sends JOIN WITH CODE to the join board', async () => {
+    const user = userEvent.setup();
+    at('/online');
+    await user.click(screen.getAllByText('JOIN WITH CODE')[0]!);
+    expect(screen.getByText('ENTER A CODE')).toBeInTheDocument();
   });
 });
 
@@ -514,18 +523,29 @@ describe('typing a room code', () => {
 
   it('opens an input when the code row is tapped', async () => {
     const user = userEvent.setup();
-    at('/online');
-    await user.click(screen.getAllByText('TAP TO TYPE')[0]!);
+    at('/online/join');
+    await user.click(screen.getAllByText('TAP TO ENTER')[0]!);
     expect(screen.getByRole('textbox')).toBeInTheDocument();
   });
 
   it('takes a typed code and lights the join row', async () => {
     const user = userEvent.setup();
-    at('/online');
-    await user.click(screen.getAllByText('TAP TO TYPE')[0]!);
+    at('/online/join');
+    await user.click(screen.getAllByText('TAP TO ENTER')[0]!);
     await user.type(screen.getByRole('textbox'), 'ABC234{Enter}');
-    // The code is on the board, and JOIN ROOM is live rather than dim.
+    // The code is on the board, and JOIN GAME is live rather than dim.
     expect(screen.getAllByText('ABC234').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Takes a seat').length).toBeGreaterThan(0);
+  });
+
+  it('takes an optional name on its own row', async () => {
+    const user = userEvent.setup();
+    at('/online/join');
+    // The whole row acts, so the name row is reached by the text only it
+    // carries — both rows say TAP TO ENTER.
+    await user.click(screen.getAllByText('Or be seated')[0]!);
+    await user.type(screen.getByRole('textbox'), 'kit{Enter}');
+    expect(screen.getAllByText('KIT').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Tap to edit').length).toBeGreaterThan(0);
   });
 });

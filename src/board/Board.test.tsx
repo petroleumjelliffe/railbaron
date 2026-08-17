@@ -68,6 +68,27 @@ describe('the board', () => {
     expect(screen.getByText('Select')).toBeInTheDocument();
   });
 
+  it('shows the room code where the dice go, and shares it on a tap', () => {
+    const onShare = vi.fn();
+    render(
+      <Board
+        screen={{ ...screenDef([]), code: 'ABC234' }}
+        onRowAct={() => {}}
+        onBack={() => {}}
+        onShare={onShare}
+      />
+    );
+    const code = screen.getByRole('button', { name: /room code ABC234/i });
+    expect(code).toBeInTheDocument();
+    act(() => { code.click(); });
+    expect(onShare).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows no code readout when the screen carries none', () => {
+    render(board(screenDef([])));
+    expect(screen.queryByRole('button', { name: /room code/i })).toBeNull();
+  });
+
   it('reads out the destination throughout a flap, not the spinning tiles', () => {
     // A screen reader must not narrate two seconds of alphabet.
     vi.useFakeTimers();

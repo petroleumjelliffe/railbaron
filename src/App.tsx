@@ -8,7 +8,7 @@ import { saved } from './board/screens/saved';
 import { confirm } from './board/screens/confirm';
 import type { FieldId, Row, ScreenDef } from './board/types';
 import { useGameShell } from './GameShell';
-import { JoinRoomApp, RoomApp } from './OnlineApp';
+import { JoinRoomApp, OnlineChoiceApp, RoomApp } from './OnlineApp';
 
 /**
  * The map is loaded only when someone asks for it. It carries the projected
@@ -42,6 +42,7 @@ const isKnown = (path: string): path is KnownRoute =>
  * why that is a deliberate trade rather than an oversight.
  */
 const ONLINE_ROUTE = '/online';
+const JOIN_ROUTE = '/online/join';
 
 /**
  * There is exactly one Board, mounted above the routing, and the route only
@@ -69,7 +70,8 @@ export default function App({ rng }: AppProps = {}) {
     useState<{ field: FieldId; seat: SeatId; placeholder: string } | null>(null);
   const [confirming, setConfirming] = useState(false);
 
-  if (pathname === ONLINE_ROUTE) return <JoinRoomApp />;
+  if (pathname === ONLINE_ROUTE) return <OnlineChoiceApp />;
+  if (pathname === JOIN_ROUTE) return <JoinRoomApp />;
   const inRoom = matchPath('/room/:code', pathname);
   if (inRoom?.params.code) return <RoomApp code={inRoom.params.code} />;
 

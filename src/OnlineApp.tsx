@@ -3,12 +3,13 @@ import { useNavigate } from 'react-router-dom';
 import { lobbyView, type LobbyLimits } from '../vendor/lobby/client/view';
 import { Board } from './board/Board';
 import {
-  joinRoom as joinRoomScreen, onlineLobby, roomGone, roomRefused, staleClient,
+  joinRoom as joinRoomScreen, onlineChoice, onlineLobby, roomGone, roomRefused, staleClient,
 } from './board/screens/online';
 import type { FieldId, Row, ScreenDef } from './board/types';
 import { useGameShell } from './GameShell';
 import { SERVER_URL } from './config';
 import { closeConnection, getConnection } from './net/connection';
+import { identity } from './net/identity';
 import { useOnlineGame } from './net/useOnlineGame';
 import { useRoom, type RoomState } from './net/useRoom';
 import { SEATS, type SeatId } from './state/events';
@@ -37,11 +38,9 @@ const LIMITS: LobbyLimits = { capacity: SEATS.length, minPlayers: 2 };
 
 const shellStyle = { height: '100%' } as const;
 
-/** `/online` — type a code, or open a room of your own. */
-export function JoinRoomApp() {
+/** `/online` — board 1d: the two ways in, stated as destinations. */
+export function OnlineChoiceApp() {
   const navigate = useNavigate();
-  const [code, setCode] = useState('');
-  const [editing, setEditing] = useState<{ placeholder: string } | null>(null);
   const [creating, setCreating] = useState(false);
   const [note, setNote] = useState<string | null>(null);
 
@@ -97,11 +96,51 @@ export function JoinRoomApp() {
         setNote(null);
         setCreating(true);
         return;
+      case 'navigate':
+        if (row.action.to === 'joinRoom') navigate('/online/join');
+        if (row.action.to === 'home') navigate('/');
+    }
+  };
+
+  return (
+    <main style={shellStyle}>
+      <Board
+        screen={onlineChoice(note)}
+        awaitRegion={null}
+        onRollDice={() => {}}
+        awaitDice={null}
+        onBack={() => navigate('/')}
+        onRowAct={onRowAct}
+      />
+    </main>
+  );
+}
+
+/** `/online/join` — board 1f: code first, name second, both click-to-input. */
+export function JoinRoomApp() {
+  const navigate = useNavigate();
+  const [code, setCode] = useState('');
+  const [name, setName] = useState('');
+  const [editing, setEditing] =
+    useState<{ field: 'roomCode' | 'joinName'; placeholder: string } | null>(null);
+
+  const join = () => {
+    // The name rides the identity store, not the URL: the lobby's join sends
+    // the remembered name, so writing it here is what makes the typed name
+    // the one the server seats.
+    if (name !== '') identity.rememberName(name);
+    navigate(`/room/${code}`);
+  };
+
+  const onRowAct = (row: Row) => {
+    if (row.action === null) return;
+    switch (row.action.kind) {
       case 'joinRoom':
-        navigate(`/room/${code}`);
+        join();
         return;
       case 'edit':
-        setEditing({ placeholder: row.action.placeholder });
+        if (row.action.field !== 'roomCode' && row.action.field !== 'joinName') return;
+        setEditing({ field: row.action.field, placeholder: row.action.placeholder });
         return;
       case 'navigate':
         if (row.action.to === 'home') navigate('/');
@@ -111,24 +150,29 @@ export function JoinRoomApp() {
   return (
     <main style={shellStyle}>
       <Board
-        screen={joinRoomScreen(code, note)}
+        screen={joinRoomScreen(code, name)}
         awaitRegion={null}
         onRollDice={() => {}}
         awaitDice={null}
         editing={editing && {
-          field: 'roomCode',
+          field: editing.field,
           placeholder: editing.placeholder,
-          // The code itself, not the row's prompt text.
-          initial: code
+          // The underlying value, not the row's prompt text.
+          initial: editing.field === 'roomCode' ? code : name
         }}
         onCommit={(value) => {
-          // Room codes are six unambiguous uppercase characters; typing them
-          // in lower case is the ordinary way a person copies one off a phone.
-          setCode(value.trim().toUpperCase().slice(0, 6));
+          if (editing?.field === 'joinName') {
+            // The board's tiles hold fourteen characters, same as a seat name.
+            setName(value.trim().toUpperCase().slice(0, 14));
+          } else {
+            // Room codes are six unambiguous uppercase characters; typing them
+            // in lower case is the ordinary way a person copies one off a phone.
+            setCode(value.trim().toUpperCase().slice(0, 6));
+          }
           setEditing(null);
         }}
         onCancel={() => setEditing(null)}
-        onBack={() => navigate('/')}
+        onBack={() => navigate('/online')}
         onRowAct={onRowAct}
       />
     </main>
@@ -182,11 +226,6 @@ function RoomBoard({ room, onHome }: { room: RoomState; onHome: () => void }) {
     switch (row.action.kind) {
       case 'begin':
         room.lobby.begin();
-        return;
-      case 'share':
-        // Best-effort. A browser that refuses the clipboard still shows the
-        // code on the row, which is the thing being shared.
-        void navigator.clipboard?.writeText(window.location.href).catch(() => {});
         return;
       case 'leave':
         room.lobby.leaveSeat();
@@ -249,6 +288,10 @@ function RoomBoard({ room, onHome }: { room: RoomState; onHome: () => void }) {
         onCancel={() => setEditing(null)}
         onBack={onHome}
         onRowAct={onRowAct}
+        // Best-effort. A browser that refuses the clipboard still shows the
+        // code on the readout, which is the thing being shared.
+        onShare={() =>
+          void navigator.clipboard?.writeText(window.location.href).catch(() => {})}
       />
     </main>
   );

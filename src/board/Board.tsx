@@ -36,11 +36,13 @@ export interface BoardProps {
   editing?: { field: FieldId; placeholder: string; initial: string } | null;
   onCommit?: (value: string) => void;
   onCancel?: () => void;
+  /** Fires when the room-code readout is tapped. The caller owns the clipboard. */
+  onShare?: () => void;
 }
 
 export function Board({
   screen, onRowAct, onBack, awaitRegion = null, awaitDice = null, onRollDice,
-  editing = null, onCommit, onCancel
+  editing = null, onCommit, onCancel, onShare
 }: BoardProps) {
   const rows = useMemo(() => padRows(screen.rows), [screen.rows]);
   const texts = useMemo(
@@ -128,6 +130,39 @@ export function Board({
             onRoll={onRollDice}
             onLanded={awaitDice?.onLanded}
           />
+        )}
+        {/* The room code takes the dice's slot — the lobby has no dice and
+            the game needs no code, so the two never contest it. */}
+        {!screen.dice && screen.code && (
+          <button
+            type="button"
+            aria-label={`Room code ${screen.code} — copy the link`}
+            onClick={() => onShare?.()}
+            style={{
+              position: 'absolute', left: '50%', top: '50%',
+              transform: 'translate(-50%,-50%)',
+              display: 'flex', alignItems: 'baseline', gap: 14,
+              cursor: 'pointer', background: 'transparent', border: 0,
+              padding: '6px 10px', font: 'inherit'
+            }}
+          >
+            <span
+              style={{
+                fontSize: 30, fontWeight: 700, letterSpacing: '0.22em',
+                color: TOKENS.amber, textTransform: 'uppercase'
+              }}
+            >
+              {screen.code}
+            </span>
+            <span
+              style={{
+                fontSize: 11, letterSpacing: '0.24em', color: TOKENS.dim,
+                textTransform: 'uppercase'
+              }}
+            >
+              Copy link
+            </span>
+          </button>
         )}
       </header>
 
