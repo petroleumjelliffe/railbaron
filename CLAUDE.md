@@ -36,6 +36,7 @@ npm run typecheck   # tsc --noEmit
 npm run build        # vite build, production bundle to dist/
 npm run build:server # a guard, not a build: fails if vendor/lobby is empty
 npm run preview      # serve the production build locally
+npm run serve        # build, then one process hosting client + sockets on 4001
 
 npx vitest run engine/payouts.test.ts        # one test file
 npx vitest run --project node                # one project (node | app)

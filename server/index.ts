@@ -1,9 +1,13 @@
 // server/index.ts
-// Boot. Express for /health, socket.io for everything that matters, the
-// lobby's handlers and the game's over one connection.
+// Boot. Express for /health and the built client, socket.io for everything
+// that matters, the lobby's handlers and the game's over one connection.
+import { existsSync } from 'node:fs';
 import { createServer } from 'node:http';
+import { dirname, join, resolve as resolvePath } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import cors from 'cors';
 import express from 'express';
+import { BASE_PATH } from '../basePath';
 import { Server as SocketServer } from 'socket.io';
 import {
   GAME_SERVER_EVENTS, RB_PROTOCOL_VERSION, RB_SAVE_VERSION,
@@ -19,8 +23,15 @@ export interface RunningServer {
   close(): Promise<void>;
 }
 
+/**
+ * Resolved from this module's location, not the working directory — the
+ * GAMES_DIR lesson: a service's cwd is wherever its plist says, and a
+ * relative path would quietly serve nothing.
+ */
+const DEFAULT_DIST = resolvePath(dirname(fileURLToPath(import.meta.url)), '..', 'dist');
+
 export async function startServer(
-  opts: { port: number; gamesDir: string },
+  opts: { port: number; gamesDir: string; distDir?: string },
 ): Promise<RunningServer> {
   const app = express();
   app.use(cors());
@@ -34,6 +45,26 @@ export async function startServer(
       saveVersion: RB_SAVE_VERSION,
     });
   });
+
+  // The built client, served under its base path so this one process is the
+  // whole game: http://<host>:<port>/railbaron/ is pages, assets and (via
+  // the client's hostname derivation) sockets. Checked at boot, not per
+  // request — `npm run dev:server` without a build is the ordinary dev case
+  // (Vite serves the client then), so it's a note, not an error.
+  const dist = opts.distDir ?? DEFAULT_DIST;
+  if (existsSync(join(dist, 'index.html'))) {
+    app.use(BASE_PATH, express.static(dist));
+    // SPA fallback: a direct load or refresh of /railbaron/room/ABCD is a
+    // client-side route, not a file — hand every unmatched GET under the
+    // base path back to the router, exactly the job 404.html does on Pages.
+    app.use(BASE_PATH, (req, res, next) => {
+      if (req.method !== 'GET') { next(); return; }
+      res.sendFile(join(dist, 'index.html'));
+    });
+    console.log(`Serving built client at ${BASE_PATH}/ from ${dist}`);
+  } else {
+    console.log(`No built client (${join(dist, 'index.html')} missing) — ${BASE_PATH}/ will 404. Run \`npm run build\` to host the client from this server.`);
+  }
 
   const http = createServer(app);
   const io = new SocketServer(http, { cors: { origin: '*' } });

@@ -15,6 +15,14 @@ design below, both deliberate:
   `<page hostname>:4001` and speaks to the server port directly — fine on a LAN, and
   zero submodule changes. Revisit only if the ports ever stop being reachable.
 
+**The shared prerequisite (serve-own-client) landed 2026-08-17**: `startServer` serves
+`dist/` under the base path with an SPA fallback (tested in
+`server/staticClient.test.ts`), `npm run serve` is the one-command hosted mode, the
+game-host repo's start script uses it, and its Caddyfile points `/railbaron/*` at 4001.
+The share-link fix (`/net-info` or host-browses-the-network-URL) remains open, as does
+the origin-relative socket change — specced separately in the game-host repo's
+`specs/2026-08-17-origin-relative-clients.md`.
+
 Also discovered at implementation: the Tier 2 base-path risk was already paid —
 `basePath.ts` has built the client under `/railbaron` for GitHub Pages all along, in
 dev too, so Caddy proxies without stripping the prefix and no game code changed for it.
