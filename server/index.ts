@@ -130,7 +130,22 @@ if (invoked.endsWith('server/index.ts') || invoked.endsWith('server/index.js')) 
   const port = Number(process.env.PORT ?? process.env.VITE_SERVER_PORT ?? 4001);
   const gamesDir = process.env.GAMES_DIR ?? 'server/games';
 
-  startServer({ port, gamesDir }).catch((error: unknown) => {
+  startServer({ port, gamesDir }).then((server) => {
+    // close() has always known how to drain in-flight saves (rooms.settled(),
+    // so the last move's write lands before the process dies) — but until
+    // here nothing called it on the signals that actually stop a server:
+    // SIGTERM from launchd/`brew services stop`, SIGINT from Ctrl-C. A
+    // second signal skips the drain — if close() is wedged, the way out
+    // should not be `kill -9`.
+    let closing = false;
+    const stop = (): void => {
+      if (closing) process.exit(1);
+      closing = true;
+      void server.close().then(() => { process.exit(0); });
+    };
+    process.on('SIGTERM', stop);
+    process.on('SIGINT', stop);
+  }).catch((error: unknown) => {
     const code = (error as { code?: string } | null)?.code;
     if (code === 'EADDRINUSE') {
       console.error(
