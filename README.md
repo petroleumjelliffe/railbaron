@@ -8,19 +8,16 @@ the physical board; the app rolls each baron's next destination and works out th
 npm install
 git submodule update --init --recursive   # vendor/lobby, needed by the server
 
-npm run dev        # client only, http://localhost:5173
+npm run dev        # client only, http://localhost:7931/railbaron/
 npm run dev:all    # client + game server, for online mode
 npm test
 ```
 
-Online mode needs both halves running. The game server defaults to port 3001 — as
-does the sibling Acquire server, so if you run both, move this one by putting a
-line in `.env.local` (gitignored) and then starting normally:
-
-```bash
-echo "VITE_SERVER_PORT=3055" >> .env.local
-npm run dev:all
-```
+Online mode needs both halves running. Ports come from the cross-game registry in
+the sibling `game-host` repo's `PORTS.md` — Rail Baron's slots are server 4001,
+dev client 7931. To move the server port for a one-off, put `VITE_SERVER_PORT=<port>` in
+`.env.local` (gitignored) and start normally; client and server read the same file,
+so the halves cannot disagree.
 
 One file, both halves: Vite hands the port to the client, and the server loads the
 same file itself, so there is no env prefix to remember and no way for the two to

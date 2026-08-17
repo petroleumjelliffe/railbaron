@@ -123,7 +123,11 @@ if (invoked.endsWith('server/index.ts') || invoked.endsWith('server/index.js')) 
     // No such file is the ordinary case, not an error.
   }
 
-  const port = Number(process.env.PORT ?? process.env.VITE_SERVER_PORT ?? 3001);
+  // 4001 is Rail Baron's slot in the cross-game registry (the game-host
+  // repo's PORTS.md).
+  // Must agree with src/config.ts's DEFAULT_SERVER_PORT, or a client with no
+  // env at all derives a port nothing is listening on.
+  const port = Number(process.env.PORT ?? process.env.VITE_SERVER_PORT ?? 4001);
   const gamesDir = process.env.GAMES_DIR ?? 'server/games';
 
   startServer({ port, gamesDir }).catch((error: unknown) => {
@@ -134,7 +138,7 @@ if (invoked.endsWith('server/index.ts') || invoked.endsWith('server/index.js')) 
         + '  Find it:   lsof -nP -iTCP:' + String(port) + ' -sTCP:LISTEN\n'
         + '  Or move:   set VITE_SERVER_PORT in .env.local to a free port, which\n'
         + '             moves this server and the client together.\n\n'
-        + '  Note 3001 is also the sibling Acquire dev server\'s default.\n',
+        + '  The cross-game port registry is the game-host repo\'s PORTS.md.\n',
       );
       process.exit(1);
     }

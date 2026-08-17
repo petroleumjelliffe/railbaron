@@ -44,6 +44,23 @@ const PURE_STATE_TESTS = 'src/state/!(storage).test.ts';
 
 export default defineConfig({
   base: BASE_PATH,
+  server: {
+    // 7931 is Rail Baron's dev-client slot in the cross-game port registry
+    // (the game-host repo's PORTS.md); the reverse proxy points at it, so
+    // strictPort fails loudly rather than sliding to 7932 — which is
+    // Acquire's slot — and leaving the proxy serving the wrong game.
+    port: 7931,
+    strictPort: true,
+    // Listen on the LAN, not just localhost: friends' devices reach this
+    // machine directly (Tier 1) or via the reverse proxy (Tier 2) — see
+    // docs/superpowers/specs/2026-08-16-lan-hosting-design.md.
+    host: true,
+    // Vite's DNS-rebind guard refuses Host headers it doesn't know. The
+    // leading dot is Vite's suffix wildcard: any mDNS name — this machine's
+    // and its next rename — without opening the server to arbitrary hosts
+    // the way `allowedHosts: true` would.
+    allowedHosts: ['.local'],
+  },
   plugins: [react(), pagesFallback()],
   test: {
     globals: true,
