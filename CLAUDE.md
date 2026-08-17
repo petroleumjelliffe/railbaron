@@ -25,8 +25,10 @@ win condition) and Phase 3 (online multiplayer) are ahead.
 
 ```bash
 npm install
-npm run dev        # Vite dev server, http://localhost:5173
-npm run dev:server  # game server (online mode), port 3001 — PORT overrides
+git submodule update --init --recursive  # vendor/lobby — the server imports it at runtime
+
+npm run dev        # Vite dev server, http://localhost:7931/railbaron/
+npm run dev:server  # game server (online mode), port 4001
 npm run dev:all     # both at once; online mode needs both
 npm test            # vitest run — every project, once
 npm run test:watch  # vitest, watch mode
@@ -34,9 +36,29 @@ npm run typecheck   # tsc --noEmit
 npm run build        # vite build, production bundle to dist/
 npm run build:server # a guard, not a build: fails if vendor/lobby is empty
 npm run preview      # serve the production build locally
+npm run serve        # build, then one process hosting client + sockets on 4001
+
+npx vitest run engine/payouts.test.ts        # one test file
+npx vitest run --project node                # one project (node | app)
+npx vitest run src/board/screens/play.test.ts -t "shows a zero-paying"  # one test by name
+# scope -t to a file: a bare name filter marks every non-matching file as failed
+
+npm run graph:validate  # structural checks on data/rail-baron-graph.json
+npm run network:build   # rebuild engine/network.json from the traced graph
+npm run outline:build   # rebuild the coastline outline
 ```
 
-The sibling Acquire server also defaults to 3001, so set `PORT` if both are up.
+Ports come from the cross-game registry — canonical in the sibling
+[`game-host`](../game-host) repo's `PORTS.md`, alongside the Caddy reverse proxy and
+game-night menu that consume it: each game hosted from this machine gets a server slot
+(4001+) and a dev-client slot (7931+); Rail Baron is 4001/7931, hardcoded here as
+defaults. Vite pins its port with `strictPort` and listens on the LAN (`host: true`), so
+friends on the wifi reach it directly or through the proxy — see
+[docs/superpowers/specs/2026-08-16-lan-hosting-design.md](docs/superpowers/specs/2026-08-16-lan-hosting-design.md).
+To move the server port anyway, put `VITE_SERVER_PORT=<port>` in `.env.local`
+(gitignored) — Vite hands it to the client and the server reads the same file, so the
+halves cannot disagree. `PORT` still overrides for a one-off, and production sets a full
+`VITE_SERVER_URL` instead.
 
 Tests run as two Vitest projects (`vite.config.ts`). **`node`** takes everything that runs
 inside the server process in production — `engine/`, `session/`, `server/`, the pure half
@@ -140,10 +162,16 @@ affects movement; a two-edge junction is correct data, not an unfinished fork.
 array *including rejected entries*, so ids stay stable when a point is rejected. Never
 renumber; a rejected endpoint orphans its edges rather than silently repointing them.
 
-Coordinates in `data/` are **scan pixel space, 1280×642**. The build step fits a
-scan→lat/lon warp from the 67 city correspondences and pushes every node through it, so
-the shipped data is real geography while the printed map's actual route shapes survive —
-one rendered bulb per real dot, at its real place.
+Coordinates in `data/` are **scan pixel space, 1280×642**. The pipeline:
+[`data/rail-baron-graph.json`](data/rail-baron-graph.json) is the hand-traced source of
+truth; [`scripts/build-network.mjs`](scripts/build-network.mjs) (`npm run network:build`)
+fits a scan→geography warp — a thin-plate spline through the 67 city correspondences,
+via Albers — and writes [`engine/network.json`](engine/network.json), which is what the
+app imports (via `engine/network.ts`). So the shipped data is real geography while the
+printed map's actual route shapes survive — one rendered bulb per real dot, at its real
+place. After editing the traced graph, run `npm run graph:validate` (dead ends, orphans,
+railroads secretly in two pieces) and rebuild the network; the build fails loudly rather
+than emitting suspect data.
 
 ### The editor is not in this repo
 
@@ -236,6 +264,8 @@ that looks unrelated to storage at all.
 
 ## Working notes
 
+- **Every push to `main` deploys to GitHub Pages**, gated by the suite and the
+  typecheck — a companion that is wrong about a payout is worse than one that is down.
 - **The branch is `main`.** Renamed from `master` 2026-08-11; `origin/master` is deleted.
   `bugfixes`, `flippy` and `jsfixes` are 2013–2014 leftovers, deliberately kept.
 - **The 2013 jQuery app is gone from the working tree.** `index2.html`, `js/`, `css/`, and

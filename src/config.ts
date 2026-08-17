@@ -1,5 +1,11 @@
-/** The game server's port when no full URL is given. */
-export const DEFAULT_SERVER_PORT = '3001';
+/**
+ * The game server's port when no full URL is given.
+ *
+ * 4001 is Rail Baron's slot in the cross-game port registry — canonical in
+ * the game-host repo's PORTS.md: servers count up from 4001, dev clients
+ * from 7931.
+ */
+export const DEFAULT_SERVER_PORT = '4001';
 
 /**
  * The server this client speaks to.

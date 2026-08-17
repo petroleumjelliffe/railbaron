@@ -1,9 +1,13 @@
 // server/index.ts
-// Boot. Express for /health, socket.io for everything that matters, the
-// lobby's handlers and the game's over one connection.
+// Boot. Express for /health and the built client, socket.io for everything
+// that matters, the lobby's handlers and the game's over one connection.
+import { existsSync } from 'node:fs';
 import { createServer } from 'node:http';
+import { dirname, join, resolve as resolvePath } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import cors from 'cors';
 import express from 'express';
+import { BASE_PATH } from '../basePath';
 import { Server as SocketServer } from 'socket.io';
 import {
   GAME_SERVER_EVENTS, RB_PROTOCOL_VERSION, RB_SAVE_VERSION,
@@ -19,8 +23,15 @@ export interface RunningServer {
   close(): Promise<void>;
 }
 
+/**
+ * Resolved from this module's location, not the working directory — the
+ * GAMES_DIR lesson: a service's cwd is wherever its plist says, and a
+ * relative path would quietly serve nothing.
+ */
+const DEFAULT_DIST = resolvePath(dirname(fileURLToPath(import.meta.url)), '..', 'dist');
+
 export async function startServer(
-  opts: { port: number; gamesDir: string },
+  opts: { port: number; gamesDir: string; distDir?: string },
 ): Promise<RunningServer> {
   const app = express();
   app.use(cors());
@@ -34,6 +45,26 @@ export async function startServer(
       saveVersion: RB_SAVE_VERSION,
     });
   });
+
+  // The built client, served under its base path so this one process is the
+  // whole game: http://<host>:<port>/railbaron/ is pages, assets and (via
+  // the client's hostname derivation) sockets. Checked at boot, not per
+  // request — `npm run dev:server` without a build is the ordinary dev case
+  // (Vite serves the client then), so it's a note, not an error.
+  const dist = opts.distDir ?? DEFAULT_DIST;
+  if (existsSync(join(dist, 'index.html'))) {
+    app.use(BASE_PATH, express.static(dist));
+    // SPA fallback: a direct load or refresh of /railbaron/room/ABCD is a
+    // client-side route, not a file — hand every unmatched GET under the
+    // base path back to the router, exactly the job 404.html does on Pages.
+    app.use(BASE_PATH, (req, res, next) => {
+      if (req.method !== 'GET') { next(); return; }
+      res.sendFile(join(dist, 'index.html'));
+    });
+    console.log(`Serving built client at ${BASE_PATH}/ from ${dist}`);
+  } else {
+    console.log(`No built client (${join(dist, 'index.html')} missing) — ${BASE_PATH}/ will 404. Run \`npm run build\` to host the client from this server.`);
+  }
 
   const http = createServer(app);
   const io = new SocketServer(http, { cors: { origin: '*' } });
@@ -123,10 +154,29 @@ if (invoked.endsWith('server/index.ts') || invoked.endsWith('server/index.js')) 
     // No such file is the ordinary case, not an error.
   }
 
-  const port = Number(process.env.PORT ?? process.env.VITE_SERVER_PORT ?? 3001);
+  // 4001 is Rail Baron's slot in the cross-game registry (the game-host
+  // repo's PORTS.md).
+  // Must agree with src/config.ts's DEFAULT_SERVER_PORT, or a client with no
+  // env at all derives a port nothing is listening on.
+  const port = Number(process.env.PORT ?? process.env.VITE_SERVER_PORT ?? 4001);
   const gamesDir = process.env.GAMES_DIR ?? 'server/games';
 
-  startServer({ port, gamesDir }).catch((error: unknown) => {
+  startServer({ port, gamesDir }).then((server) => {
+    // close() has always known how to drain in-flight saves (rooms.settled(),
+    // so the last move's write lands before the process dies) — but until
+    // here nothing called it on the signals that actually stop a server:
+    // SIGTERM from launchd/`brew services stop`, SIGINT from Ctrl-C. A
+    // second signal skips the drain — if close() is wedged, the way out
+    // should not be `kill -9`.
+    let closing = false;
+    const stop = (): void => {
+      if (closing) process.exit(1);
+      closing = true;
+      void server.close().then(() => { process.exit(0); });
+    };
+    process.on('SIGTERM', stop);
+    process.on('SIGINT', stop);
+  }).catch((error: unknown) => {
     const code = (error as { code?: string } | null)?.code;
     if (code === 'EADDRINUSE') {
       console.error(
@@ -134,7 +184,7 @@ if (invoked.endsWith('server/index.ts') || invoked.endsWith('server/index.js')) 
         + '  Find it:   lsof -nP -iTCP:' + String(port) + ' -sTCP:LISTEN\n'
         + '  Or move:   set VITE_SERVER_PORT in .env.local to a free port, which\n'
         + '             moves this server and the client together.\n\n'
-        + '  Note 3001 is also the sibling Acquire dev server\'s default.\n',
+        + '  The cross-game port registry is the game-host repo\'s PORTS.md.\n',
       );
       process.exit(1);
     }
