@@ -6,7 +6,7 @@ import { createServer } from 'node:http';
 import { dirname, join, resolve as resolvePath } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import cors from 'cors';
-import express from 'express';
+import express, { type Request, type Response } from 'express';
 import { BASE_PATH } from '../basePath';
 import { Server as SocketServer } from 'socket.io';
 import {
@@ -30,25 +30,48 @@ export interface RunningServer {
  */
 const DEFAULT_DIST = resolvePath(dirname(fileURLToPath(import.meta.url)), '..', 'dist');
 
+/**
+ * Where socket.io mounts unless an option says otherwise: the same
+ * front-door route as pages and assets, so one proxied prefix carries the
+ * whole game. Exported for the socket suites — their clients must ask for
+ * this path or hang on socket.io's bare default.
+ */
+export const SOCKET_PATH = `${BASE_PATH}/socket.io`;
+
 export async function startServer(
-  opts: { port: number; gamesDir: string; distDir?: string },
+  opts: {
+    port: number;
+    gamesDir: string;
+    distDir?: string;
+    /** Where socket.io mounts. Absent means SOCKET_PATH, which pins test
+     *  servers by construction — no ambient env can move their mount. The
+     *  env read (SOCKET_PATH) lives in the boot block, with PORT and
+     *  GAMES_DIR. */
+    socketPath?: string;
+  },
 ): Promise<RunningServer> {
   const app = express();
   app.use(cors());
   // Versions from day one: the client ships to GitHub Pages and the server to
   // Render, independently, so "which halves are these?" has to be answerable
   // without reading a deploy log.
-  app.get('/health', (_req, res) => {
+  const health = (_req: Request, res: Response): void => {
     res.json({
       ok: true,
       protocolVersion: RB_PROTOCOL_VERSION,
       saveVersion: RB_SAVE_VERSION,
     });
-  });
+  };
+  app.get('/health', health);
+  // Twinned under the base path because that is the only route the game-host
+  // front door forwards — a bare /health is unreachable through the proxy.
+  // Registered before the static mounts below so the SPA fallback never
+  // swallows it.
+  app.get(`${BASE_PATH}/health`, health);
 
   // The built client, served under its base path so this one process is the
-  // whole game: http://<host>:<port>/railbaron/ is pages, assets and (via
-  // the client's hostname derivation) sockets. Checked at boot, not per
+  // whole game: http://<host>:<port>/railbaron/ is pages, assets, health and
+  // sockets, one prefix for the front door to forward. Checked at boot, not per
   // request — `npm run dev:server` without a build is the ordinary dev case
   // (Vite serves the client then), so it's a note, not an error.
   const dist = opts.distDir ?? DEFAULT_DIST;
@@ -67,7 +90,10 @@ export async function startServer(
   }
 
   const http = createServer(app);
-  const io = new SocketServer(http, { cors: { origin: '*' } });
+  const io = new SocketServer(http, {
+    cors: { origin: '*' },
+    path: opts.socketPath ?? SOCKET_PATH,
+  });
   const rooms = createRooms(createFileStore(opts.gamesDir));
 
   const sendLog = (room: GameRoom, to: { emit: (e: string, m: LogMessage) => void }): void => {
@@ -120,7 +146,10 @@ export async function startServer(
   });
   const address = http.address();
   const port = typeof address === 'object' && address !== null ? address.port : opts.port;
-  console.log(`Server listening on ${port}`);
+  // The socket path is in the banner because a mismatch is otherwise silent:
+  // a client asking at the wrong mount just hangs on "Connecting…", and this
+  // line is where the effective mount shows itself.
+  console.log(`Server listening on ${port}, sockets at ${io.path()}`);
 
   return {
     port,
@@ -139,15 +168,12 @@ export async function startServer(
 // Run directly (`tsx server/index.ts`); imported by tests without starting.
 const invoked = process.argv[1] ?? '';
 if (invoked.endsWith('server/index.ts') || invoked.endsWith('server/index.js')) {
-  // `.env.local` is where a developer moves the port off 3001, which the
-  // sibling Acquire server also defaults to. The client reads it through Vite;
-  // the server has no bundler to do that for it, so it loads the same file
-  // itself — one place to set the port, and both halves agree without anyone
-  // having to remember an env prefix on the command line.
-  //
-  // VITE_SERVER_PORT is a bundler-flavoured name for a variable this process
-  // also reads, and that is the point: the two halves must not be able to
-  // disagree about which port they mean.
+  // `.env.local` is where a developer moves the port off 4001. The client no
+  // longer reads a port at all — it is origin-relative, and in dev it is
+  // vite.config.ts's proxy target that names this server — so moving the
+  // port means moving that target with it. The server has no bundler to load
+  // the file for it, so it loads it here; VITE_SERVER_PORT keeps working as
+  // a name because existing .env.local files use it.
   try {
     process.loadEnvFile('.env.local');
   } catch {
@@ -155,13 +181,16 @@ if (invoked.endsWith('server/index.ts') || invoked.endsWith('server/index.js')) 
   }
 
   // 4001 is Rail Baron's slot in the cross-game registry (the game-host
-  // repo's PORTS.md).
-  // Must agree with src/config.ts's DEFAULT_SERVER_PORT, or a client with no
-  // env at all derives a port nothing is listening on.
+  // repo's PORTS.md). Must agree with vite.config.ts's dev proxy target, or
+  // a dev client's sockets land on a port nothing is listening on.
   const port = Number(process.env.PORT ?? process.env.VITE_SERVER_PORT ?? 4001);
   const gamesDir = process.env.GAMES_DIR ?? 'server/games';
 
-  startServer({ port, gamesDir }).then((server) => {
+  // SOCKET_PATH is read here, not inside startServer, so a test server's
+  // mount can never be moved by ambient env — same seam as PORT and
+  // GAMES_DIR above. Nothing sets it today; it exists so a deploy that
+  // owns its whole origin could move sockets back to the bare default.
+  startServer({ port, gamesDir, socketPath: process.env.SOCKET_PATH }).then((server) => {
     // close() has always known how to drain in-flight saves (rooms.settled(),
     // so the last move's write lands before the process dies) — but until
     // here nothing called it on the signals that actually stop a server:
@@ -182,8 +211,8 @@ if (invoked.endsWith('server/index.ts') || invoked.endsWith('server/index.js')) 
       console.error(
         `\n✗ Port ${port} is already in use — something is listening there.\n\n`
         + '  Find it:   lsof -nP -iTCP:' + String(port) + ' -sTCP:LISTEN\n'
-        + '  Or move:   set VITE_SERVER_PORT in .env.local to a free port, which\n'
-        + '             moves this server and the client together.\n\n'
+        + '  Or move:   set VITE_SERVER_PORT in .env.local to a free port, and\n'
+        + '             point vite.config.ts\'s dev proxy target there too.\n\n'
         + '  The cross-game port registry is the game-host repo\'s PORTS.md.\n',
       );
       process.exit(1);

@@ -65,18 +65,18 @@ export function JoinRoomApp() {
     // Every way this can fail arrives here or not at all, and both used to be
     // silent: a refusal was ignored, and a server that never answered left the
     // row tapped and the screen unchanged. The commonest cause is not exotic —
-    // the sibling Acquire server also defaults to port 3001, and it answers
-    // with a protocol this client does not speak.
+    // a stale page speaking last week's protocol to a freshly deployed
+    // server, which is why the advice is to reload.
     const offRejected = connection.onRejected((msg) => {
       setCreating(false);
       setNote(msg.code === 'versionMismatch'
-        ? 'Server speaks a different protocol — reload, or check the port'
+        ? 'Server speaks a different protocol — reload to get the newer client'
         : msg.message);
     });
 
     const timer = setTimeout(() => {
       setCreating(false);
-      setNote(`No answer from ${SERVER_URL} — is the game server running?`);
+      setNote(`No answer through ${SERVER_URL} — is the game server behind it running?`);
     }, 8000);
 
     connection.createRoom();

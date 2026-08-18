@@ -15,19 +15,21 @@ npm test
 
 Online mode needs both halves running. Ports come from the cross-game registry in
 the sibling `game-host` repo's `PORTS.md` — Rail Baron's slots are server 4001,
-dev client 7931. To move the server port for a one-off, put `VITE_SERVER_PORT=<port>` in
-`.env.local` (gitignored) and start normally; client and server read the same file,
-so the halves cannot disagree.
+dev client 7931 — and live in exactly three places: that registry, the server's
+boot default, and `vite.config.ts`. No client code names a host or port.
 
-One file, both halves: Vite hands the port to the client, and the server loads the
-same file itself, so there is no env prefix to remember and no way for the two to
-disagree. `PORT` still overrides it for a one-off.
+The client is origin-relative: pages, assets and sockets all ride the origin of
+the page you loaded, with sockets mounted at `/railbaron/socket.io`. In dev,
+Vite's proxy carries that one path to the game server on 4001; hosted (`npm run
+serve`, or behind the game-host front door), the game server answers it itself.
+A phone on the same wifi works for free — its origin is whatever page it loaded.
+Health answers at `/health` and `/railbaron/health`.
 
-The client works out the server's address from the page it was loaded from —
-`http://<hostname>:<port>` — using the hostname rather than `localhost` so a phone
-on the same wifi reaches the dev server on your machine instead of looking for one
-on the phone. `VITE_SERVER_PORT` moves only the port and keeps that; a full
-`VITE_SERVER_URL` replaces the lot, and is what production sets.
+A build that sets `VITE_SERVER_URL` wins outright: sockets go to that server at
+socket.io's default path, because that server owns its whole origin. To move the
+server port for a one-off, put `VITE_SERVER_PORT=<port>` in `.env.local`
+(gitignored) and point `vite.config.ts`'s dev proxy target at the same port;
+`PORT` still overrides.
 
 Built for a tablet in landscape, and deployed to GitHub Pages on every push to
 `main` — the suite and the typecheck gate the deploy, because a companion that

@@ -13,7 +13,7 @@ import {
 import type { GameEvent } from '../src/state/events';
 import { replay } from '../src/state/game';
 import type { JoinedMessage } from '../vendor/lobby/protocol/protocol';
-import { startServer, type RunningServer } from './index';
+import { SOCKET_PATH, startServer, type RunningServer } from './index';
 
 /**
  * The keystone. Task 4's tests prove the authority refuses illegal appends;
@@ -46,7 +46,9 @@ afterEach(() => {
 afterAll(async () => { await server.close(); });
 
 function client(): ClientSocket {
-  const socket = connect(`http://localhost:${server.port}`, { transports: ['websocket'] });
+  const socket = connect(`http://localhost:${server.port}`, {
+    path: SOCKET_PATH, transports: ['websocket'],
+  });
   open.push(socket);
   return socket;
 }
