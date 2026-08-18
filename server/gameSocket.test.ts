@@ -9,7 +9,7 @@ import {
 } from '../session/protocol';
 import type { GameEvent } from '../src/state/events';
 import type { JoinedMessage } from '../vendor/lobby/protocol/protocol';
-import { startServer, type RunningServer } from './index';
+import { SOCKET_PATH, startServer, type RunningServer } from './index';
 
 // Real board data, as in src/state/legal.test.ts: Chicago is 20 (NC, node
 // c24), Atlanta is 9 (SE), and d122 neighbours Chicago.
@@ -45,7 +45,9 @@ function next<T>(socket: ClientSocket, event: string): Promise<T> {
 }
 
 function client(): ClientSocket {
-  const socket = connect(`http://localhost:${server.port}`, { transports: ['websocket'] });
+  const socket = connect(`http://localhost:${server.port}`, {
+    path: SOCKET_PATH, transports: ['websocket'],
+  });
   open.push(socket);
   return socket;
 }

@@ -9,7 +9,7 @@ import {
 } from '../session/protocol';
 import type { GameEvent } from '../src/state/events';
 import type { JoinedMessage } from '../vendor/lobby/protocol/protocol';
-import { startServer, type RunningServer } from './index';
+import { SOCKET_PATH, startServer, type RunningServer } from './index';
 
 /**
  * A Render deploy restarts the process while people are mid-turn, so "the
@@ -41,7 +41,9 @@ async function boot(gamesDir: string): Promise<RunningServer> {
 }
 
 function client(server: RunningServer): ClientSocket {
-  const socket = connect(`http://localhost:${server.port}`, { transports: ['websocket'] });
+  const socket = connect(`http://localhost:${server.port}`, {
+    path: SOCKET_PATH, transports: ['websocket'],
+  });
   open.push(socket);
   return socket;
 }

@@ -76,4 +76,15 @@ describe('serving the built client', () => {
     expect(res.status).toBe(200);
     expect((await res.json() as { ok: boolean }).ok).toBe(true);
   });
+
+  it(`twins health under ${BASE_PATH}, winning over the SPA fallback`, async () => {
+    // The game-host front door forwards only the base path, so a bare
+    // /health is unreachable through it — the twin is what Caddy can see.
+    // Booted with a dist so the SPA fallback is armed: this asserts the
+    // twin is registered ahead of it, JSON rather than index.html.
+    const url = await boot(await fakeDist());
+    const res = await fetch(`${url}${BASE_PATH}/health`);
+    expect(res.status).toBe(200);
+    expect((await res.json() as { ok: boolean }).ok).toBe(true);
+  });
 });
