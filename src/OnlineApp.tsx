@@ -76,7 +76,7 @@ export function JoinRoomApp() {
 
     const timer = setTimeout(() => {
       setCreating(false);
-      setNote(`No answer from ${SERVER_URL} — is the game server running?`);
+      setNote(`No answer through ${SERVER_URL} — is the game server behind it running?`);
     }, 8000);
 
     connection.createRoom();

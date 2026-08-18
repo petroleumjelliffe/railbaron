@@ -51,14 +51,24 @@ npm run outline:build   # rebuild the coastline outline
 Ports come from the cross-game registry — canonical in the sibling
 [`game-host`](../game-host) repo's `PORTS.md`, alongside the Caddy reverse proxy and
 game-night menu that consume it: each game hosted from this machine gets a server slot
-(4001+) and a dev-client slot (7931+); Rail Baron is 4001/7931, hardcoded here as
-defaults. Vite pins its port with `strictPort` and listens on the LAN (`host: true`), so
-friends on the wifi reach it directly or through the proxy — see
-[docs/superpowers/specs/2026-08-16-lan-hosting-design.md](docs/superpowers/specs/2026-08-16-lan-hosting-design.md).
-To move the server port anyway, put `VITE_SERVER_PORT=<port>` in `.env.local`
-(gitignored) — Vite hands it to the client and the server reads the same file, so the
-halves cannot disagree. `PORT` still overrides for a one-off, and production sets a full
-`VITE_SERVER_URL` instead.
+(4001+) and a dev-client slot (7931+); Rail Baron is 4001/7931, and the numbers live in
+exactly three places — that registry, the server's boot default, and `vite.config.ts`.
+The client is origin-relative (`src/config.ts`): pages, assets and sockets ride the
+page's origin, sockets mounted at `/railbaron/socket.io`, and health answers at both
+`/health` and `/railbaron/health`. In dev, Vite's proxy carries the one socket path to
+the server on 4001; hosted (`npm run serve`, or behind game-host's front door), the
+server answers it itself. Vite pins its port with `strictPort` and listens on the LAN
+(`host: true`), so friends on the wifi reach it directly or through the proxy. (The
+LAN-hosting spec,
+[docs/superpowers/specs/2026-08-16-lan-hosting-design.md](docs/superpowers/specs/2026-08-16-lan-hosting-design.md),
+is design history: its client-side `hostname:port` derivation was retired for
+origin-relative sockets — see the game-host repo's
+`specs/2026-08-17-origin-relative-clients.md`.) A build that sets `VITE_SERVER_URL`
+wins outright and keeps socket.io's default path — that server owns its whole origin.
+`SOCKET_PATH` in the environment moves the socket mount at boot (nothing sets it
+today; it exists for a deploy that owns its whole origin). To move the server port for
+a one-off, put `VITE_SERVER_PORT=<port>` in `.env.local` (gitignored) and move
+`vite.config.ts`'s proxy target with it; `PORT` still overrides.
 
 Tests run as two Vitest projects (`vite.config.ts`). **`node`** takes everything that runs
 inside the server process in production — `engine/`, `session/`, `server/`, the pure half
