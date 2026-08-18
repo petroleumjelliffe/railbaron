@@ -60,6 +60,13 @@ export default defineConfig({
     // and its next rename — without opening the server to arbitrary hosts
     // the way `allowedHosts: true` would.
     allowedHosts: ['.local'],
+    // Dev plays the part Caddy plays in hosting: the client is origin-relative
+    // and this proxy carries its socket path to the game server. One key
+    // suffices because `base` is BASE_PATH in dev and build alike, so the
+    // client always asks at the prefixed path — the mount a bare
+    // `tsx server/index.ts` answers. 4001 per game-host PORTS.md — build
+    // tooling, not shipped code.
+    proxy: { [`${BASE_PATH}/socket.io`]: { target: 'http://localhost:4001', ws: true } },
   },
   plugins: [react(), pagesFallback()],
   test: {

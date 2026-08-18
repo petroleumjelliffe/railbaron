@@ -1,6 +1,6 @@
 import { RB_PROTOCOL_VERSION } from '../../session/protocol';
 import { createLobbyConnection, type LobbyConnection } from '../../vendor/lobby/client/connection';
-import { SERVER_URL } from '../config';
+import { SERVER_URL, SOCKET_PATH } from '../config';
 
 let current: LobbyConnection | null = null;
 
@@ -32,6 +32,7 @@ export function getConnection(): LobbyConnection {
     current = createLobbyConnection({
       serverUrl: SERVER_URL,
       protocolVersion: RB_PROTOCOL_VERSION,
+      socketPath: SOCKET_PATH,
     });
   }
   return current;

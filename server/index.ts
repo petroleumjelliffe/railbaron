@@ -168,15 +168,12 @@ export async function startServer(
 // Run directly (`tsx server/index.ts`); imported by tests without starting.
 const invoked = process.argv[1] ?? '';
 if (invoked.endsWith('server/index.ts') || invoked.endsWith('server/index.js')) {
-  // `.env.local` is where a developer moves the port off 3001, which the
-  // sibling Acquire server also defaults to. The client reads it through Vite;
-  // the server has no bundler to do that for it, so it loads the same file
-  // itself — one place to set the port, and both halves agree without anyone
-  // having to remember an env prefix on the command line.
-  //
-  // VITE_SERVER_PORT is a bundler-flavoured name for a variable this process
-  // also reads, and that is the point: the two halves must not be able to
-  // disagree about which port they mean.
+  // `.env.local` is where a developer moves the port off 4001. The client no
+  // longer reads a port at all — it is origin-relative, and in dev it is
+  // vite.config.ts's proxy target that names this server — so moving the
+  // port means moving that target with it. The server has no bundler to load
+  // the file for it, so it loads it here; VITE_SERVER_PORT keeps working as
+  // a name because existing .env.local files use it.
   try {
     process.loadEnvFile('.env.local');
   } catch {
@@ -184,9 +181,8 @@ if (invoked.endsWith('server/index.ts') || invoked.endsWith('server/index.js')) 
   }
 
   // 4001 is Rail Baron's slot in the cross-game registry (the game-host
-  // repo's PORTS.md).
-  // Must agree with src/config.ts's DEFAULT_SERVER_PORT, or a client with no
-  // env at all derives a port nothing is listening on.
+  // repo's PORTS.md). Must agree with vite.config.ts's dev proxy target, or
+  // a dev client's sockets land on a port nothing is listening on.
   const port = Number(process.env.PORT ?? process.env.VITE_SERVER_PORT ?? 4001);
   const gamesDir = process.env.GAMES_DIR ?? 'server/games';
 
@@ -215,8 +211,8 @@ if (invoked.endsWith('server/index.ts') || invoked.endsWith('server/index.js')) 
       console.error(
         `\n✗ Port ${port} is already in use — something is listening there.\n\n`
         + '  Find it:   lsof -nP -iTCP:' + String(port) + ' -sTCP:LISTEN\n'
-        + '  Or move:   set VITE_SERVER_PORT in .env.local to a free port, which\n'
-        + '             moves this server and the client together.\n\n'
+        + '  Or move:   set VITE_SERVER_PORT in .env.local to a free port, and\n'
+        + '             point vite.config.ts\'s dev proxy target there too.\n\n'
         + '  The cross-game port registry is the game-host repo\'s PORTS.md.\n',
       );
       process.exit(1);
